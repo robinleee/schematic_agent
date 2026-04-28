@@ -1,0 +1,95 @@
+import json
+import os
+from neo4j import GraphDatabase
+from dotenv import load_dotenv
+
+# 加载项目根目录的 .env 文件
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(ROOT_DIR, ".env"))
+
+
+class HardwareTopologyDB:
+    def __init__(self, uri, user, password):
+        self.driver = GraphDatabase.driver(uri, auth=(user, password))
+
+    def close(self):
+        self.driver.close()
+
+    def create_topology_indexes(self):
+        """
+        为 Pin 和 Net 创建索引，这是保证 MERGE 语句极速执行的生命线！
+        """
+        queries = [
+            "CREATE CONSTRAINT pin_id_unique IF NOT EXISTS FOR (p:Pin) REQUIRE p.Id IS UNIQUE",
+            "CREATE CONSTRAINT net_name_unique IF NOT EXISTS FOR (n:Net) REQUIRE n.Name IS UNIQUE"
+        ]
+        with self.driver.session() as session:
+            for q in queries:
+                session.run(q)
+            print("Pin and Net indexes/constraints verified.")
+
+    def batch_insert_topology(self, triplets_list):
+        """
+        一次性注入: Pin 节点、Net 节点，以及 HAS_PIN 和 CONNECTS_TO 两种关系
+        """
+        query = """
+        UNWIND $triplets AS trip
+        
+        // 1. 匹配已经存在的器件节点
+        MATCH (c:Component {RefDes: trip.Component_RefDes})
+        
+        // 2. 创建或匹配引脚节点 (拼装全局唯一 ID)
+        MERGE (p:Pin {Id: trip.Component_RefDes + '_' + trip.Pin_Number})
+        ON CREATE SET p.Number = trip.Pin_Number
+        
+        // 3. 建立: 器件 -> 拥有 -> 引脚 的关系
+        MERGE (c)-[:HAS_PIN]->(p)
+        
+        // 4. 创建或匹配网络节点
+        MERGE (n:Net {Name: trip.Net_Name})
+        
+        // 5. 建立: 引脚 -> 连接到 -> 网络 的电气拓扑关系
+        MERGE (p)-[:CONNECTS_TO]->(n)
+        
+        RETURN count(p) AS processed_pins
+        """
+        
+        with self.driver.session() as session:
+            result = session.run(query, triplets=triplets_list)
+            record = result.single()
+            print(f"Successfully processed {record['processed_pins']} pin connections.")
+
+
+if __name__ == "__main__":
+    # 从环境变量读取数据库配置
+    NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
+    NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
+
+    if not NEO4J_PASSWORD:
+        print("Error: NEO4J_PASSWORD not set. Please configure it in .env file.")
+        exit(1)
+
+    # 读取 topology_triplets.json
+    topology_file = os.path.join(ROOT_DIR, "data", "output", "topology_triplets.json")
+
+    print(f"Loading topology data from: {topology_file}")
+    try:
+        with open(topology_file, 'r', encoding='utf-8') as f:
+            triplets = json.load(f)
+    except FileNotFoundError:
+        print(f"Error: File not found: {topology_file}")
+        exit(1)
+
+    print("Connecting to Neo4j and initializing topology injection...")
+    db = HardwareTopologyDB(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
+
+    try:
+        db.create_topology_indexes()
+        print(f"Preparing to insert {len(triplets)} topology records...")
+        db.batch_insert_topology(triplets)
+        print("Topology relationships injection completed.")
+    except Exception as e:
+        print(f"Database error: {e}")
+    finally:
+        db.close()

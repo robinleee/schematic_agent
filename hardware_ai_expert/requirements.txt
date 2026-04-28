@@ -1,0 +1,20 @@
+# Database drivers
+neo4j>=5.0,<7.0
+python-dotenv>=1.0
+
+# Data validation
+pydantic>=2.0
+
+# LLM & Agent framework
+langchain>=0.2
+langgraph>=0.1
+openai>=1.0
+
+# Vector DB
+chromadb>=0.4
+
+# Frontend
+streamlit>=1.30
+
+# Data processing
+pandas>=2.0
