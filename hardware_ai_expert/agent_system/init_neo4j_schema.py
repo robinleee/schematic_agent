@@ -43,14 +43,20 @@ def get_neo4j_credentials() -> tuple[str, str, str]:
     return uri, user, password
 
 
-def initialize_schema(uri: str, user: str, password: str) -> None:
+def initialize_schema(uri: str, user: str, password: str) -> dict:
     """
     初始化 Neo4j Schema
 
     创建所有约束和索引。如果已存在则跳过。
+
+    Returns:
+        统计结果 dict，包含约束/索引的创建状态
     """
     print(f"Connecting to Neo4j at {uri}...")
     driver = GraphDatabase.driver(uri, auth=(user, password))
+
+    stats = {"constraints": {"created": 0, "skipped": 0, "failed": 0},
+             "indexes": {"created": 0, "skipped": 0, "failed": 0}}
 
     try:
         with driver.session() as session:
@@ -64,28 +70,52 @@ def initialize_schema(uri: str, user: str, password: str) -> None:
             for constraint in NEO4J_CONSTRAINTS:
                 try:
                     session.run(constraint)
-                    print(f"  ✅ Created: {constraint[:60]}...")
+                    print(f"  ✅ Created: {constraint[:70]}...")
+                    stats["constraints"]["created"] += 1
                 except Exception as e:
-                    if "already exists" in str(e).lower() or "constraint already exists" in str(e).lower():
-                        print(f"  ⏭️  Skipped (already exists): {constraint[:60]}...")
+                    err_str = str(e).lower()
+                    if "already exists" in err_str or "constraint already exists" in err_str:
+                        print(f"  ⏭️  Skipped (already exists): {constraint[:70]}...")
+                        stats["constraints"]["skipped"] += 1
                     else:
                         print(f"  ❌ Error: {e}")
-                        raise
+                        stats["constraints"]["failed"] += 1
 
             # 创建索引
             print("\n📇 Creating indexes...")
             for index in NEO4J_INDEXES:
                 try:
                     session.run(index)
-                    print(f"  ✅ Created: {index[:60]}...")
+                    print(f"  ✅ Created: {index[:70]}...")
+                    stats["indexes"]["created"] += 1
                 except Exception as e:
-                    if "already exists" in str(e).lower() or "index already exists" in str(e).lower():
-                        print(f"  ⏭️  Skipped (already exists): {index[:60]}...")
+                    err_str = str(e).lower()
+                    if "already exists" in err_str or "index already exists" in err_str:
+                        print(f"  ⏭️  Skipped (already exists): {index[:70]}...")
+                        stats["indexes"]["skipped"] += 1
                     else:
                         print(f"  ❌ Error: {e}")
-                        raise
+                        stats["indexes"]["failed"] += 1
+
+        # 验证约束
+        print("\n🔍 Verifying constraints...")
+        with driver.session() as session:
+            constraints = list(session.run("SHOW CONSTRAINTS"))
+            print(f"  Active constraints: {len(constraints)}")
+            for c in constraints:
+                print(f"    - {c['name']}: {c['type']} on {c['labelsOrTypes']}")
+
+        # 验证索引
+        print("\n🔍 Verifying indexes...")
+        with driver.session() as session:
+            indexes = list(session.run("SHOW INDEXES"))
+            print(f"  Active indexes: {len(indexes)}")
+            for idx in indexes:
+                print(f"    - {idx['name']}: {idx['type']} on {idx['labelsOrTypes']}")
 
         print("\n✅ Neo4j Schema initialization completed.")
+
+        return stats
 
     finally:
         driver.close()

@@ -36,6 +36,13 @@ from agent_system.schemas.review import (
     Hypothesis,
 )
 
+from agent_system.schemas.knowledge import (
+    ExtractedKnowledge,
+    KnowledgeChunk,
+    DesignGuide,
+    DatasheetConfig,
+)
+
 __all__ = [
     # Graph
     "ComponentNode",
@@ -60,4 +67,9 @@ __all__ = [
     "RuleConfig",
     "WhitelistEntry",
     "Hypothesis",
+    # Knowledge
+    "ExtractedKnowledge",
+    "KnowledgeChunk",
+    "DesignGuide",
+    "DatasheetConfig",
 ]

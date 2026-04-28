@@ -148,6 +148,62 @@ class TopologyTriplet(BaseModel):
 
 
 # ============================================
+# 审查规则与知识节点
+# ============================================
+
+class ReviewWhitelistNode(BaseModel):
+    """
+    审查白名单节点
+
+    对应 Neo4j: (:ReviewWhitelist)
+    """
+    rule_id: str = Field(description="规则 ID")
+    refdes: str = Field(description="豁免的器件位号")
+    status: Literal["IGNORE", "APPROVED"] = Field(default="IGNORE")
+    reason: Optional[str] = Field(None, description="豁免原因")
+    added_by: str = Field(default="system")
+    added_at: str = Field(default="", description="添加时间 ISO 格式")
+
+    def to_cypher_properties(self) -> dict:
+        """转换为 Cypher 属性字典"""
+        return {
+            "RuleId": self.rule_id,
+            "RefDes": self.refdes,
+            "Status": self.status,
+            "Reason": self.reason,
+            "AddedBy": self.added_by,
+            "AddedAt": self.added_at,
+        }
+
+
+class DesignGuideNode(BaseModel):
+    """
+    设计指南节点
+
+    对应 Neo4j: (:DesignGuide)
+    """
+    guide_id: str = Field(description="指南 ID")
+    title: str = Field(description="指南标题")
+    version: str = Field(default="1.0.0")
+    category: str = Field(default="general", description="指南分类")
+    summary: Optional[str] = Field(None, description="摘要")
+    rule_count: int = Field(default=0)
+    created_at: str = Field(default="", description="创建时间")
+
+    def to_cypher_properties(self) -> dict:
+        """转换为 Cypher 属性字典"""
+        return {
+            "GuideId": self.guide_id,
+            "Title": self.title,
+            "Version": self.version,
+            "Category": self.category,
+            "Summary": self.summary,
+            "RuleCount": self.rule_count,
+            "CreatedAt": self.created_at,
+        }
+
+
+# ============================================
 # 约束与索引定义
 # ============================================
 
@@ -155,11 +211,17 @@ NEO4J_CONSTRAINTS: list[str] = [
     "CREATE CONSTRAINT component_refdes IF NOT EXISTS FOR (c:Component) REQUIRE c.RefDes IS UNIQUE",
     "CREATE CONSTRAINT pin_id IF NOT EXISTS FOR (p:Pin) REQUIRE p.Id IS UNIQUE",
     "CREATE CONSTRAINT net_name IF NOT EXISTS FOR (n:Net) REQUIRE n.Name IS UNIQUE",
+    "CREATE CONSTRAINT review_whitelist_id IF NOT EXISTS FOR (w:ReviewWhitelist) REQUIRE (w.RuleId, w.RefDes) IS UNIQUE",
+    "CREATE CONSTRAINT design_guide_id IF NOT EXISTS FOR (d:DesignGuide) REQUIRE d.GuideId IS UNIQUE",
 ]
 
 NEO4J_INDEXES: list[str] = [
     "CREATE INDEX component_parttype IF NOT EXISTS FOR (c:Component) ON (c.PartType)",
     "CREATE INDEX component_mpn IF NOT EXISTS FOR (c:Component) ON (c.MPN)",
+    "CREATE INDEX component_model IF NOT EXISTS FOR (c:Component) ON (c.Model)",
     "CREATE INDEX pin_type IF NOT EXISTS FOR (p:Pin) ON (p.Type)",
+    "CREATE INDEX pin_component IF NOT EXISTS FOR (p:Pin) ON (p.ComponentRefDes)",
     "CREATE INDEX net_voltage_level IF NOT EXISTS FOR (n:Net) ON (n.VoltageLevel)",
+    "CREATE INDEX net_type IF NOT EXISTS FOR (n:Net) ON (n.NetType)",
+    "CREATE INDEX design_guide_category IF NOT EXISTS FOR (d:DesignGuide) ON (d.Category)",
 ]
