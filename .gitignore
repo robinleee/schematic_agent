@@ -1,3 +1,10 @@
+# Runtime / data
 neo4j data/
+data/
 *.log
 .venv/
+__pycache__/
+*.pyc
+
+# Netlist source files (may contain proprietary data)
+netlist_parser/netlist/
