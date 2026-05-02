@@ -2,12 +2,12 @@
 LLM Intent Router - 本地 LLM 意图分类与路由
 
 核心功能：
-  1. 用 Ollama 本地 LLM 替代关键词正则，做意图分类
+  1. 用本地 LLM (Ollama/vLLM) 替代关键词正则，做意图分类
   2. 支持复合意图拆解（如"检查 U1 的电源和上拉电阻"→多个子任务）
   3. 置信度评估 + 兜底澄清策略
-  4. 零外部调用（纯本地推理）
+  4. 结构化 JSON 输出（LLMClient 封装）
 
-依赖：Ollama (gemma4:26b)
+依赖：Ollama (gemma4:26b) 或 vLLM
 """
 
 from __future__ import annotations
@@ -21,14 +21,12 @@ from dataclasses import dataclass
 from typing import Optional, List
 from dotenv import load_dotenv
 
+from agent_system.llm_client import LLMClient
+
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(ROOT_DIR, ".env"))
 
 logger = logging.getLogger(__name__)
-
-# Ollama 配置
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma4:26b")
 
 
 # ============================================================
@@ -72,41 +70,28 @@ class RoutingDecision:
 
 
 # ============================================================
-# LLM 调用
+# LLM 调用 (已由 LLMClient 统一封装)
 # ============================================================
+# 保留 OllamaClient 作为兼容层，内部委托给 LLMClient
 
 class OllamaClient:
-    """Ollama API 客户端"""
+    """Ollama API 客户端 (兼容层，委托 LLMClient)"""
 
     def __init__(self, model: str = None):
-        self.model = model or OLLAMA_MODEL
-        self.url = f"{OLLAMA_URL}/api/generate"
+        self._client = LLMClient(provider="ollama", model=model)
 
     def generate(self, prompt: str, temperature: float = 0.1,
                  max_tokens: int = 512) -> str:
-        """调用 Ollama 生成文本"""
+        """调用 LLM 生成文本"""
         try:
-            import urllib.request
-            payload = {
-                "model": self.model,
-                "prompt": prompt,
-                "stream": False,
-                "options": {
-                    "temperature": temperature,
-                    "num_predict": max_tokens,
-                }
-            }
-            req = urllib.request.Request(
-                self.url,
-                data=json.dumps(payload).encode(),
-                headers={"Content-Type": "application/json"},
-                method="POST"
+            resp = self._client.chat(
+                prompt=prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                data = json.loads(resp.read().decode())
-                return data.get("response", "")
+            return resp.content
         except Exception as e:
-            logger.error(f"Ollama call failed: {e}")
+            logger.error(f"LLM call failed: {e}")
             return ""
 
 
@@ -202,8 +187,8 @@ class LLMIntentRouter:
         ],
     }
 
-    def __init__(self):
-        self.llm = OllamaClient()
+    def __init__(self, llm_client: Optional[LLMClient] = None):
+        self.llm = llm_client or LLMClient()
 
     def route(self, query: str) -> RoutingDecision:
         """
@@ -226,36 +211,20 @@ class LLMIntentRouter:
         return self._keyword_fallback(query)
 
     def _llm_classify(self, query: str) -> Optional[dict]:
-        """使用 LLM 进行意图分类"""
+        """使用 LLM 进行意图分类（结构化 JSON 输出）"""
         prompt = _build_classification_prompt(query)
-        response = self.llm.generate(prompt, temperature=0.1, max_tokens=512)
 
-        if not response:
-            return None
-
-        # 提取 JSON（支持 Markdown 代码块包裹）
+        # 使用 LLMClient 的 chat_json 方法，自动处理 JSON 解析
         try:
-            # 先尝试提取 ```json ... ``` 代码块
-            md_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
-            if md_match:
-                return json.loads(md_match.group(1))
-            # 再尝试找裸 JSON
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
-            if json_match:
-                return json.loads(json_match.group())
-        except json.JSONDecodeError:
-            # 尝试修复截断的 JSON（补全括号）
-            try:
-                fixed = response + '"}' * 10  # 粗暴补全
-                md_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', fixed, re.DOTALL)
-                if md_match:
-                    return json.loads(md_match.group(1))
-                json_match = re.search(r'\{.*\}', fixed, re.DOTALL)
-                if json_match:
-                    return json.loads(json_match.group())
-            except Exception:
-                pass
-            logger.warning(f"Failed to parse LLM response as JSON: {response[:100]}")
+            result = self.llm.chat_json(
+                prompt=prompt,
+                temperature=0.1,
+                max_tokens=1024,
+            )
+            if result and "primary_intent" in result:
+                return result
+        except Exception as e:
+            logger.warning(f"LLM classification failed: {e}")
 
         return None
 
