@@ -32,7 +32,8 @@ VALID_PART_TYPES = {
     "MCU", "PMIC", "FPGA", "LDO", "BUCK", "CONNECTOR",
     "CAPACITOR", "RESISTOR", "INDUCTOR", "PASSIVE",  # 被动器件细分
     "IC", "SOC", "CPU", "FLASH", "DRAM", "SENSOR", "CRYSTAL",
-    "DIODE", "TRANSISTOR", "MOSFET", "ESD", "TVS", "UNKNOWN",
+    "DIODE", "TRANSISTOR", "MOSFET", "ESD", "TVS",
+    "TESTPOINT", "LED", "MECHANICAL", "UNKNOWN",
 }
 
 
@@ -70,33 +71,45 @@ BOM_KEYWORDS: dict[str, list[str]] = {
 # ============================================================
 
 MODEL_PATTERNS: dict[str, list[str]] = {
-    "MCU": [r'(?i)MCU', r'(?i)MICRO', r'(?i)CORTEX', r'(?i)STM32', r'(?i)MSP430'],
-    "FPGA": [r'(?i)FPGA', r'(?i)LATTICE', r'(?i)XILINX', r'(?i)ALTERA', r'(?i)MAX10', r'(?i)XC7Z'],
-    "PMIC": [r'(?i)PMIC', r'(?i)TPS65', r'(?i)ACT8', r'(?i)BQ24', r'(?i)MAX77'],
+    "MCU": [r'(?i)MCU', r'(?i)MICRO', r'(?i)CORTEX', r'(?i)STM32', r'(?i)MSP430', r'(?i)^SAK-TC'],
+    "FPGA": [r'(?i)FPGA', r'(?i)LATTICE', r'(?i)XILINX', r'(?i)ALTERA', r'(?i)MAX10', r'(?i)XC7Z', r'(?i)XCKU'],
+    "PMIC": [r'(?i)PMIC', r'(?i)TPS65', r'(?i)ACT8', r'(?i)BQ24', r'(?i)MAX77', r'(?i)^MPS[_\-]', r'(?i)^MPQ', r'(?i)^MP8', r'(?i)TLF35584'],
     "LDO": [r'(?i)LDO', r'(?i)XC6206', r'(?i)RT9193', r'(?i)TLV7', r'(?i)AMS11'],
     "BUCK": [r'(?i)BUCK', r'(?i)TPS54', r'(?i)MP23', r'(?i)SY8', r'(?i)LMR3'],
     "CONNECTOR": [r'(?i)CONN', r'(?i)HDR', r'(?i)HEADER', r'(?i)RECEPTACLE',
                   r'(?i)JACK', r'(?i)BAT-HLD', r'(?i)HOLDER', r'(?i)FPC',
-                  r'(?i)FFC', r'(?i)SOCKET', r'(?i)PLUG'],
+                  r'(?i)FFC', r'(?i)SOCKET', r'(?i)PLUG',
+                  r'(?i)^TE[_\-]', r'(?i)^CNU', r'(?i)^REC0DA'],
     "FLASH": [r'(?i)FLASH', r'(?i)MT25', r'(?i)W25', r'(?i)S25', r'(?i)M25',
               r'(?i)NOR', r'(?i)EEPROM', r'(?i)SPI_FLASH'],
-    "DRAM": [r'(?i)DDR', r'(?i)LPDDR', r'(?i)SDRAM', r'(?i)H5T'],
-    "CRYSTAL": [r'(?i)XTAL', r'(?i)CRYSTAL', r'(?i)OSCI', r'(?i)TCXO', r'(?i)ABM'],
+    "DRAM": [r'(?i)DDR', r'(?i)LPDDR', r'(?i)SDRAM', r'(?i)H5T', r'(?i)^MT60B2G8HB', r'(?i)^MT53[D|E]'],
+    "CRYSTAL": [r'(?i)XTAL', r'(?i)CRYSTAL', r'(?i)OSCI', r'(?i)TCXO', r'(?i)ABM', r'(?i)^OSC[_\-]', r'(?i)^GNR[_\-]SP'],
     "SENSOR": [r'(?i)SENSOR', r'(?i)BMP28', r'(?i)MPU[-_]?60', r'(?i)LIS3', r'(?i)HMC58', r'(?i)QMC58'],
-    "INDUCTOR": [r'(?i)INDUCTOR', r'(?i)FERRITE', r'(?i)CHOKE', r'(?i)^L[0-9]'],
+    "INDUCTOR": [r'(?i)INDUCTOR', r'(?i)FERRITE', r'(?i)CHOKE', r'(?i)^L[0-9]{1,4}[_\-]', r'(?i)^EMIFILTER', r'(?i)^FL[0-9]'],
     "DIODE": [r'(?i)DIODE', r'(?i)SCHOTTKY', r'(?i)RECTIFIER', r'(?i)ZENER',
               r'(?i)1N4148', r'(?i)SS34'],
     "TRANSISTOR": [r'(?i)TRANSISTOR', r'(?i)BJT', r'(?i)NPN', r'(?i)PNP',
                    r'(?i)BC8', r'(?i)2N39'],
-    "MOSFET": [r'(?i)MOSFET', r'(?i)SI23', r'(?i)AO34', r'(?i)IRF'],
+    "MOSFET": [r'(?i)MOSFET', r'(?i)SI23', r'(?i)AO34', r'(?i)IRF', r'(?i)^FET[_\-]'],
     "ESD": [r'(?i)\bESD', r'(?i)\bTVS\b', r'(?i)PRTR', r'(?i)USBLC6', r'(?i)PESD'],
-    "SOC": [r'(?i)SOC', r'(?i)RK3', r'(?i)AM33', r'(?i)IMX6', r'(?i)ALLWINNER'],
+    "SOC": [r'(?i)SOC', r'(?i)RK3', r'(?i)AM33', r'(?i)IMX6', r'(?i)ALLWINNER', r'(?i)AST2600'],
     "CPU": [r'(?i)\bCPU\b', r'(?i)I[0-9]-', r'(?i)RYZEN', r'(?i)XEON'],
     "IC": [r'(?i)IC_', r'(?i)INTERFACE', r'(?i)BUFFER', r'(?i)DRIVER',
            r'(?i)MUX', r'(?i)ENCODER', r'(?i)DECODER', r'(?i)OP AMP',
            r'(?i)COMPARATOR', r'(?i)LEVEL SHIFT', r'(?i)TRANSLATOR',
-           r'(?i)RTL8', r'(?i)LAN8', r'(?i)ETH PHY', r'(?i)ETHERNET'],
-
+           r'(?i)RTL8', r'(?i)LAN8', r'(?i)ETH PHY', r'(?i)ETHERNET',
+           r'(?i)^TI[_\-]', r'(?i)^SN3', r'(?i)^DP83', r'(?i)^NTS', r'(?i)^NTB',
+           r'(?i)74LVC', r'(?i)^FD', r'(?i)^INA226', r'(?i)^TS511',
+           r'(?i)^ADI[_\-]', r'(?i)^LTC[_\-]', r'(?i)^RENESAS[_\-]',
+           r'(?i)^TTL3257', r'(?i)^INDIE[_\-]', r'(?i)^PCF85',
+           r'(?i)^UM980', r'(?i)^OPA31', r'(?i)^BCM8958', r'(?i)^9QXL',
+           r'(?i)^TPS389', r'(?i)^GTL20', r'(?i)^UPD720', r'(?i)^U_PWRMTR',
+           r'(?i)^TLE92', r'(?i)^TLE93', r'(?i)^SPD5118', r'(?i)^PCA96'],
+    "TESTPOINT": [r'(?i)^TESTLOOP', r'(?i)^TPAD', r'(?i)^TESTPOINT'],
+    "LED": [r'(?i)^LED[_\-]'],
+    "MECHANICAL": [r'(?i)^MTH[_\-]', r'(?i)^PEMNUT', r'(?i)^MTG'],
+    "CAPACITOR": [r'(?i)^CAP[_\-]', r'(?i)^CAP#1[_\-]', r'(?i)^C#1[_\-]', r'(?i)^381[_\-]'],
+    "RESISTOR": [r'(?i)^RES[_\-]', r'(?i)^RESISTOR[_\-]', r'(?i)^R[0-9]{1,4}[_\-]', r'(?i)^719[_\-]'],
 }
 
 
@@ -105,9 +118,9 @@ MODEL_PATTERNS: dict[str, list[str]] = {
 # ============================================================
 
 VALUE_PATTERNS = {
-    "CAP": re.compile(r'^[0-9]+(\.[0-9]+)?[PNUµμ]?F$', re.IGNORECASE),   # 10pF, 0.1uF, 10µF
-    "RES": re.compile(r'^[0-9]+(\.[0-9]+)?[KMGΩR]?$', re.IGNORECASE),    # 10, 10K, 1M, 600R
-    "IND": re.compile(r'^[0-9]+(\.[0-9]+)?[UNµμ]?H$', re.IGNORECASE),    # 10uH, 100nH
+    "CAP": re.compile(r'^[0-9]+(\.[0-9]+)?\s*[PNUµμ]?F$', re.IGNORECASE),   # 10pF, 0.1uF, 10µF, 4.7 UF
+    "RES": re.compile(r'^[0-9]+(\.[0-9]+)?\s*[KMGΩR]?$', re.IGNORECASE),    # 10, 10K, 1M, 600R
+    "IND": re.compile(r'^[0-9]+(\.[0-9]+)?\s*[UNµμ]?H$', re.IGNORECASE),    # 10uH, 100nH
 }
 
 

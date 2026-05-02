@@ -148,8 +148,14 @@ class AMRCheckTemplate(RuleTemplate):
             cypher_voltage = """
             MATCH (c:Component {RefDes: $refdes})-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
             WHERE n.VoltageLevel IS NOT NULL
-            RETURN n.VoltageLevel AS voltage
-            ORDER BY n.VoltageLevel DESC
+            WITH n,
+                 CASE
+                   WHEN toString(n.VoltageLevel) CONTAINS 'V'
+                     THEN toFloat(replace(toString(n.VoltageLevel), 'V', ''))
+                   ELSE toFloat(n.VoltageLevel)
+                 END AS v_num
+            RETURN v_num AS voltage
+            ORDER BY v_num DESC
             LIMIT 1
             """
 
