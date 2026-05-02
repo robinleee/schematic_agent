@@ -1,0 +1,215 @@
+# ============================================
+# 默认审查规则配置
+# ============================================
+# 规则实例化模板，通过 template_id 关联 Layer 1 模板逻辑。
+# 可按电压等级、接口类型、产品线等维度覆盖参数。
+
+rules:
+  # ============================================
+  # 电源去耦电容检查
+  # ============================================
+
+  - id: POWER_3V3_DECAP
+    template_id: decap_check
+    name: "3.3V 电源去耦检查"
+    description: "检查 3.3V 电源网络的去耦电容配置"
+    severity: ERROR
+    enabled: true
+    params:
+      voltage_level: "3.3"
+      min_count: 2
+      required_values: ["0.1uF", "10uF"]
+      applicable_parts: ["IC", "MCU", "FPGA", "SOC", "FLASH", "DRAM"]
+      net_patterns: ["3V3", "3.3V", "VCC_3V3", "VDD_3V3"]
+    tags: ["power", "decap", "3v3"]
+
+  - id: POWER_1V8_DECAP
+    template_id: decap_check
+    name: "1.8V 电源去耦检查"
+    description: "检查 1.8V 电源网络的去耦电容配置"
+    severity: ERROR
+    enabled: true
+    params:
+      voltage_level: "1.8"
+      min_count: 2
+      required_values: ["0.1uF", "1uF"]
+      applicable_parts: ["IC", "MCU", "FPGA", "SOC", "FLASH", "DRAM"]
+      net_patterns: ["1V8", "1.8V", "VCC_1V8", "VDD_1V8"]
+    tags: ["power", "decap", "1v8"]
+
+  - id: POWER_5V0_DECAP
+    template_id: decap_check
+    name: "5.0V 电源去耦检查"
+    description: "检查 5.0V 电源网络的去耦电容配置"
+    severity: WARNING
+    enabled: true
+    params:
+      voltage_level: "5.0"
+      min_count: 1
+      required_values: ["0.1uF", "10uF"]
+      applicable_parts: ["IC", "MCU", "FPGA", "SOC"]
+      net_patterns: ["5V", "5.0V", "VCC_5V", "VDD_5V"]
+    tags: ["power", "decap", "5v"]
+
+  # ============================================
+  # 上拉/终端电阻检查
+  # ============================================
+
+  - id: I2C_STD_PULLUP
+    template_id: pullup_check
+    name: "I2C 总线上拉电阻检查"
+    description: "检查 I2C SCL/SDA 是否配置了合理阻值的上拉电阻"
+    severity: ERROR
+    enabled: true
+    params:
+      net_patterns: ["I2C_SCL", "I2C_SDA", "SCL", "SDA"]
+      min_ohm: 2200
+      max_ohm: 10000
+      check_mode: pullup      # pullup | termination
+    tags: ["i2c", "pullup", "bus"]
+
+  - id: CAN_BUS_TERMINATION
+    template_id: pullup_check
+    name: "CAN 总线终端电阻检查"
+    description: "检查 CAN_H/CAN_L 是否配置了 120Ω 终端电阻"
+    severity: ERROR
+    enabled: true
+    params:
+      net_patterns: ["CAN_H", "CAN_L"]
+      check_mode: termination
+      expected_ohm: 120
+      tolerance_pct: 5
+    tags: ["can", "termination", "bus"]
+
+  - id: USB_DP_DM_PULLUP
+    template_id: pullup_check
+    name: "USB D+/D- 上拉检查"
+    description: "检查 USB D+ 是否有 1.5kΩ 上拉（Full-Speed 设备模式）"
+    severity: WARNING
+    enabled: true
+    params:
+      net_patterns: ["USB_DP", "USB_D+", "D+"]
+      check_mode: pullup
+      min_ohm: 1200
+      max_ohm: 1800
+    tags: ["usb", "pullup"]
+
+  # ============================================
+  # ESD 保护检查
+  # ============================================
+
+  - id: USB_ESD_PROTECTION
+    template_id: esd_check
+    name: "USB 接口 ESD 保护检查"
+    description: "检查 USB 信号线是否配置了 ESD/TVS 保护"
+    severity: WARNING
+    enabled: true
+    params:
+      interface_types: ["USB"]
+      net_patterns: ["USB_DP", "USB_DM", "USB_D+", "USB_D-"]
+      connector_prefixes: ["J"]
+      max_capacitance_pf: 1.0
+    tags: ["usb", "esd", "interface"]
+
+  - id: HDMI_ESD_PROTECTION
+    template_id: esd_check
+    name: "HDMI 接口 ESD 保护检查"
+    description: "检查 HDMI 信号线是否配置了 ESD/TVS 保护"
+    severity: WARNING
+    enabled: true
+    params:
+      interface_types: ["HDMI"]
+      net_patterns: ["HDMI", "TMDS"]
+      connector_prefixes: ["J"]
+      max_capacitance_pf: 0.5
+    tags: ["hdmi", "esd", "interface"]
+
+  - id: ETHERNET_ESD_PROTECTION
+    template_id: esd_check
+    name: "以太网接口 ESD 保护检查"
+    description: "检查以太网信号线是否配置了 ESD/TVS 保护"
+    severity: WARNING
+    enabled: true
+    params:
+      interface_types: ["ETH", "ETHERNET"]
+      net_patterns: ["ETH", "RMII", "RGMII", "MII"]
+      connector_prefixes: ["J"]
+      max_capacitance_pf: 1.0
+    tags: ["ethernet", "esd", "interface"]
+
+  # ============================================
+  # 通用外部接口 ESD（兜底）
+  # ============================================
+
+  - id: EXTERNAL_IO_ESD
+    template_id: esd_check
+    name: "外部 IO 接口 ESD 保护检查"
+    description: "检查所有外部连接器信号线是否配置了 ESD 保护"
+    severity: INFO
+    enabled: true
+    params:
+      interface_types: ["IO", "GPIO", "UART", "SPI"]
+      net_patterns: ["UART", "SPI", "GPIO"]
+      connector_prefixes: ["J", "P", "CON"]
+      max_capacitance_pf: 5.0
+    tags: ["external", "esd", "interface"]
+
+  # ============================================
+  # AMR 降额检查
+  # ============================================
+
+  - id: AMR_RESISTOR_POWER
+    template_id: amr_check
+    name: "电阻功率降额检查"
+    description: "检查电阻实际功耗是否超过降额后的允许值"
+    severity: ERROR
+    enabled: true
+    params:
+      standard: industry
+      check_resistor_power: true
+      check_capacitor_voltage: false
+      min_voltage_v: 0.5
+    tags: ["amr", "resistor", "derating"]
+
+  # ============================================
+  # 引脚 MUX 检查
+  # ============================================
+
+  - id: OPENDRAIN_PULLUP
+    template_id: pinmux_check
+    name: "OpenDrain 引脚上拉检查"
+    description: "检查 OpenDrain 器件信号网络是否配置了上拉电阻"
+    severity: ERROR
+    enabled: true
+    params:
+      check_od_pullup: true
+      check_power_gnd: false
+      check_nc: false
+    tags: ["pinmux", "opendrain", "pullup"]
+
+  - id: IC_POWER_GND
+    template_id: pinmux_check
+    name: "IC 电源/地连接检查"
+    description: "检查 IC 器件是否有电源和地网络连接"
+    severity: WARNING
+    enabled: true
+    params:
+      check_od_pullup: false
+      check_power_gnd: true
+      check_nc: false
+    tags: ["pinmux", "power", "gnd", "ic"]
+
+  # ============================================
+  # 引脚悬空与网络错连检查
+  # ============================================
+
+  - id: NC_FLOATING_CHECK
+    template_id: pinmux_check
+    name: "NC 引脚悬空检查"
+    description: "检查 NC 标记的网络是否意外连接到器件"
+    severity: WARNING
+    enabled: true
+    params:
+      check_od_pullup: false
+      check_power_gnd: false
+      check_nc: true

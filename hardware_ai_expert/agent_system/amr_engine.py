@@ -27,6 +27,12 @@ load_dotenv(os.path.join(ROOT_DIR, ".env"))
 
 from agent_system.schemas import Violation
 
+try:
+    from agent_system.datasheet_hitl import FileBasedAMRSource
+    _FILE_BASED_AMR_AVAILABLE = True
+except ImportError:
+    _FILE_BASED_AMR_AVAILABLE = False
+
 
 # ============================================================
 # 常量定义
@@ -254,19 +260,43 @@ class AMRDataSource:
     """
     AMR 数据源接口
 
-    生产环境应连接：
-    - 内部 PLM / ERP 系统（获取器件 AMR 参数）
-    - Datasheet 解析结果（从 PDF 提取的 Rating 表）
+    支持两种数据源（优先级从高到低）：
+    1. FileBasedAMRSource: 从 amr_data.yaml 读取工程师审批后的参数
+    2. 子类自定义: 连接 PLM/ERP 等外部系统
     """
 
+    def __init__(self):
+        self._file_source = None
+        if _FILE_BASED_AMR_AVAILABLE:
+            try:
+                self._file_source = FileBasedAMRSource()
+            except Exception as e:
+                logging.warning(f"FileBasedAMRSource init failed: {e}")
+
     def get_capacitor_voltage_rating(self, refdes: str, model: str, value: str) -> Optional[float]:
-        """获取电容耐压值 (V)。当前无法从网表推断，返回 None"""
-        # TODO: 接入料号库或 Datasheet 解析结果
-        # 临时启发：从 model 名猜测？不可靠
+        """获取电容耐压值 (V)。优先从审批后的 Datasheet 数据读取"""
+        # 1. 尝试 FileBasedAMRSource
+        if self._file_source:
+            result = self._file_source.get_capacitor_voltage_rating(refdes, model, value)
+            if result is not None:
+                return result
+        # 2. 子类可在此扩展外部系统查询
+        return None
+
+    def get_resistor_power_rating(self, refdes: str, model: str, value: str) -> Optional[float]:
+        """获取电阻额定功率 (W)。优先从审批后的 Datasheet 数据读取"""
+        if self._file_source:
+            result = self._file_source.get_resistor_power_rating(refdes, model, value)
+            if result is not None:
+                return result
         return None
 
     def get_ic_voltage_range(self, refdes: str, model: str) -> Optional[tuple[float, float]]:
-        """获取 IC 电源电压范围 (min, max)。当前返回 None"""
+        """获取 IC 电源电压范围 (min, max)"""
+        if self._file_source:
+            result = self._file_source.get_ic_voltage_range(refdes, model)
+            if result is not None:
+                return result
         return None
 
 
@@ -406,9 +436,15 @@ class AMREngine:
         """获取所有电阻及其连接的最大电压"""
         cypher = """
             MATCH (c:Component)
-            WHERE c.PartType CONTAINS 'RES'
+            WHERE c.PartType = 'RESISTOR'
             OPTIONAL MATCH (c)-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
-            WITH c, max(n.VoltageLevel) AS max_v, collect(DISTINCT n.Name) AS nets
+            WITH c,
+                 CASE
+                   WHEN n.VoltageLevel IS NULL THEN 0.0
+                   ELSE toFloat(replace(toString(n.VoltageLevel), 'V', ''))
+                 END AS v_num,
+                 n.Name AS net_name
+            WITH c, max(v_num) AS max_v, collect(DISTINCT net_name) AS nets
             RETURN c.RefDes AS refdes,
                    c.Value AS value,
                    c.Model AS model,
@@ -423,9 +459,15 @@ class AMREngine:
         """获取所有电容及其连接的最大电压"""
         cypher = """
             MATCH (c:Component)
-            WHERE c.PartType CONTAINS 'CAP'
+            WHERE c.PartType = 'CAPACITOR'
             OPTIONAL MATCH (c)-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
-            WITH c, max(n.VoltageLevel) AS max_v, collect(DISTINCT n.Name) AS nets
+            WITH c,
+                 CASE
+                   WHEN n.VoltageLevel IS NULL THEN 0.0
+                   ELSE toFloat(replace(toString(n.VoltageLevel), 'V', ''))
+                 END AS v_num,
+                 n.Name AS net_name
+            WITH c, max(v_num) AS max_v, collect(DISTINCT net_name) AS nets
             RETURN c.RefDes AS refdes,
                    c.Value AS value,
                    c.Model AS model,
@@ -457,7 +499,7 @@ class AMREngine:
             resistance = parse_resistance(r["value"])
             package = get_package_from_model(r["model"])
             power_rated = get_resistor_power_rating(package)
-            voltage = r["voltage"] or 0.0
+            voltage = float(r["voltage"]) if r["voltage"] is not None else 0.0
 
             # 跳过无法解析的
             if resistance is None:
@@ -501,7 +543,7 @@ class AMREngine:
 
         for c in capacitors:
             refdes = c["refdes"]
-            voltage = c["voltage"] or 0.0
+            voltage = float(c["voltage"]) if c["voltage"] is not None else 0.0
 
             if voltage <= 0:
                 skipped_cap += 1

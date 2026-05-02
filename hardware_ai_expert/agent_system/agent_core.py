@@ -33,10 +33,14 @@ from agent_system.graph_tools import (
     get_component_nets,
     get_net_components,
     get_power_domain,
+    get_power_tree,
     get_i2c_devices,
     get_signal_path,
 )
 from agent_system.knowledge_router import KnowledgeRouter
+from agent_system.graph_rag_bridge import GraphRAGBridge
+from agent_system.llm_intent_router import LLMIntentRouter, IntentType
+from agent_system.review_engine import ReviewRuleEngine
 
 from agent_system.schemas import (
     AgentMessage,
@@ -105,6 +109,9 @@ class AgentState:
     final_report: str = ""
     next_node: str = NodeName.ENTRY
 
+    # 审查报告（由 ReviewRuleEngine 生成）
+    review_report: str = ""
+
     def to_dict(self) -> dict:
         """序列化为 dict（用于日志/调试）"""
         return {
@@ -164,24 +171,74 @@ def entry_node(state: AgentState) -> str:
 
 
 def task_classifier_node(state: AgentState) -> str:
-    """任务分类器：根据用户输入判断任务类型"""
-    user_input = state.messages[-1].content.lower() if state.messages else ""
+    """任务分类器：使用 LLM Intent Router 判断任务类型"""
+    user_input = state.messages[-1].content if state.messages else ""
 
-    # 关键词匹配（实际项目应调用 LLM 分类）
-    diagnosis_keywords = ["故障", "不工作", "失效", "error", "fault", "not working",
-                          "无法识别", "没有响应", "烧毁", "发热", "黑屏", "死机"]
-    review_keywords = ["审查", "检查", "规则", "review", "check", "audit",
-                       "合规", "规范", "违规", "上拉", "去耦", "电容"]
+    try:
+        router = LLMIntentRouter()
+        decision = router.route(user_input)
+        intent = decision.intents[0]
 
-    if any(kw in user_input for kw in diagnosis_keywords):
-        state.task_type = TaskType.DIAGNOSIS
-    elif any(kw in user_input for kw in review_keywords):
-        state.task_type = TaskType.REVIEW
-    else:
-        state.task_type = TaskType.SPEC_QUERY
+        # 记录 LLM 分类结果
+        state.context["intent_analysis"] = {
+            "primary_intent": intent.intent_type.value,
+            "confidence": intent.confidence,
+            "entities": intent.entities,
+            "strategy": decision.strategy,
+        }
 
-    _add_step(state, "reasoning", NodeName.TASK_CLASSIFIER,
-              f"任务分类结果: {state.task_type}", {"keywords_matched": True})
+        # 映射到内部 TaskType
+        intent_to_task = {
+            IntentType.RULE_REVIEW: TaskType.REVIEW,
+            IntentType.SCHEMATIC_REVIEW: TaskType.REVIEW,
+            IntentType.DIAGNOSIS: TaskType.DIAGNOSIS,
+            IntentType.POWER_ANALYSIS: TaskType.DIAGNOSIS,
+            IntentType.NET_TRACE: TaskType.SPEC_QUERY,
+            IntentType.COMPONENT_LOOKUP: TaskType.SPEC_QUERY,
+            IntentType.PINOUT_CHECK: TaskType.SPEC_QUERY,
+            IntentType.SPEC_SEARCH: TaskType.SPEC_QUERY,
+            IntentType.GRAPH_RAG: TaskType.SPEC_QUERY,
+            IntentType.COMPOSITE: TaskType.SPEC_QUERY,  # 复合意图作为查询处理
+            IntentType.CLARIFY: TaskType.SPEC_QUERY,
+            IntentType.UNKNOWN: TaskType.SPEC_QUERY,
+        }
+        state.task_type = intent_to_task.get(intent.intent_type, TaskType.SPEC_QUERY)
+
+        # 存储复合意图的子任务（供后续使用）
+        if intent.sub_intents:
+            state.context["sub_intents"] = [
+                {
+                    "intent": si.intent_type.value,
+                    "entities": si.entities,
+                    "query": si.raw_query,
+                }
+                for si in intent.sub_intents
+            ]
+
+        _add_step(state, "reasoning", NodeName.TASK_CLASSIFIER,
+                  f"LLM 分类: {intent.intent_type.value} (conf={intent.confidence:.2f}) → TaskType.{state.task_type.value}",
+                  {"entities": intent.entities, "strategy": decision.strategy})
+
+        # 如果是 clarify 策略，直接生成澄清报告
+        if decision.strategy == "clarify":
+            state.final_report = f"## 需要澄清\n\n{decision.message}\n\n请补充更多信息后重试。"
+            state.should_continue = False
+            return NodeName.END
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"LLM intent routing failed: {e}, falling back to keywords")
+        # 回退到关键词模式
+        user_input_lower = user_input.lower()
+        if any(kw in user_input_lower for kw in ["故障", "失效", "error", "黑屏", "死机"]):
+            state.task_type = TaskType.DIAGNOSIS
+        elif any(kw in user_input_lower for kw in ["审查", "检查", "规则", "review", "合规"]):
+            state.task_type = TaskType.REVIEW
+        else:
+            state.task_type = TaskType.SPEC_QUERY
+
+        _add_step(state, "reasoning", NodeName.TASK_CLASSIFIER,
+                  f"回退关键词分类: {state.task_type}", {"error": str(e)})
 
     return NodeName.REASONING
 
@@ -210,10 +267,17 @@ def _reasoning_review(state: AgentState) -> str:
         target = "DECAP"
 
     state.review_scope = {"target": target, "component_filter": None}
-    state.selected_rules = ["i2c_pullup_check", "power_decoupling_check"]
+
+    # 根据审查目标选择规则（使用 review_engine 的实际规则 ID）
+    target_rules = {
+        "I2C": ["I2C_STD_PULLUP", "OPENDRAIN_PULLUP"],
+        "POWER": ["POWER_3V3_DECAP", "POWER_1V8_DECAP", "POWER_5V0_DECAP", "IC_POWER_GND"],
+        "DECAP": ["POWER_3V3_DECAP", "POWER_1V8_DECAP", "POWER_5V0_DECAP"],
+    }
+    state.selected_rules = target_rules.get(target, None)  # None 表示运行全部规则
 
     _add_step(state, "reasoning", NodeName.REASONING,
-              f"审查策略: 目标={target}, 规则={state.selected_rules}",
+              f"审查策略: 目标={target}, 规则={state.selected_rules or '全部'}",
               {"scope": state.review_scope})
 
     return NodeName.TOOL_EXECUTOR
@@ -241,18 +305,43 @@ def _reasoning_diagnosis(state: AgentState) -> str:
 
 
 def _reasoning_query(state: AgentState) -> str:
-    """查询任务推理"""
+    """查询任务推理（支持 LLM 提取的实体）"""
     user_input = state.context.get("user_input", "")
+    intent_data = state.context.get("intent_analysis", {})
+    entities = intent_data.get("entities", {})
 
-    # 提取 MPN
-    mpn_match = re.search(r'\b[A-Z0-9]{5,20}\b', user_input.upper())
-    mpn = mpn_match.group(0) if mpn_match else None
+    # 优先使用 LLM 提取的实体
+    refdes = entities.get("refdes", [None])[0] if entities.get("refdes") else None
+    net_name = entities.get("net_name", "")
+    mpn = entities.get("mpn", "")
 
-    state.search_context = {"mpn": mpn, "query": user_input}
+    # 回退到正则提取
+    if not mpn:
+        mpn_match = re.search(r'\b[A-Z0-9]{5,20}\b', user_input.upper())
+        mpn = mpn_match.group(0) if mpn_match else None
+
+    # 判断查询策略
+    query_strategy = "general"
+    if refdes and ("电源" in user_input or "power" in user_input.lower()):
+        query_strategy = "power_tree"
+    elif net_name:
+        query_strategy = "net_trace"
+    elif refdes:
+        query_strategy = "component_lookup"
+    elif mpn:
+        query_strategy = "spec_search"
+
+    state.search_context = {
+        "mpn": mpn,
+        "refdes": refdes,
+        "net_name": net_name,
+        "query": user_input,
+        "strategy": query_strategy,
+    }
 
     _add_step(state, "reasoning", NodeName.REASONING,
-              f"查询策略: MPN={mpn}, 查询内容={user_input[:50]}",
-              {"mpn": mpn})
+              f"查询策略: {query_strategy}, refdes={refdes}, net={net_name}, mpn={mpn}",
+              {"entities": entities})
 
     return NodeName.TOOL_EXECUTOR
 
@@ -374,36 +463,119 @@ def _execute_diagnosis_tools(state: AgentState) -> str:
 
 
 def _execute_query_tools(state: AgentState) -> str:
-    """执行查询工具"""
+    """执行查询工具（支持多种策略）"""
+    strategy = state.search_context.get("strategy", "general")
     mpn = state.search_context.get("mpn")
+    refdes = state.search_context.get("refdes")
+    net_name = state.search_context.get("net_name")
     query = state.search_context.get("query", "")
 
-    if mpn:
-        try:
-            router = KnowledgeRouter()
-            result = router.search(mpn, query)
-            _add_step(state, "action", NodeName.TOOL_EXECUTOR,
-                      f"调用 KnowledgeRouter.search({mpn})",
-                      {"status": result.status, "confidence": result.confidence})
+    results = []
 
-            state.query_result = {
-                "mpn": mpn,
-                "status": result.status,
-                "content": result.content,
-                "confidence": result.confidence,
-                "tier": result.tier,
-            }
+    # 策略 1: 电源树查询
+    if strategy == "power_tree" and refdes:
+        try:
+            # 使用 get_power_tree（需要 root_refdes）
+            power_info = get_power_tree.invoke({"root_refdes": refdes})
+            _add_step(state, "action", NodeName.TOOL_EXECUTOR,
+                      f"调用 get_power_tree({refdes})", {"result": power_info[:200]})
+            results.append({"type": "power_tree", "content": power_info})
         except Exception as e:
-            _add_step(state, "observation", NodeName.TOOL_EXECUTOR, f"查询失败: {e}", {})
+            _add_step(state, "observation", NodeName.TOOL_EXECUTOR, f"电源树查询失败: {e}", {})
+
+    # 策略 2: 网络追踪
+    elif strategy == "net_trace" and net_name:
+        try:
+            net_info = get_net_components.invoke({"net_name": net_name})
+            _add_step(state, "action", NodeName.TOOL_EXECUTOR,
+                      f"调用 get_net_components({net_name})", {"result": net_info[:200]})
+            results.append({"type": "net_trace", "content": net_info})
+        except Exception as e:
+            _add_step(state, "observation", NodeName.TOOL_EXECUTOR, f"网络追踪失败: {e}", {})
+
+    # 策略 3: 器件查询
+    elif strategy == "component_lookup" and refdes:
+        try:
+            comp_info = get_component_nets.invoke({"refdes": refdes})
+            _add_step(state, "action", NodeName.TOOL_EXECUTOR,
+                      f"调用 get_component_nets({refdes})", {"result": comp_info[:200]})
+            results.append({"type": "component", "content": comp_info})
+        except Exception as e:
+            _add_step(state, "observation", NodeName.TOOL_EXECUTOR, f"器件查询失败: {e}", {})
+
+    # 策略 4: GraphRAG 规格搜索
+    elif strategy == "spec_search" and mpn:
+        try:
+            bridge = GraphRAGBridge()
+            rag_results = bridge.graph_rag_query(query, mpn=mpn)
+            _add_step(state, "action", NodeName.TOOL_EXECUTOR,
+                      f"调用 GraphRAG({mpn})", {"results": len(rag_results)})
+            if rag_results:
+                content = "\n\n".join([
+                    f"[{r.chunk_type}] {r.content[:300]}..."
+                    for r in rag_results[:3]
+                ])
+                results.append({"type": "graph_rag", "content": content})
+            bridge.close()
+        except Exception as e:
+            _add_step(state, "observation", NodeName.TOOL_EXECUTOR, f"GraphRAG 失败: {e}", {})
+
+        # GraphRAG 失败时回退到 KnowledgeRouter
+        if not results:
+            try:
+                router = KnowledgeRouter()
+                result = router.search(mpn, query)
+                _add_step(state, "action", NodeName.TOOL_EXECUTOR,
+                          f"回退 KnowledgeRouter({mpn})", {"status": result.status})
+                results.append({"type": "knowledge", "content": result.content})
+            except Exception as e:
+                _add_step(state, "observation", NodeName.TOOL_EXECUTOR, f"知识检索失败: {e}", {})
+
+    # 兜底：通用查询
     else:
-        _add_step(state, "observation", NodeName.TOOL_EXECUTOR, "未提取到 MPN，跳过知识检索", {})
+        _add_step(state, "observation", NodeName.TOOL_EXECUTOR,
+                  f"通用查询策略，未匹配特定工具", {"strategy": strategy})
+
+    state.query_result = {
+        "strategy": strategy,
+        "mpn": mpn,
+        "refdes": refdes,
+        "net_name": net_name,
+        "results": results,
+    }
 
     return NodeName.REPORT_GENERATOR
 
 
 def review_specific_node(state: AgentState) -> str:
     """审查任务后处理"""
-    # 简单后处理：按严重程度排序
+    # 尝试使用 ReviewRuleEngine 执行规则检查
+    try:
+        from agent_system.graph_tools import _get_driver
+        driver = _get_driver()
+        engine = ReviewRuleEngine(driver)
+
+        # 执行选中的规则
+        rule_ids = state.selected_rules if state.selected_rules else None
+        violations = engine.run_rules(rule_ids=rule_ids, enabled_only=True)
+
+        # 更新状态
+        state.violations = violations
+
+        # 生成报告
+        state.review_report = engine.generate_report(violations)
+
+        _add_step(state, "reasoning", NodeName.REVIEW_SPECIFIC,
+                  f"ReviewRuleEngine 检查完成: 发现 {len(violations)} 个违规",
+                  {"engine": "ReviewRuleEngine"})
+
+    except Exception as e:
+        # 回退到原有逻辑
+        _add_step(state, "reasoning", NodeName.REVIEW_SPECIFIC,
+                  f"ReviewRuleEngine 不可用，回退到原有逻辑: {e}",
+                  {"engine": "fallback"})
+
+    # 按严重程度排序
     state.violations.sort(key=lambda v: {"ERROR": 0, "WARNING": 1, "INFO": 2}[v.severity])
 
     _add_step(state, "reasoning", NodeName.REVIEW_SPECIFIC,
@@ -454,6 +626,20 @@ def report_generator_node(state: AgentState) -> str:
 
 def _generate_review_report(state: AgentState) -> str:
     """生成审查报告"""
+    # 如果 ReviewRuleEngine 已生成报告，直接使用
+    if state.review_report:
+        # 在引擎报告基础上追加执行元数据
+        meta_lines = [
+            f"\n---\n",
+            f"**审查范围**: {state.review_scope.get('target', '全板')}",
+            f"**执行规则**: {', '.join(state.selected_rules)}",
+            f"**工具调用**: {state.tool_call_count} 次",
+            f"**执行步骤**: {len(state.execution_trace)} 步",
+            f"\n*生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*",
+        ]
+        return state.review_report + "\n".join(meta_lines)
+
+    # 回退：手动构建报告
     lines = [
         "# 原理图审查报告",
         f"\n**审查范围**: {state.review_scope.get('target', '全板')}",
@@ -517,20 +703,36 @@ def _generate_diagnosis_report(state: AgentState) -> str:
 
 
 def _generate_query_report(state: AgentState) -> str:
-    """生成查询报告"""
+    """生成查询报告（支持多策略结果）"""
     result = state.query_result or {}
+    strategy = result.get("strategy", "general")
     lines = [
-        "# 器件规格查询结果",
+        "# 查询结果",
         f"\n**查询**: {state.context.get('user_input', '')}",
-        f"**MPN**: {result.get('mpn', 'N/A')}",
-        f"**来源层级**: {result.get('tier', 'N/A')}",
-        f"**置信度**: {result.get('confidence', 0):.0%}\n",
-        "---",
-        "\n## 检索内容",
+        f"**策略**: {strategy}",
     ]
 
-    content = result.get("content", "未找到相关信息")
-    lines.append(f"\n{content}")
+    if result.get("refdes"):
+        lines.append(f"**器件**: {result['refdes']}")
+    if result.get("net_name"):
+        lines.append(f"**网络**: {result['net_name']}")
+    if result.get("mpn"):
+        lines.append(f"**型号**: {result['mpn']}")
+
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    query_results = result.get("results", [])
+    if not query_results:
+        lines.append("未找到相关信息。请尝试：")
+        lines.append("- 提供更具体的器件位号（如 U50001）")
+        lines.append("- 提供网络名（如 I2C_SDA）")
+        lines.append("- 或描述更具体的查询内容")
+    else:
+        for r in query_results:
+            lines.append(f"\n## {r['type'].upper()}")
+            lines.append(f"\n{r['content']}")
 
     lines.append("\n---")
     lines.append(f"\n*生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*")
@@ -616,6 +818,7 @@ class HardwareAgent:
             "status": "success" if not state.error_message else "error",
             "task_type": state.task_type,
             "report": state.final_report,
+            "review_report": state.review_report,
             "error": state.error_message,
             "violations": [v.model_dump() for v in state.violations],
             "hypotheses": [h.model_dump() for h in state.hypotheses],
