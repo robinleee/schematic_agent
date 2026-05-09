@@ -72,8 +72,8 @@ class DocumentProcessor:
     def __init__(self):
         self.parsers = {
             "design_guide": DesignGuideParser(),
-            # TODO: Phase 2 添加 checklist_parser
-            # "checklist": ChecklistParser(),
+            "checklist": None,  # 延迟导入，避免循环依赖
+            "expert_note": DesignGuideParser(),  # 复用文本切片
         }
     
     def process(self, file_path: str, doc_type: str, metadata: Optional[Dict[str, Any]] = None) -> ProcessingResult:
@@ -172,13 +172,26 @@ class DocumentProcessor:
             )
     
     def _process_checklist(self, file_path: str, metadata: Dict[str, Any]) -> ProcessingResult:
-        """处理检查清单（Phase 2 实现）"""
-        return ProcessingResult(
-            doc_type="checklist",
-            source_file=file_path,
-            metadata=metadata,
-            error="Checklist 解析器尚未实现（Phase 2）"
-        )
+        """处理检查清单"""
+        try:
+            from .checklist_parser import ChecklistParser
+            parser = ChecklistParser()
+            rules = parser.parse(file_path, metadata)
+            
+            return ProcessingResult(
+                doc_type="checklist",
+                source_file=file_path,
+                metadata=metadata,
+                rules=rules,
+            )
+        except Exception as e:
+            logger.error(f"Checklist processing failed: {e}")
+            return ProcessingResult(
+                doc_type="checklist",
+                source_file=file_path,
+                metadata=metadata,
+                error=f"Checklist 解析失败: {e}"
+            )
     
     def _process_expert_note(self, file_path: str, metadata: Dict[str, Any]) -> ProcessingResult:
         """处理经验文档（复用 DesignGuideParser 的文本切片）"""

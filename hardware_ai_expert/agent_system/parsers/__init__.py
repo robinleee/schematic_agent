@@ -8,11 +8,14 @@
 """
 
 from .design_guide_parser import DesignGuideParser, DesignGuideChunk
+from .checklist_parser import ChecklistParser, ChecklistRule
 from .document_processor import DocumentProcessor, ProcessingResult
 
 __all__ = [
     "DesignGuideParser",
-    "DesignGuideChunk", 
+    "DesignGuideChunk",
+    "ChecklistParser",
+    "ChecklistRule",
     "DocumentProcessor",
     "ProcessingResult",
 ]
