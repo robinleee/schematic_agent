@@ -121,6 +121,11 @@ _kb_page_path = os.path.join(os.path.dirname(__file__), "pages", "knowledge_base
 if os.path.exists(_kb_page_path):
     pages["knowledge_base"] = st.Page("pages/knowledge_base.py", title="知识库管理", icon="📚")
 
+# 添加 ETL 导入页面（如果存在）
+_etl_page_path = os.path.join(os.path.dirname(__file__), "pages", "etl_import.py")
+if os.path.exists(_etl_page_path):
+    pages["etl_import"] = st.Page("pages/etl_import.py", title="ETL 导入", icon="🔧")
+
 # 设置导航
 pg = st.navigation(pages, position="sidebar")
 
