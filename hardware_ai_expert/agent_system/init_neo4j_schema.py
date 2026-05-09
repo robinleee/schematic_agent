@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+from __future__ import annotations
+
 """
 Neo4j Schema 初始化脚本
 

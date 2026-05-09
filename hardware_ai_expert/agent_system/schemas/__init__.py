@@ -25,6 +25,8 @@ from agent_system.schemas.agent import (
     QueryState,
     ReviewResult,
     DiagnosisResult,
+    ReActDecision,
+    ReActTraceStep,
 )
 
 from agent_system.schemas.review import (
@@ -60,6 +62,8 @@ __all__ = [
     "QueryState",
     "ReviewResult",
     "DiagnosisResult",
+    "ReActDecision",
+    "ReActTraceStep",
     # Review
     "Violation",
     "ViolationEvidence",

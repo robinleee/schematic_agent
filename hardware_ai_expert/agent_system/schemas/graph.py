@@ -7,7 +7,11 @@ Neo4j 图谱数据模型
 
 from __future__ import annotations
 
-from typing import Optional, Literal, Annotated, Sequence
+from typing import Optional, Literal, Sequence
+try:
+    from typing import Annotated
+except ImportError:
+    from typing_extensions import Annotated
 from pydantic import BaseModel, Field, field_validator
 import re
 
@@ -203,6 +207,68 @@ class DesignGuideNode(BaseModel):
         }
 
 
+class ReviewRuleNode(BaseModel):
+    """
+    审查规则节点（来自 Checklist）
+
+    对应 Neo4j: (:ReviewRule)
+    """
+    rule_id: str = Field(description="规则唯一标识")
+    name: str = Field(description="规则名称")
+    category: str = Field(default="general", description="分类")
+    target: str = Field(default="", description="适用器件/场景")
+    check_item: str = Field(default="", description="检查项描述")
+    pass_condition: str = Field(default="", description="通过条件")
+    severity: str = Field(default="WARNING", description="严重级别: ERROR/WARNING/INFO")
+    source_checklist: str = Field(default="", description="来源清单")
+    reference: str = Field(default="", description="参考文档")
+    enabled: bool = Field(default=True, description="是否启用")
+    created_at: str = Field(default="", description="创建时间")
+
+    def to_cypher_properties(self) -> dict:
+        return {
+            "RuleId": self.rule_id,
+            "Name": self.name,
+            "Category": self.category,
+            "Target": self.target,
+            "CheckItem": self.check_item,
+            "PassCondition": self.pass_condition,
+            "Severity": self.severity,
+            "SourceChecklist": self.source_checklist,
+            "Reference": self.reference,
+            "Enabled": self.enabled,
+            "CreatedAt": self.created_at,
+        }
+
+
+class KnowledgeChunkNode(BaseModel):
+    """
+    知识切片节点（来自 Design Guide / Expert Note）
+
+    对应 Neo4j: (:KnowledgeChunk)
+    """
+    chunk_id: str = Field(description="切片唯一标识")
+    source_id: str = Field(description="来源文档标识")
+    title: str = Field(default="", description="章节标题")
+    category: str = Field(default="general", description="主题分类")
+    content: str = Field(description="切片内容")
+    content_hash: str = Field(default="", description="内容哈希")
+    char_count: int = Field(default=0, description="字符数")
+    indexed_at: str = Field(default="", description="入库时间")
+
+    def to_cypher_properties(self) -> dict:
+        return {
+            "ChunkId": self.chunk_id,
+            "SourceId": self.source_id,
+            "Title": self.title,
+            "Category": self.category,
+            "Content": self.content[:2000],  # Neo4j 属性长度限制
+            "ContentHash": self.content_hash,
+            "CharCount": self.char_count,
+            "IndexedAt": self.indexed_at,
+        }
+
+
 # ============================================
 # 约束与索引定义
 # ============================================
@@ -213,6 +279,8 @@ NEO4J_CONSTRAINTS: list[str] = [
     "CREATE CONSTRAINT net_name IF NOT EXISTS FOR (n:Net) REQUIRE n.Name IS UNIQUE",
     "CREATE CONSTRAINT review_whitelist_id IF NOT EXISTS FOR (w:ReviewWhitelist) REQUIRE (w.RuleId, w.RefDes) IS UNIQUE",
     "CREATE CONSTRAINT design_guide_id IF NOT EXISTS FOR (d:DesignGuide) REQUIRE d.GuideId IS UNIQUE",
+    "CREATE CONSTRAINT review_rule_id IF NOT EXISTS FOR (r:ReviewRule) REQUIRE r.RuleId IS UNIQUE",
+    "CREATE CONSTRAINT knowledge_chunk_id IF NOT EXISTS FOR (k:KnowledgeChunk) REQUIRE k.ChunkId IS UNIQUE",
 ]
 
 NEO4J_INDEXES: list[str] = [
@@ -224,4 +292,8 @@ NEO4J_INDEXES: list[str] = [
     "CREATE INDEX net_voltage_level IF NOT EXISTS FOR (n:Net) ON (n.VoltageLevel)",
     "CREATE INDEX net_type IF NOT EXISTS FOR (n:Net) ON (n.NetType)",
     "CREATE INDEX design_guide_category IF NOT EXISTS FOR (d:DesignGuide) ON (d.Category)",
+    "CREATE INDEX review_rule_category IF NOT EXISTS FOR (r:ReviewRule) ON (r.Category)",
+    "CREATE INDEX review_rule_severity IF NOT EXISTS FOR (r:ReviewRule) ON (r.Severity)",
+    "CREATE INDEX knowledge_chunk_source IF NOT EXISTS FOR (k:KnowledgeChunk) ON (k.SourceId)",
+    "CREATE INDEX knowledge_chunk_category IF NOT EXISTS FOR (k:KnowledgeChunk) ON (k.Category)",
 ]

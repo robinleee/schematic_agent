@@ -7,13 +7,7 @@ Agent 状态机数据模型
 
 from __future__ import annotations
 
-from __future__ import annotations
-
-from typing import TypedDict, Literal, Optional, TYPE_CHECKING
-try:
-    from typing import Annotated, NotRequired
-except ImportError:
-    from typing_extensions import Annotated, NotRequired
+from typing import TypedDict, Annotated, Literal, Optional, NotRequired, TYPE_CHECKING
 import operator
 
 from pydantic import BaseModel, Field
@@ -105,26 +99,3 @@ class DiagnosisResult(BaseModel):
     visited_nodes_count: int
     execution_trace: list[ExecutionStep]
     tool_call_count: int
-
-
-# ============================================
-# ReAct 决策模型
-# ============================================
-
-class ReActDecision(BaseModel):
-    """ReAct 单步决策输出"""
-    thought: str = Field(..., description="当前推理过程")
-    action: str = Field(..., description="要调用的工具名，或 'final_answer'")
-    action_input: dict = Field(default_factory=dict, description="工具参数")
-    final_answer: Optional[str] = Field(default=None, description="最终回答（当 action='final_answer' 时）")
-    is_final: bool = Field(default=False, description="是否结束循环")
-
-
-class ReActTraceStep(BaseModel):
-    """ReAct 执行的单步记录"""
-    step_id: int
-    thought: str
-    action: str
-    action_input: dict
-    observation: str
-    timestamp: str = Field(default_factory=lambda: __import__("datetime").datetime.now().isoformat())
