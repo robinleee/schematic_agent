@@ -105,39 +105,6 @@ def render_quick_actions():
 
 
 # ============================================================
-# 多页面导航配置
-# ============================================================
-
-pages = {
-    "chat": st.Page(render_chat, title="智能对话", icon="💬"),
-    "review": st.Page(render_review_report, title="审查报告", icon="📋"),
-    "hitl": st.Page(render_hitl, title="HITL 审批", icon="✅"),
-    "datasheet": st.Page(render_datasheet_hitl, title="Datasheet 审批", icon="📄"),
-    "status": st.Page(render_system_status, title="系统状态", icon="📊"),
-}
-
-# 添加知识库管理页面（如果存在）
-_kb_page_path = os.path.join(os.path.dirname(__file__), "pages", "knowledge_base.py")
-if os.path.exists(_kb_page_path):
-    pages["knowledge_base"] = st.Page("pages/knowledge_base.py", title="知识库管理", icon="📚")
-
-# 添加 ETL 导入页面（如果存在）
-_etl_page_path = os.path.join(os.path.dirname(__file__), "pages", "etl_import.py")
-if os.path.exists(_etl_page_path):
-    pages["etl_import"] = st.Page("pages/etl_import.py", title="ETL 导入", icon="🔧")
-
-# 设置导航
-pg = st.navigation(pages, position="sidebar")
-
-# 侧边栏额外内容
-with st.sidebar:
-    st.markdown("---")
-    render_quick_actions()
-
-# 运行当前页面
-pg.run()
-
-# ============================================================
 # 页面 1: 智能对话
 # ============================================================
 
@@ -635,5 +602,39 @@ def _generate_markdown_report(result: dict) -> str:
     lines.append("*报告由硬件 AI 专家系统自动生成*")
 
     return "\n".join(lines)
+
+
+# ============================================================
+# 多页面导航配置（必须在所有页面函数定义之后）
+# ============================================================
+
+pages = {
+    "chat": st.Page(render_chat, title="智能对话", icon="💬"),
+    "review": st.Page(render_review_report, title="审查报告", icon="📋"),
+    "hitl": st.Page(render_hitl, title="HITL 审批", icon="✅"),
+    "datasheet": st.Page(render_datasheet_hitl, title="Datasheet 审批", icon="📄"),
+    "status": st.Page(render_system_status, title="系统状态", icon="📊"),
+}
+
+# 添加知识库管理页面（如果存在）
+_kb_page_path = os.path.join(os.path.dirname(__file__), "pages", "knowledge_base.py")
+if os.path.exists(_kb_page_path):
+    pages["knowledge_base"] = st.Page("pages/knowledge_base.py", title="知识库管理", icon="📚")
+
+# 添加 ETL 导入页面（如果存在）
+_etl_page_path = os.path.join(os.path.dirname(__file__), "pages", "etl_import.py")
+if os.path.exists(_etl_page_path):
+    pages["etl_import"] = st.Page("pages/etl_import.py", title="ETL 导入", icon="🔧")
+
+# 设置导航
+pg = st.navigation(pages, position="sidebar")
+
+# 侧边栏额外内容
+with st.sidebar:
+    st.markdown("---")
+    render_quick_actions()
+
+# 运行当前页面
+pg.run()
 
 
