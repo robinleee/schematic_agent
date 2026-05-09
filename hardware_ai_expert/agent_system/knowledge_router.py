@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Knowledge Router - 三级降级检索路由
 

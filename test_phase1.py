@@ -162,6 +162,9 @@ def test_knowledge_router_import():
     try:
         import chromadb
         chromadb_available = True
+        # 重置 ChromaDB singleton 避免旧数据兼容性问题
+        from agent_system.knowledge_router import _get_chroma_client
+        _get_chroma_client().reset()
     except ImportError:
         chromadb_available = False
         print("  ⚠️ ChromaDB 不可用，跳过导入测试")
@@ -218,6 +221,9 @@ def test_knowledge_router_query():
     try:
         import chromadb
         chromadb_available = True
+        # 重置 ChromaDB singleton 避免旧数据兼容性问题
+        from agent_system.knowledge_router import _get_chroma_client
+        _get_chroma_client().reset()
     except ImportError:
         chromadb_available = False
         print("  ⚠️ ChromaDB 不可用，跳过查询测试")
