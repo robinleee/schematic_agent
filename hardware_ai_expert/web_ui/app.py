@@ -85,25 +85,11 @@ if "datasheet_hitl" not in st.session_state:
     st.session_state.datasheet_hitl = DatasheetHITLManager()
 
 # ============================================================
-# 侧边栏
+# 页面定义（用于 st.navigation）
 # ============================================================
 
-with st.sidebar:
-    st.markdown("<div class='main-header'>🔧 硬件 AI 专家系统</div>", unsafe_allow_html=True)
-    st.markdown("---")
-
-    # 导航
-    page = st.radio("导航", [
-        "💬 智能对话",
-        "📋 审查报告",
-        "✅ HITL 审批",
-        "📄 Datasheet 审批",
-        "📊 系统状态",
-    ])
-
-    st.markdown("---")
-
-    # 快速操作
+# 快速操作页面（在侧边栏显示）
+def render_quick_actions():
     st.markdown("### 快速操作")
     if st.button("🗑️ 清空对话"):
         st.session_state.messages = []
@@ -116,6 +102,35 @@ with st.sidebar:
             st.success("已加载系统概览")
         except Exception as e:
             st.error(f"加载失败: {e}")
+
+
+# ============================================================
+# 多页面导航配置
+# ============================================================
+
+pages = {
+    "chat": st.Page(render_chat, title="智能对话", icon="💬"),
+    "review": st.Page(render_review_report, title="审查报告", icon="📋"),
+    "hitl": st.Page(render_hitl, title="HITL 审批", icon="✅"),
+    "datasheet": st.Page(render_datasheet_hitl, title="Datasheet 审批", icon="📄"),
+    "status": st.Page(render_system_status, title="系统状态", icon="📊"),
+}
+
+# 添加知识库管理页面（如果存在）
+_kb_page_path = os.path.join(os.path.dirname(__file__), "pages", "knowledge_base.py")
+if os.path.exists(_kb_page_path):
+    pages["knowledge_base"] = st.Page("pages/knowledge_base.py", title="知识库管理", icon="📚")
+
+# 设置导航
+pg = st.navigation(pages, position="sidebar")
+
+# 侧边栏额外内容
+with st.sidebar:
+    st.markdown("---")
+    render_quick_actions()
+
+# 运行当前页面
+pg.run()
 
 # ============================================================
 # 页面 1: 智能对话
@@ -616,17 +631,4 @@ def _generate_markdown_report(result: dict) -> str:
 
     return "\n".join(lines)
 
-# ============================================================
-# 主路由
-# ============================================================
 
-if page == "💬 智能对话":
-    render_chat()
-elif page == "📋 审查报告":
-    render_review_report()
-elif page == "✅ HITL 审批":
-    render_hitl()
-elif page == "📄 Datasheet 审批":
-    render_datasheet_hitl()
-elif page == "📊 系统状态":
-    render_system_status()
