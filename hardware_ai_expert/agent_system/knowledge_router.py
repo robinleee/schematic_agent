@@ -324,6 +324,50 @@ class KnowledgeRouter:
                 imported += 1
         return imported
 
+    def import_design_guide(self, source_id: str, chunks: list, category: str = "general") -> int:
+        """
+        导入设计指南切片到本地向量库。
+
+        Args:
+            source_id: 指南标识（如 "usb3_design_guide_v1"）
+            chunks: DesignGuideChunk 列表
+            category: 知识分类
+
+        Returns:
+            成功导入的切片数
+        """
+        imported = 0
+        for i, chunk in enumerate(chunks):
+            if not chunk.content or not chunk.content.strip():
+                continue
+
+            # 构建切片 ID
+            chunk_id = f"{source_id}_chunk_{i:03d}"
+
+            # 构建元数据丰富的内容（标题 + 分类 + 内容）
+            enriched_content = f"""
+[设计指南: {source_id}]
+[主题: {chunk.category}]
+[章节: {chunk.title}]
+
+{chunk.content}
+""".strip()
+
+            # 创建 ChromaDB 切片
+            db_chunk = DatasheetChunk(
+                mpn=source_id,  # 用 source_id 替代 MPN
+                page=i,
+                content=enriched_content,
+                chunk_type=f"design_guide_{chunk.category}",
+            )
+            db_chunk.content_hash = chunk.content_hash
+
+            if self.tier1.add_chunk(db_chunk):
+                imported += 1
+
+        logger.info(f"Imported {imported}/{len(chunks)} design guide chunks for '{source_id}'")
+        return imported
+
     def get_stats(self) -> dict:
         """获取向量库统计"""
         return {
