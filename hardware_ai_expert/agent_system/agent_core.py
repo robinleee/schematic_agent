@@ -1207,21 +1207,47 @@ class HardwareAgent:
     - review(user_input): 原理图审查
     - diagnose(user_input): 故障诊断
     - query_spec(user_input): 规格查询
+
+    所有任务类型统一走 ReAct 循环（LLM 自主推理+选工具）。
+    保留旧版状态机作为 fallback。
     """
 
-    def __init__(self, max_steps: int = MAX_STEPS, use_react_diagnosis: bool = True):
+    def __init__(self, max_steps: int = MAX_STEPS, use_react: bool = True):
         self.max_steps = max_steps
-        self.use_react_diagnosis = use_react_diagnosis
-        self._react_engine: Optional[ReActDiagnosisEngine] = None
+        self.use_react = use_react
+        self._react_agent = None
 
     @property
-    def react_engine(self) -> ReActDiagnosisEngine:
-        if self._react_engine is None:
-            self._react_engine = ReActDiagnosisEngine()
-        return self._react_engine
+    def react_agent(self):
+        if self._react_agent is None:
+            from agent_system.react_agent import ReActAgent
+            self._react_agent = ReActAgent()
+        return self._react_agent
+
+    def review(self, user_input: str, rules: list[str] = None) -> dict:
+        """执行原理图审查"""
+        if self.use_react:
+            return self.react_agent.run(user_input, task_type="review")
+        return self._run(TaskType.REVIEW, user_input, rules=rules or [])
+
+    def diagnose(self, user_input: str) -> dict:
+        """执行故障诊断"""
+        if self.use_react:
+            return self.react_agent.run(user_input, task_type="diagnosis")
+        return self._run(TaskType.DIAGNOSIS, user_input)
+
+    def query_spec(self, user_input: str) -> dict:
+        """执行规格查询"""
+        if self.use_react:
+            return self.react_agent.run(user_input, task_type="query")
+        return self._run(TaskType.SPEC_QUERY, user_input)
+
+    # ========================================
+    # Fallback: 旧版状态机（use_react=False 时使用）
+    # ========================================
 
     def _run(self, task_type: str, user_input: str, **kwargs) -> dict:
-        """运行状态机"""
+        """运行状态机（旧版 fallback）"""
         state = AgentState()
         state.messages = [AgentMessage(role="user", content=user_input)]
         state.task_type = task_type
@@ -1234,11 +1260,8 @@ class HardwareAgent:
             if not node_fn:
                 state.error_message = f"Unknown node: {state.next_node}"
                 break
-
             state.next_node = node_fn(state)
             step_count += 1
-
-            # 防死循环：检查 should_continue
             if not state.should_continue and state.next_node not in (NodeName.REPORT_GENERATOR, NodeName.END):
                 state.next_node = NodeName.REPORT_GENERATOR
 
@@ -1247,40 +1270,24 @@ class HardwareAgent:
 
         return self._format_result(state)
 
-    def review(self, user_input: str, rules: list[str] = None) -> dict:
-        """执行原理图审查"""
-        return self._run(TaskType.REVIEW, user_input, rules=rules or [])
-
-    def diagnose(self, user_input: str) -> dict:
-        """执行故障诊断（ReAct 版本）"""
-        if self.use_react_diagnosis:
-            # 快速关键词提取实体（供 ReAct 引擎参考），避免 Intent Router LLM 调用耗时
-            entities = self._quick_extract_entities(user_input)
-            return self.react_engine.run(user_input, entities=entities)
-        else:
-            # 回退到旧版硬编码状态机
-            return self._run(TaskType.DIAGNOSIS, user_input)
-
-    @staticmethod
-    def _quick_extract_entities(user_input: str) -> dict:
-        """轻量级实体提取（无需 LLM），供 ReAct 引擎初始化参考"""
-        entities = {"refdes": [], "net_names": [], "voltage_levels": []}
-        import re
-        # 提取 refdes（如 U1, R3002, C100）
-        for m in re.finditer(r'\b([A-Z]+\d+[A-Z]*\d*)\b', user_input):
-            entities["refdes"].append(m.group(1))
-        # 提取电压（如 3.3V, 1.8V, 0.85V）
-        for m in re.finditer(r'\b(\d+\.?\d*)\s*[Vv]\b', user_input):
-            entities["voltage_levels"].append(m.group(1) + "V")
-        # 提取网络名（简单启发式：大写下划线组合）
-        for m in re.finditer(r'\b([A-Z][A-Z0-9_]+)\b', user_input):
-            if len(m.group(1)) >= 3 and "_" in m.group(1):
-                entities["net_names"].append(m.group(1))
-        return entities
-
-    def query_spec(self, user_input: str) -> dict:
-        """执行规格查询"""
-        return self._run(TaskType.SPEC_QUERY, user_input)
+    def _format_result(self, state: AgentState) -> dict:
+        """格式化输出结果（旧版 fallback）"""
+        return {
+            "status": "success" if not state.error_message else "error",
+            "task_type": state.task_type,
+            "report": state.final_report,
+            "review_report": state.review_report,
+            "error": state.error_message,
+            "violations": [v.model_dump() for v in state.violations],
+            "hypotheses": [h.model_dump() for h in state.hypotheses],
+            "execution_trace": [
+                {"id": s.step_id, "type": s.step_type, "node": s.node, "content": s.content, "metadata": s.metadata}
+                for s in state.execution_trace
+            ],
+            "tool_call_count": state.tool_call_count,
+            "visited_nodes": list(state.visited_nodes),
+            "state": state.to_dict(),
+        }
 
     def _format_result(self, state: AgentState) -> dict:
         """格式化输出结果"""
