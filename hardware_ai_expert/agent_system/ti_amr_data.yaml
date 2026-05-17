@@ -1,0 +1,61 @@
+components:
+- confidence: 0.1
+  manufacturer: Texas Instruments
+  mpn: SN74LVC1G34
+  source_file: sn74lvc1g34.pdf
+- confidence: 0.1
+  manufacturer: Texas Instruments
+  mpn: TLV733P-Q1
+  source_file: tlv733p-q1.pdf
+- confidence: 0.1
+  manufacturer: Texas Instruments
+  mpn: TPS389006
+  source_file: tps389006.pdf
+- absolute_maximum_ratings:
+    AUX:
+      max: '7'
+      min: '-0.3'
+      unit: V
+    FB2:
+      max: '3'
+      min: '-0.3'
+      unit: V
+    L1:
+      max: '20'
+      min: '-0.3'
+      unit: V
+    L1 (transient for t<10ns)(2):
+      max: '25'
+      min: '-3'
+      unit: V
+    L2 (transient for t<10ns)(2):
+      max: '15'
+      min: '-3'
+      unit: V
+    L2, PG, VOUT, FB:
+      max: '12'
+      min: '-0.3'
+      unit: V
+    Operating junction temperature, Tj:
+      max: '150'
+      min: '-40'
+      unit: °C
+    Storage temperature range, Tstg:
+      max: '150'
+      min: '-65'
+      unit: °C
+    Voltage range VIN, PS/SYNC, EN, VSEL:
+      max: '20'
+      min: '-0.3'
+      unit: V
+  confidence: 0.8
+  manufacturer: Texas Instruments
+  mpn: TPS63070
+  source_file: tps63070.pdf
+- confidence: 0.1
+  manufacturer: Texas Instruments
+  mpn: TPS7A47
+  source_file: tps7a47.pdf
+metadata:
+  count: 5
+  source: ti_datasheet_extractor

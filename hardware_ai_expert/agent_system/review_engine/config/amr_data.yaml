@@ -1,0 +1,6679 @@
+components:
+  381_CAP#1_C0402_DISCRETE_0.1UF_:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.1UF
+      capacitance_pf:
+        value: 100000.0
+      package:
+        value: '0402'
+  381_CAP_C0402_DISCRETE_0.1UF_11:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.1UF
+      capacitance_pf:
+        value: 100000.0
+      package:
+        value: '0402'
+  381_CAP_C0402_DISCRETE_0.22UF_1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.22UF
+      capacitance_pf:
+        value: 220000.0
+      package:
+        value: '0402'
+  381_CAP_C0402_DISCRETE_1 UF_110:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 1UF
+      capacitance_pf:
+        value: 1000000.0
+      package:
+        value: '0402'
+  381_CAP_C0402_DISCRETE_100PF_11:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 100PF
+      capacitance_pf:
+        value: 100.0
+      package:
+        value: '0402'
+  381_CAP_C0402_DISCRETE_10NF_110:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 10NF
+      capacitance_pf:
+        value: 10000.0
+      package:
+        value: '0402'
+  381_CAP_C0402_DISCRETE_1UF_110-:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 1UF
+      capacitance_pf:
+        value: 1000000.0
+      package:
+        value: '0402'
+  381_CAP_C0402_DISCRETE_22 UF_11:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 22UF
+      capacitance_pf:
+        value: 22000000.0
+      package:
+        value: '0402'
+  381_CAP_C0402_DISCRETE_4.7 UF_1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 4.7UF
+      capacitance_pf:
+        value: 4700000.0
+      package:
+        value: '0402'
+  381_CAP_C0402_DISCRETE_DNP_10NF:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 10NF
+      capacitance_pf:
+        value: 10000.0
+      package:
+        value: '0402'
+  381_CAP_C0603_DISCRETE_10UF_110:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 10UF
+      capacitance_pf:
+        value: 10000000.0
+      package:
+        value: '0603'
+  381_CAP_C0603_DISCRETE_1UF_110-:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 1UF
+      capacitance_pf:
+        value: 1000000.0
+      package:
+        value: '0603'
+  381_CAP_C0603_DISCRETE_22 UF_11:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 22UF
+      capacitance_pf:
+        value: 22000000.0
+      package:
+        value: '0603'
+  381_CAP_SMC0402A_DISCRETE_10NF_:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 10NF
+      capacitance_pf:
+        value: 10000.0
+      package:
+        value: '0402'
+  381_CAP_SMC0402A_DISCRETE_1UF_1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 1UF
+      capacitance_pf:
+        value: 1000000.0
+      package:
+        value: '0402'
+  719_CAP_PPG_C0402_DISCRETE_1UF_:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 1UF
+      capacitance_pf:
+        value: 1000000.0
+      package:
+        value: '0402'
+  719_RES#1_R0402_DISCRETE_10K_10:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10000.0
+  719_RES#1_R0402_DISCRETE_1K_100:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1000.0
+  719_RES_PPG#1_R0402_DISCRETE_10:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10.0
+  719_RES_PPG#1_R0402_DISCRETE_1K:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1000.0
+  719_RES_PPG#1_R0402_DISCRETE_DN:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  719_RES_PPG_R0402_DISCRETE_0_10:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 0.0
+  719_RES_PPG_R0402_DISCRETE_10K_:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10000.0
+  719_RES_PPG_R0402_DISCRETE_10_1:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10.0
+  719_RES_PPG_R0402_DISCRETE_1K_1:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1000.0
+  719_RES_PPG_R0402_DISCRETE_2K_1:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 2000.0
+  719_RES_PPG_R0402_DISCRETE_49.9:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 49.9
+  719_RES_PPG_R0402_DISCRETE_DNP_:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  C#1_C0402_DISCRETE_10000 PF_10%:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 10000PF
+      capacitance_pf:
+        value: 10000.0
+      package:
+        value: '0402'
+  CAP#1_C0402_DISCRETE_0.1 UF_110:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.1UF
+      capacitance_pf:
+        value: 100000.0
+      package:
+        value: '0402'
+  CAP#1_C0402_DISCRETE_18PF_110-0:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 18PF
+      capacitance_pf:
+        value: 18.0
+      package:
+        value: '0402'
+  CAP#1_C0402_DISCRETE_1UF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 1UF
+      capacitance_pf:
+        value: 1000000.0
+      package:
+        value: '0402'
+  CAP#1_SMC0402A_DISCRETE_0.22UF_:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.22UF
+      capacitance_pf:
+        value: 220000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_0.015UF_110-:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 0.015UF
+      capacitance_pf:
+        value: 15000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_0.033UF_110-:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 0.033UF
+      capacitance_pf:
+        value: 33000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_0.047UF_110-:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 0.047UF
+      capacitance_pf:
+        value: 47000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_0.1 UF_110-0:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.1UF
+      capacitance_pf:
+        value: 100000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_0.1UF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.1UF
+      capacitance_pf:
+        value: 100000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_0.1UF_110-_1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.1UF
+      capacitance_pf:
+        value: 100000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_0.1UF_110-_2:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.1UF
+      capacitance_pf:
+        value: 100000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_0.22UF_110-0:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.22UF
+      capacitance_pf:
+        value: 220000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_0.22UF_110_1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.22UF
+      capacitance_pf:
+        value: 220000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_0.22UF_110_2:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.22UF
+      capacitance_pf:
+        value: 220000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_0.47UF_110-0:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.47UF
+      capacitance_pf:
+        value: 470000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_1 UF_110-004:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 1UF
+      capacitance_pf:
+        value: 1000000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_10 PF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 10PF
+      capacitance_pf:
+        value: 10.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_100 PF_110-0:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 100PF
+      capacitance_pf:
+        value: 100.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_100 PF_110_1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 100PF
+      capacitance_pf:
+        value: 100.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_1000 PF_110-:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 1000PF
+      capacitance_pf:
+        value: 1000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_100PF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 100PF
+      capacitance_pf:
+        value: 100.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_10NF_110-000:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 10NF
+      capacitance_pf:
+        value: 10000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_10PF_110-001:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 10PF
+      capacitance_pf:
+        value: 10.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_10PF_110-004:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 10PF
+      capacitance_pf:
+        value: 10.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_10UF_110-001:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 10UF
+      capacitance_pf:
+        value: 10000000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_10UF_110-004:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 10UF
+      capacitance_pf:
+        value: 10000000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_12PF_110-001:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 12PF
+      capacitance_pf:
+        value: 12.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_15 PF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 15PF
+      capacitance_pf:
+        value: 15.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_1NF_110-0002:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 1NF
+      capacitance_pf:
+        value: 1000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_1NF_110-00_1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 1NF
+      capacitance_pf:
+        value: 1000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_1UF_110-0014:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 1UF
+      capacitance_pf:
+        value: 1000000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_1UF_110-0015:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 1UF
+      capacitance_pf:
+        value: 1000000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_1UF_110-0048:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 1UF
+      capacitance_pf:
+        value: 1000000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_2.2UF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 2.2UF
+      capacitance_pf:
+        value: 2200000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_2200PF_110-0:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 2200PF
+      capacitance_pf:
+        value: 2200.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_220PF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 220PF
+      capacitance_pf:
+        value: 220.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_22PF_110-004:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 22PF
+      capacitance_pf:
+        value: 22.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_27PF_110-000:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 27PF
+      capacitance_pf:
+        value: 27.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_27PF_110-002:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 27PF
+      capacitance_pf:
+        value: 27.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_3.3NF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 3.3NF
+      capacitance_pf:
+        value: 3300.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_33 PF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 33PF
+      capacitance_pf:
+        value: 33.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_33PF_110-000:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 33PF
+      capacitance_pf:
+        value: 33.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_4.7 UF_110-0:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 4.7UF
+      capacitance_pf:
+        value: 4700000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_4.7NF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 4.7NF
+      capacitance_pf:
+        value: 4700.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_4.7UF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 4.7UF
+      capacitance_pf:
+        value: 4700000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_470PF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 470PF
+      capacitance_pf:
+        value: 470.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_47NF_110-000:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 47NF
+      capacitance_pf:
+        value: 47000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_47PF_110-000:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 47PF
+      capacitance_pf:
+        value: 47.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_47PF_110-004:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 47PF
+      capacitance_pf:
+        value: 47.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_680 PF_110-0:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 680PF
+      capacitance_pf:
+        value: 680.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_DNP_0.1UF_11:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.1UF
+      capacitance_pf:
+        value: 100000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_DNP_0.1UF__1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.1UF
+      capacitance_pf:
+        value: 100000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_DNP_1NF_110-:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 1NF
+      capacitance_pf:
+        value: 1000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_DNP_1UF_110-:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 1UF
+      capacitance_pf:
+        value: 1000000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_DNP_20PF_110:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 20PF
+      capacitance_pf:
+        value: 20.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_DNP_220PF_11:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 220PF
+      capacitance_pf:
+        value: 220.0
+      package:
+        value: '0402'
+  CAP_C0603_DISCRETE_0.01UF_110-0:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 25.0
+      capacitance:
+        value: 0.01UF
+      capacitance_pf:
+        value: 10000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_0.022 UF_110:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 25.0
+      capacitance:
+        value: 0.022UF
+      capacitance_pf:
+        value: 22000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_0.022UF_110-:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 25.0
+      capacitance:
+        value: 0.022UF
+      capacitance_pf:
+        value: 22000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_0.1 UF_110-0:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 0.1UF
+      capacitance_pf:
+        value: 100000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_0.1UF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 0.1UF
+      capacitance_pf:
+        value: 100000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_0.1UF_110-_1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 0.1UF
+      capacitance_pf:
+        value: 100000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_0.22UF_110-0:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 0.22UF
+      capacitance_pf:
+        value: 220000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_0.33 UF_110-:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 0.33UF
+      capacitance_pf:
+        value: 330000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_1 UF_110-003:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 1UF
+      capacitance_pf:
+        value: 1000000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_1 UF_110-0_1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 1UF
+      capacitance_pf:
+        value: 1000000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_10000PF_110-:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 25.0
+      capacitance:
+        value: 10000PF
+      capacitance_pf:
+        value: 10000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_10NF_110-004:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 25.0
+      capacitance:
+        value: 10NF
+      capacitance_pf:
+        value: 10000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_10UF_110-001:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 10UF
+      capacitance_pf:
+        value: 10000000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_10UF_110-002:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 10UF
+      capacitance_pf:
+        value: 10000000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_10UF_110-004:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 10UF
+      capacitance_pf:
+        value: 10000000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_1UF_110-0005:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 1UF
+      capacitance_pf:
+        value: 1000000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_2.2UF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 2.2UF
+      capacitance_pf:
+        value: 2200000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_22UF_110-004:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 22UF
+      capacitance_pf:
+        value: 22000000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_22UF_110-0_1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 22UF
+      capacitance_pf:
+        value: 22000000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_4.7UF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 4.7UF
+      capacitance_pf:
+        value: 4700000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_4.7UF_110-_1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 4.7UF
+      capacitance_pf:
+        value: 4700000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_4.7UF_110-_2:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 4.7UF
+      capacitance_pf:
+        value: 4700000.0
+      package:
+        value: '0603'
+  CAP_C0603_DISCRETE_DNP_0.022 UF:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 25.0
+      capacitance:
+        value: 0.022UF
+      capacitance_pf:
+        value: 22000.0
+      package:
+        value: '0603'
+  CAP_C0805_DISCRETE_10UF_110-001:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 10UF
+      capacitance_pf:
+        value: 10000000.0
+      package:
+        value: 0805
+  CAP_C0805_DISCRETE_10UF_110-004:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 10UF
+      capacitance_pf:
+        value: 10000000.0
+      package:
+        value: 0805
+  CAP_C0805_DISCRETE_1UF_110-0014:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 1UF
+      capacitance_pf:
+        value: 1000000.0
+      package:
+        value: 0805
+  CAP_C0805_DISCRETE_22UF_110-000:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 22UF
+      capacitance_pf:
+        value: 22000000.0
+      package:
+        value: 0805
+  CAP_C0805_DISCRETE_22UF_110-004:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 22UF
+      capacitance_pf:
+        value: 22000000.0
+      package:
+        value: 0805
+  CAP_C0805_DISCRETE_330PF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 50.0
+      capacitance:
+        value: 330PF
+      capacitance_pf:
+        value: 330.0
+      package:
+        value: 0805
+  CAP_C0805_DISCRETE_4.7NF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 50.0
+      capacitance:
+        value: 4.7NF
+      capacitance_pf:
+        value: 4700.0
+      package:
+        value: 0805
+  CAP_C0805_DISCRETE_4.7UF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 4.7UF
+      capacitance_pf:
+        value: 4700000.0
+      package:
+        value: 0805
+  CAP_C0805_DISCRETE_4.7UF_110-_1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 4.7UF
+      capacitance_pf:
+        value: 4700000.0
+      package:
+        value: 0805
+  CAP_C0805_DISCRETE_47UF_110-004:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 47UF
+      capacitance_pf:
+        value: 47000000.0
+      package:
+        value: 0805
+  CAP_C0805_DISCRETE_DNP_10UF_110:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 10UF
+      capacitance_pf:
+        value: 10000000.0
+      package:
+        value: 0805
+  CAP_C1206-H1_80_DISCRETE_2.2UF_:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 2.2UF
+      capacitance_pf:
+        value: 2200000.0
+      package:
+        value: '1206'
+  CAP_C1206-H1_80_DISCRETE_22UF_1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 22UF
+      capacitance_pf:
+        value: 22000000.0
+      package:
+        value: '1206'
+  CAP_C1206_DISCRETE_100UF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 100UF
+      capacitance_pf:
+        value: 100000000.0
+      package:
+        value: '1206'
+  CAP_C1206_DISCRETE_22 UF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 22UF
+      capacitance_pf:
+        value: 22000000.0
+      package:
+        value: '1206'
+  CAP_C1206_DISCRETE_4700 PF_110-:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 50.0
+      capacitance:
+        value: 4700PF
+      capacitance_pf:
+        value: 4700.0
+      package:
+        value: '1206'
+  CAP_C1210-H2_80_DISCRETE_10UF_1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 25.0
+      capacitance:
+        value: 10UF
+      capacitance_pf:
+        value: 10000000.0
+      package:
+        value: '1210'
+  CAP_C1210-H2_80_DISCRETE_22UF_1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 25.0
+      capacitance:
+        value: 22UF
+      capacitance_pf:
+        value: 22000000.0
+      package:
+        value: '1210'
+  CAP_C1210-H2_80_DISCRETE_22UF_2:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 25.0
+      capacitance:
+        value: 22UF
+      capacitance_pf:
+        value: 22000000.0
+      package:
+        value: '1210'
+  CAP_C1210_DISCRETE_10 UF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 25.0
+      capacitance:
+        value: 10UF
+      capacitance_pf:
+        value: 10000000.0
+      package:
+        value: '1210'
+  CAP_IT_C0402_DISCRETE_220PF_110:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 220PF
+      capacitance_pf:
+        value: 220.0
+      package:
+        value: '0402'
+  CAP_IT_C0402_DISCRETE_DNP_220PF:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 220PF
+      capacitance_pf:
+        value: 220.0
+      package:
+        value: '0402'
+  CAP_IT_SMC0402A_DISCRETE_0.1UF_:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.1UF
+      capacitance_pf:
+        value: 100000.0
+      package:
+        value: '0402'
+  CAP_IT_SMC0402A_DISCRETE_1UF_11:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 1UF
+      capacitance_pf:
+        value: 1000000.0
+      package:
+        value: '0402'
+  CAP_IT_SMC0603C_DISCRETE_10UF_1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 10UF
+      capacitance_pf:
+        value: 10000000.0
+      package:
+        value: '0603'
+  CAP_IT_SMC0805A_DISCRETE_22 UF_:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 22UF
+      capacitance_pf:
+        value: 22000000.0
+      package:
+        value: 0805
+  CAP_IT_SMC0805A_DISCRETE_47UF_1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 47UF
+      capacitance_pf:
+        value: 47000000.0
+      package:
+        value: 0805
+  CAP_NONPOL_C0402_DISCRETE_1UF_1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 1UF
+      capacitance_pf:
+        value: 1000000.0
+      package:
+        value: '0402'
+  CAP_PPG_C0402_DISCRETE_0.1UF_11:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.1UF
+      capacitance_pf:
+        value: 100000.0
+      package:
+        value: '0402'
+  CAP_PPG_C0402_DISCRETE_10UF_110:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 10UF
+      capacitance_pf:
+        value: 10000000.0
+      package:
+        value: '0402'
+  CAP_PPG_C0402_DISCRETE_1NF_110-:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 1NF
+      capacitance_pf:
+        value: 1000.0
+      package:
+        value: '0402'
+  CAP_PPG_C0402_DISCRETE_1UF_110-:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 1UF
+      capacitance_pf:
+        value: 1000000.0
+      package:
+        value: '0402'
+  CAP_PPG_C0402_DISCRETE_DNP_18PF:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 18PF
+      capacitance_pf:
+        value: 18.0
+      package:
+        value: '0402'
+  CAP_PPG_C0402_DISCRETE_DNP_1UF_:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 1UF
+      capacitance_pf:
+        value: 1000000.0
+      package:
+        value: '0402'
+  CAP_PPG_SMC0603C_DISCRETE_47 UF:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 47UF
+      capacitance_pf:
+        value: 47000000.0
+      package:
+        value: '0603'
+  CAP_PPG_SMC0805A_DISCRETE_47UF_:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 47UF
+      capacitance_pf:
+        value: 47000000.0
+      package:
+        value: 0805
+  CAP_P_C0805_DISCRETE_10 UF_110-:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 10UF
+      capacitance_pf:
+        value: 10000000.0
+      package:
+        value: 0805
+  CAP_SMC0402A_DISCRETE_0.1UF_110:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.1UF
+      capacitance_pf:
+        value: 100000.0
+      package:
+        value: '0402'
+  CAP_SMC1206A_DISCRETE_22UF_110-:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 22UF
+      capacitance_pf:
+        value: 22000000.0
+      package:
+        value: '1206'
+  CAP_SMX0402C_DISCRETE_10UF_110-:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 10UF
+      capacitance_pf:
+        value: 10000000.0
+      package:
+        value: '0402'
+  CAP_SMX0402C_DISCRETE_22 UF_110:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 22UF
+      capacitance_pf:
+        value: 22000000.0
+      package:
+        value: '0402'
+  C_C0402_DISCRETE_0.1UF_10%_110-:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.1UF
+      capacitance_pf:
+        value: 100000.0
+      package:
+        value: '0402'
+  C_C0805_DISCRETE_4.7 UF_10%_110:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 4.7UF
+      capacitance_pf:
+        value: 4700000.0
+      package:
+        value: 0805
+  C_C1206-H1_80_DISCRETE_10UF_10%:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 16.0
+      capacitance:
+        value: 10UF
+      capacitance_pf:
+        value: 10000000.0
+      package:
+        value: '1206'
+  RES#1_R0402_301_100-00572-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES#1_R0402_DISCRETE_10K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10000.0
+  RES#1_R0402_DISCRETE_1M_100-002:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1000000.0
+  RES#1_R0402_DISCRETE_2K_100-000:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 2000.0
+  RES#1_R0402_DISCRETE_49.9_100-0:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 49.9
+  RES#1_SMR0402A_127K_100-00535-0:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES#1_SMR0402A_DISCRETE_23.2K_1:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 23200.0
+  RES#1_SMR0402A_DISCRETE_54.9K_1:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 54900.0
+  RESISTOR_R0402_16.2K_100-00709-:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RESISTOR_R0402_5.23K_100-00712-:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RESISTOR_R0402_5.36 K_100-00590:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RESISTOR_R0402_80.6E_0.5%_100-0:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RESISTOR_R0402_DISCRETE_100K_10:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 100000.0
+  RESISTOR_R0402_DISCRETE_10K_100:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10000.0
+  RESISTOR_R0402_DISCRETE_10_100-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10.0
+  RESISTOR_R0402_DISCRETE_11K_100:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 11000.0
+  RESISTOR_R0402_DISCRETE_1M_100-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1000000.0
+  RESISTOR_R0402_DISCRETE_2.2K_10:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 2200.0
+  RESISTOR_R0402_DISCRETE_20K_100:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 20000.0
+  RESISTOR_R0402_DISCRETE_24.9K_1:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 24900.0
+  RESISTOR_R0402_DISCRETE_240_100:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 240.0
+  RESISTOR_R0402_DISCRETE_3K_100-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 3000.0
+  RESISTOR_R0402_DISCRETE_47K_100:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 47000.0
+  RESISTOR_R0402_DISCRETE_54.9K_1:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 54900.0
+  RESISTOR_R0402_DISCRETE_56.2K_1:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 56200.0
+  RESISTOR_R0402_DISCRETE_DNP_10K:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10000.0
+  RESISTOR_R0402_DISCRETE_DNP_47K:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 47000.0
+  RESISTOR_R0402_DNP_45K_100-0071:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A#1_R0402_1.02 K_100-00619-:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A#1_R0402_1.5 K_100-00620-0:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A#1_R0402_2.74 K_100-00589-:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A#1_R0402_3.32 K_100-00565-:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A#1_R0402_47.5 K_100-00584-:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A#1_R0402_5.36 K_100-00590-:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A#1_R0402_60.4_100-00595-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A#1_R0402_DISCRETE_100K_100:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 100000.0
+  RES_A#1_R0402_DISCRETE_100_100-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 100.0
+  RES_A#1_R0402_DISCRETE_10K_100-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10000.0
+  RES_A#1_R0402_DISCRETE_150_100-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 150.0
+  RES_A#1_R0402_DISCRETE_1K_100-0:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1000.0
+  RES_A#1_R0402_DISCRETE_240_100-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 240.0
+  RES_A#1_R0402_DISCRETE_2K_100-0:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 2000.0
+  RES_A#1_R0402_DISCRETE_4.75K_10:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 4750.0
+  RES_A#1_R0402_DISCRETE_47K_100-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 47000.0
+  RES_A#1_R0402_DISCRETE_49.9_100:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 49.9
+  RES_A#1_R0402_DISCRETE_DNP_100K:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 100000.0
+  RES_A#1_R0402_DISCRETE_DNP_10K_:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A#1_R0402_DISCRETE_DNP_1K_1:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A#1_R0402_DISCRETE_DNP_1M_1:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A#1_R0402_DISCRETE_DNP_4.75:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A#1_R0402_DISCRETE_DNP_47K_:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A#1_R0603_1 K_100-00608-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0603'
+      res_power_rating:
+        value: 0.1
+  RES_A#1_R0603_DNP_0_100-00628-0:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0603'
+      res_power_rating:
+        value: 0.1
+  RES_A#1_SMR0402A_DISCRETE_0_100:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 0.0
+  RES_A#1_SMR0402A_DISCRETE_10K_1:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10000.0
+  RES_A#1_SMR0402A_DISCRETE_1K_10:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1000.0
+  RES_A#1_SMR0402A_DISCRETE_4.75K:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 4750.0
+  RES_A#1_SMR0402A_DISCRETE_475_1:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 475.0
+  RES_A#1_SMR0402A_DISCRETE_DNP_1:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A#1_SMR0402A_DISCRETE_DNP_4:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A#1_SMR0603A_1 K_100-00608-:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0603'
+      res_power_rating:
+        value: 0.1
+  RES_A#1_SMR0603A_DISCRETE_100_1:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0603'
+      res_power_rating:
+        value: 0.1
+      resistance_ohm:
+        value: 100.0
+  RES_A_PPG#1_R0402_DISCRETE_0_10:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 0.0
+  RES_A_PPG_R0402_DISCRETE_0_100-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 0.0
+  RES_A_PPG_R0402_DISCRETE_1K_100:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1000.0
+  RES_A_PPG_R0402_DISCRETE_499_10:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 499.0
+  RES_A_R0402_120_100-00481-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A_R0402_2.67 K_100-00581-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A_R0402_33.2_100-00625-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A_R0402_332_100-00586-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A_R0402_DISCRETE_0_100-0024:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 0.0
+  RES_A_R0402_DISCRETE_100_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 100.0
+  RES_A_R0402_DISCRETE_10_100-002:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10.0
+  RES_A_R0402_DISCRETE_1K_100-001:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1000.0
+  RES_A_R0402_DISCRETE_200_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 200.0
+  RES_A_R0402_DISCRETE_4.75K_100-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 4750.0
+  RES_A_R0402_DISCRETE_49.9K_100-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 49900.0
+  RES_A_R0402_DISCRETE_49.9_100-0:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 49.9
+  RES_A_R0402_DISCRETE_DNP_4.75K_:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A_R0402_DNP_120_100-00481-0:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A_R0603_0_100-00628-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0603'
+      res_power_rating:
+        value: 0.1
+  RES_A_R0805_DISCRETE_0_100-0029:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: 0805
+      res_power_rating:
+        value: 0.125
+      resistance_ohm:
+        value: 0.0
+  RES_A_R0805_DISCRETE_DNP_0_100-:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: 0805
+      res_power_rating:
+        value: 0.125
+  RES_A_SMR0402A_33.2_100-00625-0:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A_SMR0402A_DISCRETE_0_100-0:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 0.0
+  RES_A_SMR0402A_DISCRETE_10_100-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10.0
+  RES_A_SMR0402A_DISCRETE_22_100-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 22.0
+  RES_A_SMR0402A_DISCRETE_49.9_10:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 49.9
+  RES_A_SMR0402A_DISCRETE_DNP_0_1:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A_SMR0402A_DISCRETE_DNP_4.7:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_A_SMR0603A_0_100-00628-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0603'
+      res_power_rating:
+        value: 0.1
+  RES_A_SMR0603A_2.2_100-00445-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0603'
+      res_power_rating:
+        value: 0.1
+  RES_A_SMR2010B_1 M_100-00462-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '2010'
+      res_power_rating:
+        value: 0.75
+  RES_A_SMR2512E_500 U_100-00618-:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '2512'
+      res_power_rating:
+        value: 1.0
+  RES_H_R0402_4.7K_100-00352-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_H_R0805_DISCRETE_2.2K_100-0:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: 0805
+      res_power_rating:
+        value: 0.125
+      resistance_ohm:
+        value: 2200.0
+  RES_IT_R0402_1.5 K_100-00620-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_IT_R0402_20_100-00452-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_IT_R0402_33.2_100-00625-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_IT_R0402_8.2_100-00690-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_IT_R0402_DISCRETE_0_100-002:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 0.0
+  RES_IT_R0402_DISCRETE_100_100-0:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 100.0
+  RES_IT_R0402_DISCRETE_10K_100-0:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10000.0
+  RES_IT_R0402_DISCRETE_10_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10.0
+  RES_IT_R0402_DISCRETE_20K_100-0:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 20000.0
+  RES_IT_R0402_DISCRETE_49.9_100-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 49.9
+  RES_IT_R0402_DNP_1.5 K_100-0062:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_PPG#1_R0402_1.6K_100-00724-:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_PPG#1_R0402_3.32 K_100-0056:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_PPG#1_R0402_301_100-00572-0:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_PPG#1_R0402_412_100-00585-0:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_PPG#1_R0402_511_100-00588-0:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_PPG#1_R0402_DISCRETE_0_100-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 0.0
+  RES_PPG#1_R0402_DISCRETE_100K_1:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 100000.0
+  RES_PPG#1_R0402_DISCRETE_100_10:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 100.0
+  RES_PPG#1_R0402_DISCRETE_10K_10:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10000.0
+  RES_PPG#1_R0402_DISCRETE_150_10:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 150.0
+  RES_PPG#1_R0402_DISCRETE_1K_100:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1000.0
+  RES_PPG#1_R0402_DISCRETE_200K_1:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 200000.0
+  RES_PPG#1_R0402_DISCRETE_21 KOH:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 21.0
+  RES_PPG#1_R0402_DISCRETE_240_10:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 240.0
+  RES_PPG#1_R0402_DISCRETE_4.75K_:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 4750.0
+  RES_PPG#1_R0402_DISCRETE_49.9_1:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 49.9
+  RES_PPG#1_R0402_DISCRETE_499_10:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 499.0
+  RES_PPG#1_R0402_DISCRETE_750_10:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 750.0
+  RES_PPG#1_R0402_DISCRETE_DNP_10:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_PPG#1_R0402_DISCRETE_DNP_1K:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1000.0
+  RES_PPG#1_R0402_DISCRETE_DNP_4.:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_PPG#1_R0402_DISCRETE_DNP_75:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_PPG_R0402_20_100-00452-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_PPG_R0402_22.1_100-00443-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_PPG_R0402_33.2_100-00625-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_PPG_R0402_DISCRETE_0_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 0.0
+  RES_PPG_R0402_DISCRETE_100_100-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 100.0
+  RES_PPG_R0402_DISCRETE_10K_100-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10000.0
+  RES_PPG_R0402_DISCRETE_10_100-0:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10.0
+  RES_PPG_R0402_DISCRETE_1K_100-0:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1000.0
+  RES_PPG_R0402_DISCRETE_1M_100-0:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1000000.0
+  RES_PPG_R0402_DISCRETE_200_100-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 200.0
+  RES_PPG_R0402_DISCRETE_4.75K_10:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 4750.0
+  RES_PPG_R0402_DISCRETE_49.9_100:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 49.9
+  RES_PPG_R0402_DISCRETE_750_100-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 750.0
+  RES_PPG_R0402_DISCRETE_DNP_0_10:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_PPG_R0402_DISCRETE_DNP_750_:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_PPG_R0603_DNP_10 M_100-0043:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0603'
+      res_power_rating:
+        value: 0.1
+  RES_R0402_0_100-00403-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_1.07K_100-00723-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_1.13K_100-00717-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_1.24K_100-00412-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_1.27K_100-00419-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_1.2K_100-00707-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_1.47K_100-00722-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_1.5 K_100-00620-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_10.5_100-00714-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_121_100-00721-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_16.2K_100-00709-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_16K_100-00471-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_17.4K_100-00720-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_1K_100-00706-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_1_100-00574-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_2.49 K_100-00573-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_2.4K_100-00705-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_22 K_100-00604-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_220_100-00426-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_221_100-00587-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_24.9_100-00623-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_249_100-00461-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_27.4K_100-00473-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_27.4_100-00444-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_3.32 K_100-00565-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_3.9_100-00694-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_31.6 K_100-00571-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_33.2_100-00625-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_33K_100-00493-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_3_100-00695-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_4.53K_100-00458-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_430_100-00719-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_47.5 K_100-00584-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_48.1K_100-00421-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_499_100-00704-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_576_100-00579-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_6.19 K_100-00580-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_DISCRETE_0_100-00241-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 0.0
+  RES_R0402_DISCRETE_1.5K_100-001:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1500.0
+  RES_R0402_DISCRETE_1.5_100-0025:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1.5
+  RES_R0402_DISCRETE_1.74K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1740.0
+  RES_R0402_DISCRETE_1.87K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1870.0
+  RES_R0402_DISCRETE_100K_100-001:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 100000.0
+  RES_R0402_DISCRETE_100_100-0003:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 100.0
+  RES_R0402_DISCRETE_10K_100-0016:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10000.0
+  RES_R0402_DISCRETE_10K_100-0024:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10000.0
+  RES_R0402_DISCRETE_10_100-00252:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10.0
+  RES_R0402_DISCRETE_110K_100-001:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 110000.0
+  RES_R0402_DISCRETE_11K_100-0014:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 11000.0
+  RES_R0402_DISCRETE_12.4K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 12400.0
+  RES_R0402_DISCRETE_12.7K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 12700.0
+  RES_R0402_DISCRETE_12K_100-0011:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 12000.0
+  RES_R0402_DISCRETE_13.7K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 13700.0
+  RES_R0402_DISCRETE_130K_100-001:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 130000.0
+  RES_R0402_DISCRETE_150_100-0026:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 150.0
+  RES_R0402_DISCRETE_15K_100-0027:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 15000.0
+  RES_R0402_DISCRETE_1K_100-00134:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1000.0
+  RES_R0402_DISCRETE_1K_100-00150:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1000.0
+  RES_R0402_DISCRETE_1M_100-00266:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1000000.0
+  RES_R0402_DISCRETE_2.1K_100-001:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 2100.0
+  RES_R0402_DISCRETE_2.2K_100-000:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 2200.0
+  RES_R0402_DISCRETE_2.2_100-0032:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 2.2
+  RES_R0402_DISCRETE_20.5K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 20500.0
+  RES_R0402_DISCRETE_200K_100-001:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 200000.0
+  RES_R0402_DISCRETE_200K_100-002:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 200000.0
+  RES_R0402_DISCRETE_200_100-0009:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 200.0
+  RES_R0402_DISCRETE_200_100-00_1:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 200.0
+  RES_R0402_DISCRETE_20K_100-0001:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 20000.0
+  RES_R0402_DISCRETE_22.1K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 22100.0
+  RES_R0402_DISCRETE_22_100-00271:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 22.0
+  RES_R0402_DISCRETE_240_100-0009:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 240.0
+  RES_R0402_DISCRETE_255K_100-000:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 255000.0
+  RES_R0402_DISCRETE_274K_100-002:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 274000.0
+  RES_R0402_DISCRETE_28 KOHMS_100:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 28.0
+  RES_R0402_DISCRETE_2K_100-00070:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 2000.0
+  RES_R0402_DISCRETE_3.3K_100-002:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 3300.0
+  RES_R0402_DISCRETE_30.1K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 30100.0
+  RES_R0402_DISCRETE_309K_100-002:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 309000.0
+  RES_R0402_DISCRETE_316K_100-002:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 316000.0
+  RES_R0402_DISCRETE_33.2K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 33200.0
+  RES_R0402_DISCRETE_330_100-0009:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 330.0
+  RES_R0402_DISCRETE_33_100-00264:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 33.0
+  RES_R0402_DISCRETE_348K_100-000:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 348000.0
+  RES_R0402_DISCRETE_35.7K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 35700.0
+  RES_R0402_DISCRETE_365K_100-003:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 365000.0
+  RES_R0402_DISCRETE_38.3 KOHMS_1:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 38.3
+  RES_R0402_DISCRETE_39.2K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 39200.0
+  RES_R0402_DISCRETE_390K_100-000:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 390000.0
+  RES_R0402_DISCRETE_39_100-00138:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 39.0
+  RES_R0402_DISCRETE_4.7K_100-002:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 4700.0
+  RES_R0402_DISCRETE_4.7K_100-0_1:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 4700.0
+  RES_R0402_DISCRETE_4.7_100-0000:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 4.7
+  RES_R0402_DISCRETE_4.99K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 4990.0
+  RES_R0402_DISCRETE_4.99K_100-_1:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 4990.0
+  RES_R0402_DISCRETE_402_100-0031:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 402.0
+  RES_R0402_DISCRETE_46.4K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 46400.0
+  RES_R0402_DISCRETE_47K_100-0004:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 47000.0
+  RES_R0402_DISCRETE_49.9K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 49900.0
+  RES_R0402_DISCRETE_49.9_100-000:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 49.9
+  RES_R0402_DISCRETE_499_100-0009:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 499.0
+  RES_R0402_DISCRETE_499_100-00_1:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 499.0
+  RES_R0402_DISCRETE_5.1 OHMS_100:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 5.1
+  RES_R0402_DISCRETE_5.1K_100-002:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 5100.0
+  RES_R0402_DISCRETE_51.1K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 51100.0
+  RES_R0402_DISCRETE_52.3K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 52300.0
+  RES_R0402_DISCRETE_523K_100-000:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 523000.0
+  RES_R0402_DISCRETE_56.2K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 56200.0
+  RES_R0402_DISCRETE_6.04K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 6040.0
+  RES_R0402_DISCRETE_60.4K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 60400.0
+  RES_R0402_DISCRETE_619K_100-002:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 619000.0
+  RES_R0402_DISCRETE_66.5K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 66500.0
+  RES_R0402_DISCRETE_68.1K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 68100.0
+  RES_R0402_DISCRETE_680_100-0010:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 680.0
+  RES_R0402_DISCRETE_7.5K_100-002:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 7500.0
+  RES_R0402_DISCRETE_8.06K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 8060.000000000001
+  RES_R0402_DISCRETE_80.6K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 80600.0
+  RES_R0402_DISCRETE_9.09 KOHMS_1:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 9.09
+  RES_R0402_DISCRETE_DNP_0_100-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_DISCRETE_DNP_1.5K_100:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_DISCRETE_DNP_100K_100:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_DISCRETE_DNP_100_100-:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_DISCRETE_DNP_10K_100-:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_DISCRETE_DNP_10K_10_1:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_DISCRETE_DNP_10_100-0:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_DISCRETE_DNP_130K_100:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_DISCRETE_DNP_137K_100:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_DISCRETE_DNP_1K_100-0:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_DISCRETE_DNP_2.2K_100:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_DISCRETE_DNP_4.7K_100:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_DISCRETE_DNP_470_100-:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_DISCRETE_DNP_49.9_100:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_DISCRETE_RMCF0402FT4K:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 4000.0
+  RES_R0402_DNP_0_100-00403-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_DNP_1K_100-00706-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_DNP_2.49 K_100-00573-:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0402_DNP_6.19 K_100-00580-:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_R0603_0_100-00628-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0603'
+      res_power_rating:
+        value: 0.1
+  RES_R0603_100K_100-00428-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0603'
+      res_power_rating:
+        value: 0.1
+  RES_R0603_120_100-00609-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0603'
+      res_power_rating:
+        value: 0.1
+  RES_R0603_1_100-00610-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0603'
+      res_power_rating:
+        value: 0.1
+  RES_R0603_4.7 KOHMS_100-00646-0:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0603'
+      res_power_rating:
+        value: 0.1
+  RES_R0603_DISCRETE_0_100-00153-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0603'
+      res_power_rating:
+        value: 0.1
+      resistance_ohm:
+        value: 0.0
+  RES_R0603_DISCRETE_100_100-0023:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0603'
+      res_power_rating:
+        value: 0.1
+      resistance_ohm:
+        value: 100.0
+  RES_R0603_DISCRETE_500_100-0027:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0603'
+      res_power_rating:
+        value: 0.1
+      resistance_ohm:
+        value: 500.0
+  RES_R0603_DISCRETE_DNP_0_100-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0603'
+      res_power_rating:
+        value: 0.1
+  RES_R0603_DISCRETE_DNP_10K_100-:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0603'
+      res_power_rating:
+        value: 0.1
+  RES_R0603_DNP_0_100-00628-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0603'
+      res_power_rating:
+        value: 0.1
+  RES_R0805_1 OHM_100-00702-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: 0805
+      res_power_rating:
+        value: 0.125
+  RES_R0805_180_100-00453-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: 0805
+      res_power_rating:
+        value: 0.125
+  RES_R0805_499_100-00700-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: 0805
+      res_power_rating:
+        value: 0.125
+  RES_R0805_DISCRETE_0_100-00295-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: 0805
+      res_power_rating:
+        value: 0.125
+      resistance_ohm:
+        value: 0.0
+  RES_R0805_DISCRETE_DNP_0_100-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: 0805
+      res_power_rating:
+        value: 0.125
+  RES_R0805_DISCRETE_DNP_4.7_100-:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: 0805
+      res_power_rating:
+        value: 0.125
+  RES_R1206_1 K_100-00615-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '1206'
+      res_power_rating:
+        value: 0.25
+  RES_R1206_10 KOHMS_100-00666-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '1206'
+      res_power_rating:
+        value: 0.25
+  RES_R1206_DISCRETE_120_100-0002:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '1206'
+      res_power_rating:
+        value: 0.25
+      resistance_ohm:
+        value: 120.0
+  RES_R1206_DISCRETE_DNP_120_100-:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '1206'
+      res_power_rating:
+        value: 0.25
+  RES_R1206_DNP_0_100-00527-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '1206'
+      res_power_rating:
+        value: 0.25
+  RES_R1210_120 OHM_100-00703-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '1210'
+      res_power_rating:
+        value: 0.3333333333333333
+  RES_R2512_330_100-00460-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '2512'
+      res_power_rating:
+        value: 1.0
+  RES_RES1206_W_0-75_0.003_100-00:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '1206'
+      res_power_rating:
+        value: 0.25
+  RES_SMR0402A_DISCRETE_0_100-002:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 0.0
+  RES_SMR0402A_DISCRETE_100_100-0:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 100.0
+  RES_SMR0402A_DISCRETE_1K_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 1000.0
+  RES_SMR0402A_DISCRETE_33.2_100-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 33.2
+  RES_SMR0402A_DISCRETE_DNP_0_100:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_SMR0402A_DISCRETE_DNP_10K_1:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_SMR0402A_DISCRETE_DNP_1K_10:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_SMR0402A_DISCRETE_DNP_240_1:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  RES_SMX0402B_DISCRETE_0_100-002:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 0.0
+  RES_SMX0402B_DISCRETE_240_100-0:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 240.0
+  RES_SMX0402B_DISCRETE_DNP_0_100:
+    parameters:
+      _confidence:
+        value: 0.5
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+  R_R0402_DISCRETE_10K_5 %_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 10000.0
+  R_R0402_DISCRETE_2.2_5 %_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 2.2
+  R_R0402_DISCRETE_24K_5 %_100-00:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 24000.0
+  R_R0402_DISCRETE_750_100-00285-:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '0402'
+      res_power_rating:
+        value: 0.0625
+      resistance_ohm:
+        value: 750.0
+  TPS63070:
+    parameters:
+      _amr_raw:
+        value:
+          AUX:
+            max: '7'
+            min: '-0.3'
+            unit: V
+          FB2:
+            max: '3'
+            min: '-0.3'
+            unit: V
+          L1:
+            max: '20'
+            min: '-0.3'
+            unit: V
+          L1 (transient for t<10ns)(2):
+            max: '25'
+            min: '-3'
+            unit: V
+          L2 (transient for t<10ns)(2):
+            max: '15'
+            min: '-3'
+            unit: V
+          L2, PG, VOUT, FB:
+            max: '12'
+            min: '-0.3'
+            unit: V
+          Operating junction temperature, Tj:
+            max: '150'
+            min: '-40'
+            unit: °C
+          Storage temperature range, Tstg:
+            max: '150'
+            min: '-65'
+            unit: °C
+          Voltage range VIN, PS/SYNC, EN, VSEL:
+            max: '20'
+            min: '-0.3'
+            unit: V
+      _confidence:
+        value: 0.8
+      _source:
+        value: ti_datasheet
+      t_junction_max:
+        value: 150.0
+      t_junction_min:
+        value: -40.0
+      voltage_max:
+        value: 20.0
+      voltage_min:
+        value: -0.3
+metadata:
+  capacitors_with_voltage: 140
+  description: AMR data for schematic_agent - generated from MPN decoder + TI datasheets
+  ics_with_voltage_range: 1
+  resistors_with_power: 333
+  total_components: 474
