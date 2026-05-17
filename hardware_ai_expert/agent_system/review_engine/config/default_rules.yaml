@@ -62,7 +62,7 @@ rules:
     severity: ERROR
     enabled: true
     params:
-      net_patterns: ["I2C_SCL", "I2C_SDA", "SCL", "SDA"]
+      net_patterns: ["I2C", "I3C_"]
       min_ohm: 2200
       max_ohm: 10000
       check_mode: pullup      # pullup | termination

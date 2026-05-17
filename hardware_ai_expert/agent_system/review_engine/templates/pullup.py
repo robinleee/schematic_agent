@@ -96,6 +96,9 @@ class PullupCheckTemplate(RuleTemplate):
 
         driver = context.neo4j_driver
 
+        # Pass driver to sub-checks via params
+        params["_driver"] = driver
+
         # 1. 查找目标网络
         cypher_nets = """
         MATCH (n:Net)
@@ -144,14 +147,23 @@ class PullupCheckTemplate(RuleTemplate):
         rule_name: str,
         severity: str,
     ) -> list[Violation]:
-        """上拉电阻模式：检查是否有阻值在范围内的电阻"""
+        """上拉电阻模式：检查是否有阻值在范围内的电阻
+
+        调优：
+        - 同时检查串联电阻另一端的上拉（通过 Neo4j 关系查询）
+        - I3C 总线不需要传统上拉，降级
+        """
         violations = []
         min_ohm = params.get("min_ohm", 1000)
         max_ohm = params.get("max_ohm", 47000)
+        driver = params.get("_driver")  # 传入 driver 用于查找串联电阻
 
         valid_resistors = []
         for res in resistors:
             val_str = res.get("res_value", "")
+            # 跳过 DNP 电阻（不贴装，不算有效上拉）
+            if val_str.upper().startswith("DNP"):
+                continue
             ohm = parse_resistance(val_str)
             if ohm is not None:
                 valid_resistors.append((res, ohm))
@@ -159,7 +171,19 @@ class PullupCheckTemplate(RuleTemplate):
         # 检查是否有任一电阻在合理范围内
         has_valid = any(min_ohm <= ohm <= max_ohm for _, ohm in valid_resistors)
 
+        # 调优: 检查串联电阻另一端是否有上拉
+        # 例如: SDA --[4.7k]--> VDD_3V3 (电阻不在 SDA 网络上，而在 VDD 网络上)
+        if not has_valid and driver:
+            has_valid = self._check_pullup_via_series_resistor(
+                driver, net_name, min_ohm, max_ohm
+            )
+
         if not has_valid:
+            # 调优: I3C 总线降级为 INFO
+            actual_severity = severity
+            if "I3C" in net_name.upper():
+                actual_severity = "INFO"
+
             res_descs = [
                 f"{r['res_refdes']}({r['res_value']})"
                 for r in resistors
@@ -173,12 +197,45 @@ class PullupCheckTemplate(RuleTemplate):
                 refdes="总线",
                 net_name=net_name,
                 description=f"网络 '{net_name}' 未检测到合理阻值的上拉电阻",
-                severity=severity,
+                severity=actual_severity,
                 expected=f"阻值在 {format_ohm(min_ohm)} ~ {format_ohm(max_ohm)} 之间",
                 actual=actual_str,
             ))
 
         return violations
+
+    @staticmethod
+    def _check_pullup_via_series_resistor(driver, net_name: str, min_ohm: float, max_ohm: float) -> bool:
+        """检查：从该网络经过一个电阻后，另一端是否连接到电源网络
+
+        例如: SDA_NET --[R1:4.7k]--> VDD_3V3
+        这是常见的 I2C 上拉接法：上拉电阻连接在 SDA 和 VDD 之间
+        """
+        cypher = """
+        MATCH (n1:Net {Name: $net_name})<-[:CONNECTS_TO]-(p1:Pin)<-[:HAS_PIN]-(r:Component)
+        WHERE r.PartType CONTAINS 'RES'
+        MATCH (r)-[:HAS_PIN]->(p2:Pin)-[:CONNECTS_TO]->(n2:Net)
+        WHERE n2 <> n1
+          AND (n2.Name CONTAINS 'VDD' OR n2.Name CONTAINS 'VCC'
+               OR n2.Name CONTAINS '3V3' OR n2.Name CONTAINS '1V8'
+               OR n2.Name CONTAINS '5V' OR n2.Name CONTAINS 'P3V3')
+        RETURN r.Value AS res_value, n2.Name AS power_net
+        LIMIT 5
+        """
+        try:
+            with driver.session() as session:
+                results = list(session.run(cypher, {"net_name": net_name}))
+            for r in results:
+                val_str = r.get("res_value", "") or ""
+                # 跳过 DNP 电阻（不贴装）
+                if val_str.upper().startswith("DNP"):
+                    continue
+                ohm = parse_resistance(val_str)
+                if ohm is not None and min_ohm <= ohm <= max_ohm:
+                    return True
+        except Exception:
+            pass
+        return False
 
     def _check_termination(
         self,

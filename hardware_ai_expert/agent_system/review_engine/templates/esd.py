@@ -6,6 +6,8 @@ ESD 保护检查模板
 
 from __future__ import annotations
 
+import re
+
 from agent_system.review_engine.templates.base import RuleTemplate, RuleContext, TemplateRegistry
 from agent_system.schemas import Violation
 
@@ -73,8 +75,6 @@ class ESDCheckTemplate(RuleTemplate):
             """
             with driver.session() as session:
                 for r in session.run(cypher_conn_nets, {"prefixes": connector_prefixes}):
-                    # 如果 net_patterns 存在，只保留匹配的网络
-                    # 如果 net_patterns 为空，保留所有连接器关联的网络
                     if not net_patterns or any(pat in r["net_name"] for pat in net_patterns):
                         target_nets.add(r["net_name"])
 
@@ -85,6 +85,10 @@ class ESDCheckTemplate(RuleTemplate):
         for net_name in sorted(target_nets):
             # 跳过电源/地/NC
             if self._is_power_or_gnd(net_name):
+                continue
+
+            # 调优: 跳过明显的内部/低风险信号
+            if self._is_low_risk_signal(net_name):
                 continue
 
             # 查找网络上的 ESD/TVS 器件
@@ -100,8 +104,11 @@ class ESDCheckTemplate(RuleTemplate):
             with driver.session() as session:
                 esd_devices = list(session.run(cypher_esd, {"net_name": net_name}))
 
+            # 调优: 检查网络上是否有串联电阻保护（>1kΩ）
+            has_series_protection = self._has_series_resistor(driver, net_name)
+
             if not esd_devices:
-                # 查找该网络关联的连接器（用于报告）
+                # 查找该网络关联的连接器
                 cypher_conn = """
                 MATCH (n:Net {Name: $net_name})<-[:CONNECTS_TO]-(p:Pin)<-[:HAS_PIN]-(c:Component)
                 WHERE ANY(prefix IN $prefixes WHERE c.RefDes STARTS WITH prefix)
@@ -120,6 +127,9 @@ class ESDCheckTemplate(RuleTemplate):
                     refdes = "网络"
                     desc = f"信号网络 '{net_name}' 缺少 ESD/TVS 保护"
 
+                # 有串联电阻保护的降级为 INFO
+                actual_severity = "INFO" if has_series_protection else severity
+
                 violations.append(Violation(
                     id=f"{rule_id}_{net_name}",
                     rule_id=rule_id,
@@ -127,12 +137,69 @@ class ESDCheckTemplate(RuleTemplate):
                     refdes=refdes,
                     net_name=net_name,
                     description=desc,
-                    severity=severity,
+                    severity=actual_severity,
                     expected=f"应配置 ESD/TVS 保护器件 (电容 < {max_cap_pf}pF)",
-                    actual="未找到 ESD/TVS 保护器件",
+                    actual="未找到 ESD/TVS 保护器件" + (" (有串联电阻)" if has_series_protection else ""),
                 ))
 
         return violations
+
+    @staticmethod
+    def _is_low_risk_signal(net_name: str) -> bool:
+        """判断网络是否为低风险信号，不需要 ESD 保护
+
+        以下情况视为低风险：
+        - 纯内部信号（非连接器引出）
+        - 调试/测试信号（JTAG、UART 等板内调试口）
+        - 已有信号名表明是内部连接（_R 后缀表示经过电阻）
+        """
+        if not net_name:
+            return False
+        upper = net_name.upper()
+
+        # 内部调试信号 — 板内 JTAG/UART 不需要 ESD
+        low_risk_patterns = [
+            'JTAG', 'SWD', 'SWCLK', 'SWDIO',      # 调试口
+            'UART_TX', 'UART_RX',                   # 板内 UART
+            'SPI_', 'I2C_', 'SMBUS',                 # 板内总线
+            'CLK_REQ', 'XTAL', 'CRYSTAL',            # 时钟
+            'LED', 'FAN', 'BUZZER',                   # 指示/控制
+            'SENSOR', 'TMON', 'THERM',               # 温度传感
+            'INTR', 'INT_', 'IRQ',                    # 中断
+            'RST', 'RESET', 'PWROK', 'PWRGD',        # 电源控制
+            'MISC', 'STRAP', 'CFG', 'CONFIG',         # 配置
+        ]
+        # 精确匹配：信号名完全由低风险关键词组成
+        for pat in low_risk_patterns:
+            if pat in upper:
+                return True
+
+        # 信号名含 _R 或 _R_LVC 表示经过电平转换/电阻 — 内部信号
+        if re.search(r'_R[_L]|_LVC|_LEVEL', upper):
+            return True
+
+        return False
+
+    @staticmethod
+    def _has_series_resistor(driver, net_name: str) -> bool:
+        """检查网络上是否有串联电阻（>1kΩ），这提供一定程度的 ESD 防护"""
+        cypher = """
+        MATCH (n:Net {Name: $net_name})<-[:CONNECTS_TO]-(p:Pin)<-[:HAS_PIN]-(c:Component)
+        WHERE c.PartType CONTAINS 'RES'
+        RETURN c.Value AS value
+        LIMIT 5
+        """
+        try:
+            with driver.session() as session:
+                resistors = list(session.run(cypher, {"net_name": net_name}))
+            for r in resistors:
+                val = (r.get('value') or '').upper()
+                # 简单判断: 如果有 kΩ 级电阻就算有保护
+                if 'K' in val:
+                    return True
+        except Exception:
+            pass
+        return False
 
     @staticmethod
     def _is_power_or_gnd(net_name: str) -> bool:

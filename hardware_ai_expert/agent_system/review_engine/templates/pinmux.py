@@ -311,14 +311,18 @@ class PinMuxCheckTemplate(RuleTemplate):
         severity: str,
     ) -> list[Violation]:
         """
-        检查 NC 网络是否意外连接到器件
+        检查 NC 网络的异常连接
 
-        策略：查找网络名含 "NC" 的网络，检查是否连接了器件
-        （NC 网络应该是悬空的）。
+        调优策略（v3）：
+        - IC 的 NC 引脚接到 NC 网络是正常设计，不报
+        - 只报以下异常情况：
+          1. 同一 NC 网络连接了多个不同器件（意外短路）
+          2. NC 网络连接到电源/地（意外上电/接地）
+        - 其余降级为 INFO
         """
         violations = []
 
-        # 查找 NC 网络及其连接的器件
+        # 查找所有 NC 网络及其连接的器件
         cypher = """
         MATCH (n:Net)
         WHERE n.Name = 'NC'
@@ -326,36 +330,63 @@ class PinMuxCheckTemplate(RuleTemplate):
            OR n.Name CONTAINS '_NC'
         MATCH (n)<-[:CONNECTS_TO]-(p:Pin)<-[:HAS_PIN]-(c:Component)
         RETURN n.Name AS net_name,
-               c.RefDes AS refdes,
-               c.PartType AS part_type
-        LIMIT 500
+               collect(DISTINCT c.RefDes) AS connected_refdes,
+               collect(DISTINCT c.PartType) AS connected_part_types,
+               count(DISTINCT c) AS component_count
         """
 
         try:
             with driver.session() as session:
-                nc_connections = list(session.run(cypher))
+                nc_nets = list(session.run(cypher))
         except Exception as e:
             print(f"[PinMux] NC 网络查询失败: {e}")
             return violations
 
-        for item in nc_connections:
+        for item in nc_nets:
             net_name = item["net_name"] or ""
-            refdes = item["refdes"] or "UNKNOWN"
-            part_type = item.get("part_type", "")
+            component_count = item.get("component_count", 0)
+            connected_refdes = item.get("connected_refdes", [])
+            connected_part_types = item.get("connected_part_types", [])
 
-            # NC 网络不应连接到非 NC 引脚
-            # 这里简单检查：NC 网络连接了器件即为可疑
-            violations.append(Violation(
-                id=f"{rule_id}_NC_CONNECT_{refdes}_{net_name}",
-                rule_id=rule_id,
-                rule_name=rule_name,
-                refdes=refdes,
-                net_name=net_name,
-                description=f"NC 网络 '{net_name}' 连接到器件 {refdes}",
-                severity="INFO",  # 降级为 INFO，因为 NC 连接可能是设计意图
-                expected="NC 网络应保持悬空",
-                actual=f"连接到器件 {refdes}({part_type})",
-            ))
+            # 异常1: 同一 NC 网络连接了多个不同器件（可能意外短路）
+            if component_count > 1:
+                # 排除同一器件多引脚连同一 NC 的情况
+                unique_prefixes = set()
+                for rd in connected_refdes:
+                    # 提取 RefDes 前缀 (如 U1A, U1B -> U1)
+                    import re
+                    m = re.match(r'([A-Z]+\d+)', rd)
+                    unique_prefixes.add(m.group(1) if m else rd)
+
+                if len(unique_prefixes) > 1:
+                    violations.append(Violation(
+                        id=f"{rule_id}_NC_SHORT_{net_name}",
+                        rule_id=rule_id,
+                        rule_name=rule_name,
+                        refdes=",".join(connected_refdes[:3]),
+                        net_name=net_name,
+                        description=f"NC 网络 '{net_name}' 连接了 {component_count} 个不同器件，可能意外短路: {', '.join(connected_refdes[:5])}",
+                        severity="WARNING",
+                        expected="NC 网络应仅连接单个器件",
+                        actual=f"连接了 {component_count} 个器件",
+                    ))
+
+            # 异常2: NC 网络名含电源/地关键词（可能接错了）
+            upper_net = net_name.upper()
+            power_in_nc = any(kw in upper_net for kw in ['VCC', 'VDD', 'VIN', '3V3', '1V8', '5V', '12V'])
+            gnd_in_nc = any(kw in upper_net for kw in ['GND', 'VSS', 'AGND'])
+            if power_in_nc or gnd_in_nc:
+                violations.append(Violation(
+                    id=f"{rule_id}_NC_POWER_{net_name}",
+                    rule_id=rule_id,
+                    rule_name=rule_name,
+                    refdes=connected_refdes[0] if connected_refdes else "UNKNOWN",
+                    net_name=net_name,
+                    description=f"NC 网络 '{net_name}' 名称含电源/地关键词，请确认是否接错",
+                    severity="WARNING",
+                    expected="NC 网络不应含电源/地标识",
+                    actual=f"网络名含 {'电源' if power_in_nc else '地'} 标识",
+                ))
 
         return violations
 
