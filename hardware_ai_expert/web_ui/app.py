@@ -781,7 +781,8 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 if "agent" not in st.session_state:
-    st.session_state.agent = HardwareAgent()
+    from agent_system.react_agent import ReActAgent
+    st.session_state.agent = ReActAgent()
 
 if "review_results" not in st.session_state:
     st.session_state.review_results = None
@@ -819,7 +820,7 @@ def render_quick_actions():
 def render_chat():
     st.markdown("<div class='main-header'>💬 智能对话</div>", unsafe_allow_html=True)
     st.markdown("<div class='header-line'></div>", unsafe_allow_html=True)
-    st.markdown("<span style='color:var(--text-secondary);font-size:0.9rem;'>与硬件 AI 专家对话，支持：审查、诊断、查询</span>", unsafe_allow_html=True)
+    st.markdown("<span style='color:var(--text-secondary);font-size:0.9rem;'>与硬件 AI 专家对话，支持：审查、诊断、查询 &middot; ReAct 推理模式</span>", unsafe_allow_html=True)
 
     # 显示历史消息
     for msg in st.session_state.messages:
@@ -833,14 +834,24 @@ def render_chat():
                 """, unsafe_allow_html=True)
         else:
             with st.chat_message("assistant", avatar="🤖"):
-                st.markdown(f"""
-                <div class='chat-msg-wrapper' style='position:relative;'>
-                    <div class='chat-assistant'>{msg['content']}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                # 主回复内容
+                st.markdown(msg["content"], unsafe_allow_html=False)
+
+                # 推理过程（可展开）
+                if msg.get("trace"):
+                    with st.expander(f"🔍 推理过程 ({len(msg['trace'])} 步)"):
+                        for step in msg["trace"]:
+                            st.markdown(f"""
+                            <div class='dash-card' style='text-align:left;padding:10px 16px;margin-bottom:8px;'>
+                                <div style='font-size:0.75rem;color:var(--accent-cyan);font-weight:600;'>Step {step['step_id']}</div>
+                                <div style='font-size:0.85rem;color:var(--text-secondary);margin:2px 0;'>💭 {step.get('thought','')}</div>
+                                <div style='font-size:0.8rem;'><code>{step['action']}({json.dumps(step['action_input'], ensure_ascii=False)})</code></div>
+                                <div style='font-size:0.8rem;color:var(--text-muted);margin-top:4px;white-space:pre-wrap;max-height:120px;overflow:auto;'>{step.get('observation','')[:300]}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
 
     # 输入框
-    user_input = st.chat_input("输入您的问题...")
+    user_input = st.chat_input("输入您的问题...（审查/诊断/查询均可）")
 
     if user_input:
         # 添加用户消息
@@ -852,53 +863,54 @@ def render_chat():
             </div>
             """, unsafe_allow_html=True)
 
-        # 调用 Agent
+        # 调用 ReAct Agent
         with st.chat_message("assistant", avatar="🤖"):
-            # Typing indicator
-            st.markdown("""
-            <div class='typing-indicator'>
-                <div class='dot'></div>
-                <div class='dot'></div>
-                <div class='dot'></div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            with st.spinner("思考中..."):
+            with st.spinner("🤔 思考中..."):
                 try:
-                    result = st.session_state.agent.review(user_input)
+                    # 使用统一 ReAct Agent
+                    result = st.session_state.agent.run(user_input)
 
-                    # 格式化输出
+                    # 格式化报告
                     report = result.get("report", "")
-                    review_report = result.get("review_report", "")
-                    violations = result.get("violations", [])
+                    trace = result.get("execution_trace", [])
+                    tool_count = result.get("tool_call_count", 0)
+                    task_type = result.get("task_type", "")
 
-                    if review_report:
-                        response = review_report
-                    elif report:
-                        response = report
-                    elif violations:
-                        lines = ["### 审查发现", ""]
-                        for v in violations[:10]:  # 最多显示 10 条
-                            severity_emoji = {"ERROR": "🔴", "WARNING": "🟡", "INFO": "🟢"}.get(v.get("severity", ""), "⚪")
-                            lines.append(f"{severity_emoji} **{v.get('rule_name', 'Unknown')}**")
-                            lines.append(f"   - 器件: `{v.get('refdes', 'N/A')}`")
-                            lines.append(f"   - 问题: {v.get('description', '')}")
-                            lines.append(f"   - 期望: {v.get('expected', '')}")
-                            lines.append("")
-                        if len(violations) > 10:
-                            lines.append(f"*... 还有 {len(violations) - 10} 条违规项，请在审查报告页面查看完整列表*")
-                        response = "\n".join(lines)
+                    # 任务类型标签
+                    task_labels = {"review": "🔍 审查", "diagnosis": "🩺 诊断", "query": "🔎 查询"}
+                    task_label = task_labels.get(task_type, "💬")
+
+                    # 显示元信息
+                    st.markdown(f"<span style='color:var(--text-muted);font-size:0.8rem;'>{task_label} · {tool_count} 次工具调用 · {len(trace)} 步推理</span>", unsafe_allow_html=True)
+
+                    # 显示报告
+                    if report:
+                        st.markdown(report)
                     else:
-                        response = "✅ 未发现问题，设计看起来合规。"
+                        st.warning("Agent 未生成报告")
 
-                    st.markdown(f"""
-                    <div class='chat-msg-wrapper' style='position:relative;'>
-                        <div class='chat-assistant'>{response}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    st.session_state.messages.append({"role": "assistant", "content": response})
+                    # 推理过程
+                    if trace:
+                        with st.expander(f"🔍 推理过程 ({len(trace)} 步)"):
+                            for step in trace:
+                                st.markdown(f"""
+                                <div class='dash-card' style='text-align:left;padding:10px 16px;margin-bottom:8px;'>
+                                    <div style='font-size:0.75rem;color:var(--accent-cyan);font-weight:600;'>Step {step['step_id']}</div>
+                                    <div style='font-size:0.85rem;color:var(--text-secondary);margin:2px 0;'>💭 {step.get('thought','')}</div>
+                                    <div style='font-size:0.8rem;'><code>{step['action']}({json.dumps(step['action_input'], ensure_ascii=False)})</code></div>
+                                    <div style='font-size:0.8rem;color:var(--text-muted);margin-top:4px;white-space:pre-wrap;max-height:120px;overflow:auto;'>{step.get('observation','')[:300]}</div>
+                                </div>
+                                """, unsafe_allow_html=True)
 
-                    # 保存审查结果供其他页面使用
+                    # 保存到 session
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": report or "无报告",
+                        "trace": trace,
+                    })
+
+                    # 兼容：如果结果包含 violations，也保存到 review_results
+                    violations = result.get("violations", [])
                     if violations:
                         st.session_state.review_results = result
 
