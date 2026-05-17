@@ -26,21 +26,14 @@ try:
 except ImportError:
     GraphDatabase = None
 
+from agent_system.embedding import embed, embed_batch, EMBEDDING_DIM
+
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(ROOT_DIR, ".env"))
 
 logger = logging.getLogger(__name__)
 
-# 向量维度（固定，需与 embedding 生成一致）
-VECTOR_DIM = 768
-
-# 尝试加载 sklearn TF-IDF（更专业的 embedding）
-try:
-    from sklearn.feature_extraction.text import TfidfVectorizer
-    _SKLEARN_AVAILABLE = True
-except ImportError:
-    _SKLEARN_AVAILABLE = False
-    TfidfVectorizer = None
+VECTOR_DIM = EMBEDDING_DIM
 
 
 # ============================================================
@@ -99,108 +92,12 @@ class GraphRAGBridge:
     # --------------------------------------------------------
 
     def embed(self, text: str) -> list[float]:
-        """
-        生成文本的向量嵌入。
-        策略：优先 sklearn TF-IDF → 回退 Ollama API → 回退本地 embedding
-        """
-        # 优先使用 sklearn TF-IDF
-        if _SKLEARN_AVAILABLE and hasattr(self, '_tfidf'):
-            return self._tfidf_embed(text)
-        
-        ollama_emb = self._ollama_embed(text)
-        if ollama_emb:
-            return ollama_emb
-        return self._local_embed(text)
+        """Generate semantic embedding using unified sentence-transformers model."""
+        return embed(text)
 
-    def _init_tfidf(self, corpus: list[str]):
-        """初始化 TF-IDF 向量器（需要语料库）"""
-        if not _SKLEARN_AVAILABLE:
-            return
-        try:
-            self._tfidf = TfidfVectorizer(max_features=VECTOR_DIM, stop_words='english')
-            self._tfidf.fit(corpus)
-            logger.info(f"TF-IDF initialized with {len(self._tfidf.get_feature_names_out())} features")
-        except Exception as e:
-            logger.warning(f"TF-IDF init failed: {e}")
-            self._tfidf = None
-
-    def _tfidf_embed(self, text: str) -> list[float]:
-        """使用 TF-IDF 生成 embedding"""
-        try:
-            vec = self._tfidf.transform([text])
-            dense = vec.toarray()[0]
-            # 填充或截断到 VECTOR_DIM
-            if len(dense) < VECTOR_DIM:
-                dense = list(dense) + [0.0] * (VECTOR_DIM - len(dense))
-            return dense[:VECTOR_DIM]
-        except Exception:
-            return self._local_embed(text)
-
-    def _ollama_embed(self, text: str) -> Optional[list[float]]:
-        try:
-            import urllib.request
-            req = urllib.request.Request(
-                "http://localhost:11434/api/embeddings",
-                data=json.dumps({"model": "gemma4:26b", "prompt": text[:512]}).encode(),
-                headers={"Content-Type": "application/json"},
-                method="POST"
-            )
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read().decode())
-                emb = data.get("embedding", [])
-                if emb and len(emb) == VECTOR_DIM:
-                    return emb
-                elif emb:
-                    # 维度不匹配，调整
-                    return self._resize_vector(emb, VECTOR_DIM)
-        except Exception:
-            pass
-        return None
-
-    def _local_embed(self, text: str) -> list[float]:
-        """改进的本地 embedding（维度 768）"""
-        import math
-        import re
-
-        vec = [0.0] * VECTOR_DIM
-        words = re.findall(r'[a-zA-Z]+|[0-9]+', text.lower())
-
-        weights = {
-            'voltage': 2.0, 'current': 2.0, 'power': 2.0, 'resistance': 2.0,
-            'capacitor': 2.0, 'resistor': 2.0, 'inductor': 2.0,
-            'pin': 1.5, 'gpio': 1.5, 'vdd': 1.5, 'vcc': 1.5, 'gnd': 1.5,
-            'input': 1.2, 'output': 1.2, 'pullup': 1.5, 'pulldown': 1.5,
-            'maximum': 1.3, 'minimum': 1.3, 'rating': 1.3,
-            'frequency': 1.2, 'clock': 1.2, 'timing': 1.2,
-        }
-
-        for word in words:
-            h1 = hash(word) % VECTOR_DIM
-            h2 = (hash(word + "_salt") * 31) % VECTOR_DIM
-            w = weights.get(word, 1.0)
-            vec[h1] += w
-            vec[h2] += w * 0.5
-
-        norm = math.sqrt(sum(v * v for v in vec))
-        if norm > 0:
-            vec = [v / norm for v in vec]
-        return vec
-
-    @staticmethod
-    def _resize_vector(vec: list[float], target_dim: int) -> list[float]:
-        """调整向量维度"""
-        if len(vec) == target_dim:
-            return vec
-        import math
-        # 线性插值
-        result = []
-        for i in range(target_dim):
-            src_idx = i * len(vec) // target_dim
-            result.append(vec[src_idx])
-        norm = math.sqrt(sum(v * v for v in result))
-        if norm > 0:
-            result = [v / norm for v in result]
-        return result
+    def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        """Generate embeddings for multiple texts (more efficient than individual calls)."""
+        return embed_batch(texts)
 
     # --------------------------------------------------------
     # 核心：索引与检索
@@ -211,10 +108,6 @@ class GraphRAGBridge:
         将文档切片索引到 Neo4j（图节点 + 向量）。
         注意：使用 Python 层计算相似度，不依赖 Neo4j 原生向量索引。
         """
-        # 首次索引时初始化 TF-IDF（如果可用）
-        if _SKLEARN_AVAILABLE and not hasattr(self, '_tfidf'):
-            self._init_tfidf([chunk.content, "voltage current power resistor capacitor"])
-        
         try:
             emb = self.embed(chunk.content)
 

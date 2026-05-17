@@ -40,7 +40,20 @@
       "confidence": 0.8,
       "notes": ""
     },
-    "amr": null
+    "amr": {
+      "category": "capacitor",
+      "mpn_pattern": "381_CAP_C0201_DISCRETE_2.2 PF_1",
+      "capacitance": "2.2PF",
+      "capacitance_pf": 2.2,
+      "voltage_rating_V": 25,
+      "derating_factor": 0.5,
+      "max_operating_voltage_V": 12.5,
+      "package": "0201",
+      "temp_characteristic": null,
+      "source": "mpn_decoder",
+      "voltage_source": "inferred_from_package",
+      "confidence": 0.5599999999999999
+    }
   },
   {
     "model": "381_CAP_C0201_DISCRETE_5 PF_110",
@@ -55,7 +68,20 @@
       "confidence": 0.8,
       "notes": ""
     },
-    "amr": null
+    "amr": {
+      "category": "capacitor",
+      "mpn_pattern": "381_CAP_C0201_DISCRETE_5 PF_110",
+      "capacitance": "5PF",
+      "capacitance_pf": 5.0,
+      "voltage_rating_V": 25,
+      "derating_factor": 0.5,
+      "max_operating_voltage_V": 12.5,
+      "package": "0201",
+      "temp_characteristic": null,
+      "source": "mpn_decoder",
+      "voltage_source": "inferred_from_package",
+      "confidence": 0.5599999999999999
+    }
   },
   {
     "model": "381_CAP_C0402_DISCRETE_0.1UF_11",
@@ -490,7 +516,20 @@
       "confidence": 0.8,
       "notes": ""
     },
-    "amr": null
+    "amr": {
+      "category": "capacitor",
+      "mpn_pattern": "CAP#1_C0201_DISCRETE_0.22 UF_11",
+      "capacitance": "0.22UF",
+      "capacitance_pf": 220000.0,
+      "voltage_rating_V": 10,
+      "derating_factor": 0.5,
+      "max_operating_voltage_V": 5.0,
+      "package": "0201",
+      "temp_characteristic": null,
+      "source": "mpn_decoder",
+      "voltage_source": "inferred_from_package",
+      "confidence": 0.5599999999999999
+    }
   },
   {
     "model": "CAP#1_C0402_DISCRETE_0.1 UF_110",
@@ -623,8 +662,9 @@
       "category": "capacitor",
       "manufacturer": "Generic",
       "mpn": "CAPP_SMC3018F_DISCRETE_470UF_11",
-      "capacitance": "470UF",
-      "capacitance_pf": 470000000.0,
+      "package": "3018",
+      "capacitance": "3018F",
+      "capacitance_pf": 3018000000.0,
       "confidence": 0.8,
       "notes": ""
     },
@@ -643,7 +683,20 @@
       "confidence": 0.8,
       "notes": ""
     },
-    "amr": null
+    "amr": {
+      "category": "capacitor",
+      "mpn_pattern": "CAP_C0201_DISCRETE_0.1UF_110-00",
+      "capacitance": "0.1UF",
+      "capacitance_pf": 100000.0,
+      "voltage_rating_V": 10,
+      "derating_factor": 0.5,
+      "max_operating_voltage_V": 5.0,
+      "package": "0201",
+      "temp_characteristic": null,
+      "source": "mpn_decoder",
+      "voltage_source": "inferred_from_package",
+      "confidence": 0.5599999999999999
+    }
   },
   {
     "model": "CAP_C0201_DISCRETE_0.1UF_110-_1",
@@ -658,7 +711,20 @@
       "confidence": 0.8,
       "notes": ""
     },
-    "amr": null
+    "amr": {
+      "category": "capacitor",
+      "mpn_pattern": "CAP_C0201_DISCRETE_0.1UF_110-_1",
+      "capacitance": "0.1UF",
+      "capacitance_pf": 100000.0,
+      "voltage_rating_V": 10,
+      "derating_factor": 0.5,
+      "max_operating_voltage_V": 5.0,
+      "package": "0201",
+      "temp_characteristic": null,
+      "source": "mpn_decoder",
+      "voltage_source": "inferred_from_package",
+      "confidence": 0.5599999999999999
+    }
   },
   {
     "model": "CAP_C0201_DISCRETE_0.22 UF_110-",
@@ -673,7 +739,20 @@
       "confidence": 0.8,
       "notes": ""
     },
-    "amr": null
+    "amr": {
+      "category": "capacitor",
+      "mpn_pattern": "CAP_C0201_DISCRETE_0.22 UF_110-",
+      "capacitance": "0.22UF",
+      "capacitance_pf": 220000.0,
+      "voltage_rating_V": 10,
+      "derating_factor": 0.5,
+      "max_operating_voltage_V": 5.0,
+      "package": "0201",
+      "temp_characteristic": null,
+      "source": "mpn_decoder",
+      "voltage_source": "inferred_from_package",
+      "confidence": 0.5599999999999999
+    }
   },
   {
     "model": "CAP_C0201_DISCRETE_0.22UF_110-0",
@@ -688,7 +767,20 @@
       "confidence": 0.8,
       "notes": ""
     },
-    "amr": null
+    "amr": {
+      "category": "capacitor",
+      "mpn_pattern": "CAP_C0201_DISCRETE_0.22UF_110-0",
+      "capacitance": "0.22UF",
+      "capacitance_pf": 220000.0,
+      "voltage_rating_V": 10,
+      "derating_factor": 0.5,
+      "max_operating_voltage_V": 5.0,
+      "package": "0201",
+      "temp_characteristic": null,
+      "source": "mpn_decoder",
+      "voltage_source": "inferred_from_package",
+      "confidence": 0.5599999999999999
+    }
   },
   {
     "model": "CAP_C0201_DISCRETE_10 PF_110-00",
@@ -703,7 +795,20 @@
       "confidence": 0.8,
       "notes": ""
     },
-    "amr": null
+    "amr": {
+      "category": "capacitor",
+      "mpn_pattern": "CAP_C0201_DISCRETE_10 PF_110-00",
+      "capacitance": "10PF",
+      "capacitance_pf": 10.0,
+      "voltage_rating_V": 25,
+      "derating_factor": 0.5,
+      "max_operating_voltage_V": 12.5,
+      "package": "0201",
+      "temp_characteristic": null,
+      "source": "mpn_decoder",
+      "voltage_source": "inferred_from_package",
+      "confidence": 0.5599999999999999
+    }
   },
   {
     "model": "CAP_C0201_DISCRETE_1UF_110-0047",
@@ -718,7 +823,20 @@
       "confidence": 0.8,
       "notes": ""
     },
-    "amr": null
+    "amr": {
+      "category": "capacitor",
+      "mpn_pattern": "CAP_C0201_DISCRETE_1UF_110-0047",
+      "capacitance": "1UF",
+      "capacitance_pf": 1000000.0,
+      "voltage_rating_V": 6.3,
+      "derating_factor": 0.5,
+      "max_operating_voltage_V": 3.15,
+      "package": "0201",
+      "temp_characteristic": null,
+      "source": "mpn_decoder",
+      "voltage_source": "inferred_from_package",
+      "confidence": 0.5599999999999999
+    }
   },
   {
     "model": "CAP_C0402_DISCRETE_0.015UF_110-",
@@ -1008,10 +1126,25 @@
       "manufacturer": "Generic",
       "mpn": "CAP_C0402_DISCRETE_0.47 F_110",
       "package": "0402",
-      "confidence": 0.5,
+      "capacitance": "0.47UF",
+      "capacitance_pf": 470000.0,
+      "confidence": 0.8,
       "notes": ""
     },
-    "amr": null
+    "amr": {
+      "category": "capacitor",
+      "mpn_pattern": "CAP_C0402_DISCRETE_0.47 F_110",
+      "capacitance": "0.47UF",
+      "capacitance_pf": 470000.0,
+      "voltage_rating_V": 10,
+      "derating_factor": 0.5,
+      "max_operating_voltage_V": 5.0,
+      "package": "0402",
+      "temp_characteristic": null,
+      "source": "mpn_decoder",
+      "voltage_source": "inferred_from_package",
+      "confidence": 0.5599999999999999
+    }
   },
   {
     "model": "CAP_C0402_DISCRETE_0.47UF_110-0",
@@ -3312,9 +3445,9 @@
       "mpn_pattern": "CAP_C1210-H2_80_DISCRETE_10UF_1",
       "capacitance": "10UF",
       "capacitance_pf": 10000000.0,
-      "voltage_rating_V": 25,
+      "voltage_rating_V": 16,
       "derating_factor": 0.5,
-      "max_operating_voltage_V": 12.5,
+      "max_operating_voltage_V": 8.0,
       "package": "1210",
       "temp_characteristic": null,
       "source": "mpn_decoder",
@@ -3340,9 +3473,9 @@
       "mpn_pattern": "CAP_C1210-H2_80_DISCRETE_22UF_1",
       "capacitance": "22UF",
       "capacitance_pf": 22000000.0,
-      "voltage_rating_V": 25,
+      "voltage_rating_V": 16,
       "derating_factor": 0.5,
-      "max_operating_voltage_V": 12.5,
+      "max_operating_voltage_V": 8.0,
       "package": "1210",
       "temp_characteristic": null,
       "source": "mpn_decoder",
@@ -3368,9 +3501,9 @@
       "mpn_pattern": "CAP_C1210-H2_80_DISCRETE_22UF_2",
       "capacitance": "22UF",
       "capacitance_pf": 22000000.0,
-      "voltage_rating_V": 25,
+      "voltage_rating_V": 16,
       "derating_factor": 0.5,
-      "max_operating_voltage_V": 12.5,
+      "max_operating_voltage_V": 8.0,
       "package": "1210",
       "temp_characteristic": null,
       "source": "mpn_decoder",
@@ -3396,9 +3529,9 @@
       "mpn_pattern": "CAP_C1210_DISCRETE_10 UF_110-00",
       "capacitance": "10UF",
       "capacitance_pf": 10000000.0,
-      "voltage_rating_V": 25,
+      "voltage_rating_V": 16,
       "derating_factor": 0.5,
-      "max_operating_voltage_V": 12.5,
+      "max_operating_voltage_V": 8.0,
       "package": "1210",
       "temp_characteristic": null,
       "source": "mpn_decoder",
@@ -3498,10 +3631,25 @@
       "manufacturer": "Generic",
       "mpn": "CAP_IT_SMC0402A_DISCRETE_0.1U_1",
       "package": "0402",
-      "confidence": 0.5,
+      "capacitance": "0.1UF",
+      "capacitance_pf": 100000.0,
+      "confidence": 0.8,
       "notes": ""
     },
-    "amr": null
+    "amr": {
+      "category": "capacitor",
+      "mpn_pattern": "CAP_IT_SMC0402A_DISCRETE_0.1U_1",
+      "capacitance": "0.1UF",
+      "capacitance_pf": 100000.0,
+      "voltage_rating_V": 10,
+      "derating_factor": 0.5,
+      "max_operating_voltage_V": 5.0,
+      "package": "0402",
+      "temp_characteristic": null,
+      "source": "mpn_decoder",
+      "voltage_source": "inferred_from_package",
+      "confidence": 0.5599999999999999
+    }
   },
   {
     "model": "CAP_IT_SMC0402A_DISCRETE_1UF_11",
@@ -4124,7 +4272,20 @@
       "confidence": 0.8,
       "notes": ""
     },
-    "amr": null
+    "amr": {
+      "category": "capacitor",
+      "mpn_pattern": "CAP_PPG_C0201_DISCRETE_27 PF_11",
+      "capacitance": "27PF",
+      "capacitance_pf": 27.0,
+      "voltage_rating_V": 25,
+      "derating_factor": 0.5,
+      "max_operating_voltage_V": 12.5,
+      "package": "0201",
+      "temp_characteristic": null,
+      "source": "mpn_decoder",
+      "voltage_source": "inferred_from_package",
+      "confidence": 0.5599999999999999
+    }
   },
   {
     "model": "CAP_PPG_C0402_DISCRETE_0.1UF_11",
@@ -4457,12 +4618,26 @@
       "category": "capacitor",
       "manufacturer": "Generic",
       "mpn": "CAP_P_C7343_DISCRETE_100UF_110-",
+      "package": "7343",
       "capacitance": "100UF",
       "capacitance_pf": 100000000.0,
       "confidence": 0.8,
       "notes": ""
     },
-    "amr": null
+    "amr": {
+      "category": "capacitor",
+      "mpn_pattern": "CAP_P_C7343_DISCRETE_100UF_110-",
+      "capacitance": "100UF",
+      "capacitance_pf": 100000000.0,
+      "voltage_rating_V": 10,
+      "derating_factor": 0.5,
+      "max_operating_voltage_V": 5.0,
+      "package": "7343",
+      "temp_characteristic": null,
+      "source": "mpn_decoder",
+      "voltage_source": "inferred_from_package",
+      "confidence": 0.5599999999999999
+    }
   },
   {
     "model": "CAP_P_CAP_6_3X7_7H_DISCRETE_150",
@@ -5484,10 +5659,25 @@
       "manufacturer": "Generic",
       "mpn": "719_CAP_PPG_C0402_DISCRETE_0.1U",
       "package": "0402",
-      "confidence": 0.5,
+      "capacitance": "0.1UF",
+      "capacitance_pf": 100000.0,
+      "confidence": 0.8,
       "notes": ""
     },
-    "amr": null
+    "amr": {
+      "category": "capacitor",
+      "mpn_pattern": "719_CAP_PPG_C0402_DISCRETE_0.1U",
+      "capacitance": "0.1UF",
+      "capacitance_pf": 100000.0,
+      "voltage_rating_V": 10,
+      "derating_factor": 0.5,
+      "max_operating_voltage_V": 5.0,
+      "package": "0402",
+      "temp_characteristic": null,
+      "source": "mpn_decoder",
+      "voltage_source": "inferred_from_package",
+      "confidence": 0.5599999999999999
+    }
   },
   {
     "model": "719_CAP_PPG_C0402_DISCRETE_1UF_",
@@ -5525,10 +5715,25 @@
       "manufacturer": "Generic",
       "mpn": "719_CAP_PPG_C0402_DISCRETE_2.2U",
       "package": "0402",
-      "confidence": 0.5,
+      "capacitance": "2.2UF",
+      "capacitance_pf": 2200000.0,
+      "confidence": 0.8,
       "notes": ""
     },
-    "amr": null
+    "amr": {
+      "category": "capacitor",
+      "mpn_pattern": "719_CAP_PPG_C0402_DISCRETE_2.2U",
+      "capacitance": "2.2UF",
+      "capacitance_pf": 2200000.0,
+      "voltage_rating_V": 6.3,
+      "derating_factor": 0.5,
+      "max_operating_voltage_V": 3.15,
+      "package": "0402",
+      "temp_characteristic": null,
+      "source": "mpn_decoder",
+      "voltage_source": "inferred_from_package",
+      "confidence": 0.5599999999999999
+    }
   },
   {
     "model": "719_RES#1_R0402_DISCRETE_10K_10",
@@ -14008,12 +14213,25 @@
       "category": "resistor",
       "manufacturer": "Generic",
       "mpn": "RES_R2010_DISCRETE_250M_100-000",
+      "package": "2010",
       "resistance": "250.0M",
       "resistance_ohm": 250000000.0,
+      "power_rating": "3/4W",
+      "power_rating_w": 0.75,
       "confidence": 0.8,
       "notes": ""
     },
-    "amr": null
+    "amr": {
+      "category": "resistor",
+      "mpn_pattern": "RES_R2010_DISCRETE_250M_100-000",
+      "resistance_ohm": 250000000.0,
+      "power_rating_W": 0.75,
+      "derating_factor": 0.5,
+      "max_operating_power_W": 0.375,
+      "package": "2010",
+      "source": "mpn_decoder",
+      "confidence": 0.8
+    }
   },
   {
     "model": "RES_R2512_330_100-00460-00",
@@ -14047,12 +14265,25 @@
       "category": "resistor",
       "manufacturer": "Generic",
       "mpn": "RES_R2512_DISCRETE_1.5M_100-002",
+      "package": "2512",
       "resistance": "1.5M",
       "resistance_ohm": 1500000.0,
+      "power_rating": "1W",
+      "power_rating_w": 1.0,
       "confidence": 0.8,
       "notes": ""
     },
-    "amr": null
+    "amr": {
+      "category": "resistor",
+      "mpn_pattern": "RES_R2512_DISCRETE_1.5M_100-002",
+      "resistance_ohm": 1500000.0,
+      "power_rating_W": 1.0,
+      "derating_factor": 0.5,
+      "max_operating_power_W": 0.5,
+      "package": "2512",
+      "source": "mpn_decoder",
+      "confidence": 0.8
+    }
   },
   {
     "model": "RES_R2512_DISCRETE_1M_100-00301",
@@ -14061,12 +14292,25 @@
       "category": "resistor",
       "manufacturer": "Generic",
       "mpn": "RES_R2512_DISCRETE_1M_100-00301",
+      "package": "2512",
       "resistance": "1.0M",
       "resistance_ohm": 1000000.0,
+      "power_rating": "1W",
+      "power_rating_w": 1.0,
       "confidence": 0.8,
       "notes": ""
     },
-    "amr": null
+    "amr": {
+      "category": "resistor",
+      "mpn_pattern": "RES_R2512_DISCRETE_1M_100-00301",
+      "resistance_ohm": 1000000.0,
+      "power_rating_W": 1.0,
+      "derating_factor": 0.5,
+      "max_operating_power_W": 0.5,
+      "package": "2512",
+      "source": "mpn_decoder",
+      "confidence": 0.8
+    }
   },
   {
     "model": "RES_R2512_DISCRETE_5M_100-00018",
@@ -14075,12 +14319,25 @@
       "category": "resistor",
       "manufacturer": "Generic",
       "mpn": "RES_R2512_DISCRETE_5M_100-00018",
+      "package": "2512",
       "resistance": "5.0M",
       "resistance_ohm": 5000000.0,
+      "power_rating": "1W",
+      "power_rating_w": 1.0,
       "confidence": 0.8,
       "notes": ""
     },
-    "amr": null
+    "amr": {
+      "category": "resistor",
+      "mpn_pattern": "RES_R2512_DISCRETE_5M_100-00018",
+      "resistance_ohm": 5000000.0,
+      "power_rating_W": 1.0,
+      "derating_factor": 0.5,
+      "max_operating_power_W": 0.5,
+      "package": "2512",
+      "source": "mpn_decoder",
+      "confidence": 0.8
+    }
   },
   {
     "model": "RES_RES1206_W_0-75_0.003_100-00",

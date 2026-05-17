@@ -28,55 +28,100 @@ from agent_system.parsers.document_processor import DocumentProcessor
 from agent_system.parsers.checklist_parser import ChecklistParser
 from agent_system.storage_dispatcher import StorageDispatcher, StorageResult
 from agent_system.knowledge_router import KnowledgeRouter
-from agent_system.schemas.graph import Neo4jKnowledgeStore
+from agent_system.storage_dispatcher import Neo4jKnowledgeStore
+from agent_system.datasheet_processor import DatasheetPipeline
 
 
 # ============================================================
 # 页面配置
 # ============================================================
 
-st.set_page_config(
-    page_title="知识库管理",
-    page_icon="📚",
-    layout="wide",
-)
+# Page config removed - set in app.py
 
 # ============================================================
-# CSS 样式
+# CSS 样式 — uses theme variables from app.py
 # ============================================================
 
 st.markdown("""
 <style>
     .kb-header {
-        font-size: 1.8rem;
-        font-weight: bold;
-        color: #1f77b4;
-        margin-bottom: 1rem;
+        font-size: 1.75rem;
+        font-weight: 700;
+        background: var(--gradient-hero, linear-gradient(135deg, #1a237e 0%, #00bcd4 100%));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 0.5rem;
+        letter-spacing: -0.02em;
     }
     .doc-card {
-        background-color: #f8f9fa;
+        background-color: var(--bg-card, #f8f9fa);
         padding: 15px;
-        border-radius: 10px;
-        border: 1px solid #dee2e6;
+        border-radius: var(--radius-md, 10px);
+        border: 1px solid var(--border-color, #dee2e6);
         margin-bottom: 10px;
+        box-shadow: var(--shadow, 0 2px 8px rgba(0,0,0,0.3));
+        transition: all 0.25s ease;
+    }
+    .doc-card:hover {
+        border-color: var(--accent-cyan, #00bcd4);
+        box-shadow: var(--shadow-hover, 0 4px 16px rgba(0,0,0,0.4));
+        transform: translateY(-1px);
     }
     .status-badge {
-        display: inline-block;
-        padding: 2px 8px;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 3px 10px;
         border-radius: 12px;
-        font-size: 0.85rem;
-        font-weight: bold;
+        font-size: 0.8rem;
+        font-weight: 600;
     }
-    .status-uploaded { background-color: #e3f2fd; color: #1976d2; }
-    .status-processing { background-color: #fff3e0; color: #f57c00; }
-    .status-pending_review { background-color: #fff8e1; color: #f9a825; }
-    .status-stored { background-color: #e8f5e9; color: #388e3c; }
-    .status-rejected { background-color: #ffebee; color: #d32f2f; }
+    .status-uploaded {
+        background-color: var(--info-bg, rgba(88,166,255,0.12));
+        color: var(--info, #58a6ff);
+        border: 1px solid var(--info, #58a6ff);
+    }
+    .status-processing {
+        background-color: var(--warning-bg, rgba(210,153,34,0.12));
+        color: var(--warning, #d29922);
+        border: 1px solid var(--warning, #d29922);
+    }
+    .status-pending_review {
+        background-color: var(--warning-bg, rgba(210,153,34,0.12));
+        color: var(--warning, #d29922);
+        border: 1px solid var(--warning, #d29922);
+    }
+    .status-stored {
+        background-color: var(--success-bg, rgba(46,160,67,0.12));
+        color: var(--success, #2ea043);
+        border: 1px solid var(--success, #2ea043);
+    }
+    .status-rejected {
+        background-color: var(--error-bg, rgba(248,81,73,0.12));
+        color: var(--error, #f85149);
+        border: 1px solid var(--error, #f85149);
+    }
     .result-item {
-        background-color: #f5f5f5;
+        background-color: var(--bg-card, #1c2333);
         padding: 10px;
-        border-radius: 5px;
+        border-radius: var(--radius-sm, 6px);
         margin: 5px 0;
+        border: 1px solid var(--border-color, #30363d);
+    }
+    .header-line {
+        height: 3px;
+        background: var(--gradient-hero, linear-gradient(135deg, #1a237e 0%, #00bcd4 100%));
+        border-radius: 2px;
+        margin-bottom: 16px;
+    }
+    .section-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--accent-cyan, #00bcd4);
+        margin-bottom: 8px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -576,20 +621,126 @@ def render_stats():
 
 
 # ============================================================
+# Tab 6: Datasheet Upload
+# ============================================================
+
+def render_datasheet_upload():
+    """Datasheet upload tab with multi-file support and semantic processing"""
+    st.markdown("### 📤 Datasheet Upload")
+    st.markdown("Upload component datasheets (PDF) for semantic indexing and AMR derating")
+
+    uploaded_files = st.file_uploader(
+        "Select PDF datasheets",
+        type=["pdf"],
+        accept_multiple_files=True,
+        help="Upload one or more component datasheets in PDF format",
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        component_hint = st.text_input(
+            "Component type hint (optional)",
+            value="",
+            placeholder="e.g. capacitor, resistor, IC, PMIC",
+            help="Helps the parser focus on relevant parameters",
+        )
+    with col2:
+        mpn_hint = st.text_input(
+            "MPN hint (optional)",
+            value="",
+            placeholder="e.g. GRM21BR71H104KA01",
+            help="Part number to associate with the datasheet",
+        )
+
+    if uploaded_files:
+        st.markdown(f"**{len(uploaded_files)} file(s) selected**")
+        for f in uploaded_files:
+            size_kb = f.size / 1024
+            st.markdown(f"- `{f.name}` ({size_kb:.1f} KB)")
+
+        if st.button("🚀 Process & Index", type="primary", use_container_width=True):
+            _process_datasheets(uploaded_files, component_hint, mpn_hint)
+
+
+def _process_datasheets(uploaded_files, component_hint: str, mpn_hint: str):
+    """Process and index uploaded datasheets"""
+    pipeline = DatasheetPipeline()
+    total = len(uploaded_files)
+
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+
+    results = []
+    for i, uploaded_file in enumerate(uploaded_files):
+        pct = int((i / total) * 100)
+        progress_bar.progress(pct)
+        status_text.text(f"Processing {i+1}/{total}: {uploaded_file.name}")
+
+        # Save to temp file
+        suffix = os.path.splitext(uploaded_file.name)[1]
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir="/dev/shm") as tmp:
+            tmp.write(uploaded_file.getvalue())
+            tmp_path = tmp.name
+
+        try:
+            result = pipeline.process_pdf(
+                pdf_path=tmp_path,
+                filename=uploaded_file.name,
+                component_hint=component_hint or None,
+                mpn_hint=mpn_hint or None,
+            )
+            results.append({
+                "filename": uploaded_file.name,
+                "status": "success" if result["success"] else "error",
+                "chunks": result.get("chunks_indexed", 0),
+                "mpn": result.get("mpn", ""),
+                "error": result.get("error", ""),
+            })
+        except Exception as e:
+            results.append({
+                "filename": uploaded_file.name,
+                "status": "error",
+                "chunks": 0,
+                "mpn": "",
+                "error": str(e),
+            })
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+    progress_bar.progress(100)
+    status_text.text("Processing complete!")
+
+    # Display results
+    st.markdown("---")
+    st.markdown("### Results")
+
+    success_count = sum(1 for r in results if r["status"] == "success")
+    st.metric("Processed", f"{success_count}/{total}")
+
+    for r in results:
+        if r["status"] == "success":
+            st.success(f"✅ **{r['filename']}** — {r['chunks']} chunks indexed (MPN: {r['mpn']})")
+        else:
+            st.error(f"❌ **{r['filename']}** — {r['error']}")
+
+
+# ============================================================
 # 主页面
 # ============================================================
 
 def main():
     st.markdown("<div class='kb-header'>📚 知识库管理</div>", unsafe_allow_html=True)
-    st.markdown("管理硬件设计知识：上传文档、审核知识、查询检索")
-    st.markdown("---")
+    st.markdown("<div class='header-line'></div>", unsafe_allow_html=True)
+    st.markdown("<span style='color:var(--text-secondary);font-size:0.9rem;'>管理硬件设计知识：上传文档、审核知识、查询检索</span>", unsafe_allow_html=True)
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📤 文档上传",
         "📋 文档列表",
         "✅ 知识审核",
         "🔍 查询测试",
         "📊 统计面板",
+        "📄 Datasheet Upload",
     ])
 
     with tab1:
@@ -606,6 +757,9 @@ def main():
 
     with tab5:
         render_stats()
+
+    with tab6:
+        render_datasheet_upload()
 
 
 if __name__ == "__main__":

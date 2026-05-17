@@ -11,6 +11,30 @@ capacitors:
   temp_characteristic: null
   voltage_rating_V: 10
   voltage_source: inferred_from_package
+- capacitance: 2.2PF
+  capacitance_pf: 2.2
+  category: capacitor
+  confidence: 0.5599999999999999
+  derating_factor: 0.5
+  max_operating_voltage_V: 12.5
+  mpn_pattern: 381_CAP_C0201_DISCRETE_2.2 PF_1
+  package: '0201'
+  source: mpn_decoder
+  temp_characteristic: null
+  voltage_rating_V: 25
+  voltage_source: inferred_from_package
+- capacitance: 5PF
+  capacitance_pf: 5.0
+  category: capacitor
+  confidence: 0.5599999999999999
+  derating_factor: 0.5
+  max_operating_voltage_V: 12.5
+  mpn_pattern: 381_CAP_C0201_DISCRETE_5 PF_110
+  package: '0201'
+  source: mpn_decoder
+  temp_characteristic: null
+  voltage_rating_V: 25
+  voltage_source: inferred_from_package
 - capacitance: 0.1UF
   capacitance_pf: 100000.0
   category: capacitor
@@ -191,6 +215,18 @@ capacitors:
   temp_characteristic: null
   voltage_rating_V: 16
   voltage_source: inferred_from_package
+- capacitance: 0.22UF
+  capacitance_pf: 220000.0
+  category: capacitor
+  confidence: 0.5599999999999999
+  derating_factor: 0.5
+  max_operating_voltage_V: 5.0
+  mpn_pattern: CAP#1_C0201_DISCRETE_0.22 UF_11
+  package: '0201'
+  source: mpn_decoder
+  temp_characteristic: null
+  voltage_rating_V: 10
+  voltage_source: inferred_from_package
 - capacitance: 0.1UF
   capacitance_pf: 100000.0
   category: capacitor
@@ -238,6 +274,78 @@ capacitors:
   source: mpn_decoder
   temp_characteristic: null
   voltage_rating_V: 10
+  voltage_source: inferred_from_package
+- capacitance: 0.1UF
+  capacitance_pf: 100000.0
+  category: capacitor
+  confidence: 0.5599999999999999
+  derating_factor: 0.5
+  max_operating_voltage_V: 5.0
+  mpn_pattern: CAP_C0201_DISCRETE_0.1UF_110-00
+  package: '0201'
+  source: mpn_decoder
+  temp_characteristic: null
+  voltage_rating_V: 10
+  voltage_source: inferred_from_package
+- capacitance: 0.1UF
+  capacitance_pf: 100000.0
+  category: capacitor
+  confidence: 0.5599999999999999
+  derating_factor: 0.5
+  max_operating_voltage_V: 5.0
+  mpn_pattern: CAP_C0201_DISCRETE_0.1UF_110-_1
+  package: '0201'
+  source: mpn_decoder
+  temp_characteristic: null
+  voltage_rating_V: 10
+  voltage_source: inferred_from_package
+- capacitance: 0.22UF
+  capacitance_pf: 220000.0
+  category: capacitor
+  confidence: 0.5599999999999999
+  derating_factor: 0.5
+  max_operating_voltage_V: 5.0
+  mpn_pattern: CAP_C0201_DISCRETE_0.22 UF_110-
+  package: '0201'
+  source: mpn_decoder
+  temp_characteristic: null
+  voltage_rating_V: 10
+  voltage_source: inferred_from_package
+- capacitance: 0.22UF
+  capacitance_pf: 220000.0
+  category: capacitor
+  confidence: 0.5599999999999999
+  derating_factor: 0.5
+  max_operating_voltage_V: 5.0
+  mpn_pattern: CAP_C0201_DISCRETE_0.22UF_110-0
+  package: '0201'
+  source: mpn_decoder
+  temp_characteristic: null
+  voltage_rating_V: 10
+  voltage_source: inferred_from_package
+- capacitance: 10PF
+  capacitance_pf: 10.0
+  category: capacitor
+  confidence: 0.5599999999999999
+  derating_factor: 0.5
+  max_operating_voltage_V: 12.5
+  mpn_pattern: CAP_C0201_DISCRETE_10 PF_110-00
+  package: '0201'
+  source: mpn_decoder
+  temp_characteristic: null
+  voltage_rating_V: 25
+  voltage_source: inferred_from_package
+- capacitance: 1UF
+  capacitance_pf: 1000000.0
+  category: capacitor
+  confidence: 0.5599999999999999
+  derating_factor: 0.5
+  max_operating_voltage_V: 3.15
+  mpn_pattern: CAP_C0201_DISCRETE_1UF_110-0047
+  package: '0201'
+  source: mpn_decoder
+  temp_characteristic: null
+  voltage_rating_V: 6.3
   voltage_source: inferred_from_package
 - capacitance: 0.015UF
   capacitance_pf: 15000.0
@@ -354,6 +462,18 @@ capacitors:
   derating_factor: 0.5
   max_operating_voltage_V: 5.0
   mpn_pattern: CAP_C0402_DISCRETE_0.22UF_110_2
+  package: '0402'
+  source: mpn_decoder
+  temp_characteristic: null
+  voltage_rating_V: 10
+  voltage_source: inferred_from_package
+- capacitance: 0.47UF
+  capacitance_pf: 470000.0
+  category: capacitor
+  confidence: 0.5599999999999999
+  derating_factor: 0.5
+  max_operating_voltage_V: 5.0
+  mpn_pattern: CAP_C0402_DISCRETE_0.47 F_110
   package: '0402'
   source: mpn_decoder
   temp_characteristic: null
@@ -1336,48 +1456,48 @@ capacitors:
   category: capacitor
   confidence: 0.5599999999999999
   derating_factor: 0.5
-  max_operating_voltage_V: 12.5
+  max_operating_voltage_V: 8.0
   mpn_pattern: CAP_C1210-H2_80_DISCRETE_10UF_1
   package: '1210'
   source: mpn_decoder
   temp_characteristic: null
-  voltage_rating_V: 25
+  voltage_rating_V: 16
   voltage_source: inferred_from_package
 - capacitance: 22UF
   capacitance_pf: 22000000.0
   category: capacitor
   confidence: 0.5599999999999999
   derating_factor: 0.5
-  max_operating_voltage_V: 12.5
+  max_operating_voltage_V: 8.0
   mpn_pattern: CAP_C1210-H2_80_DISCRETE_22UF_1
   package: '1210'
   source: mpn_decoder
   temp_characteristic: null
-  voltage_rating_V: 25
+  voltage_rating_V: 16
   voltage_source: inferred_from_package
 - capacitance: 22UF
   capacitance_pf: 22000000.0
   category: capacitor
   confidence: 0.5599999999999999
   derating_factor: 0.5
-  max_operating_voltage_V: 12.5
+  max_operating_voltage_V: 8.0
   mpn_pattern: CAP_C1210-H2_80_DISCRETE_22UF_2
   package: '1210'
   source: mpn_decoder
   temp_characteristic: null
-  voltage_rating_V: 25
+  voltage_rating_V: 16
   voltage_source: inferred_from_package
 - capacitance: 10UF
   capacitance_pf: 10000000.0
   category: capacitor
   confidence: 0.5599999999999999
   derating_factor: 0.5
-  max_operating_voltage_V: 12.5
+  max_operating_voltage_V: 8.0
   mpn_pattern: CAP_C1210_DISCRETE_10 UF_110-00
   package: '1210'
   source: mpn_decoder
   temp_characteristic: null
-  voltage_rating_V: 25
+  voltage_rating_V: 16
   voltage_source: inferred_from_package
 - capacitance: 220PF
   capacitance_pf: 220.0
@@ -1410,6 +1530,18 @@ capacitors:
   derating_factor: 0.5
   max_operating_voltage_V: 5.0
   mpn_pattern: CAP_IT_SMC0402A_DISCRETE_0.1UF_
+  package: '0402'
+  source: mpn_decoder
+  temp_characteristic: null
+  voltage_rating_V: 10
+  voltage_source: inferred_from_package
+- capacitance: 0.1UF
+  capacitance_pf: 100000.0
+  category: capacitor
+  confidence: 0.5599999999999999
+  derating_factor: 0.5
+  max_operating_voltage_V: 5.0
+  mpn_pattern: CAP_IT_SMC0402A_DISCRETE_0.1U_1
   package: '0402'
   source: mpn_decoder
   temp_characteristic: null
@@ -1474,6 +1606,18 @@ capacitors:
   source: mpn_decoder
   temp_characteristic: null
   voltage_rating_V: 6.3
+  voltage_source: inferred_from_package
+- capacitance: 27PF
+  capacitance_pf: 27.0
+  category: capacitor
+  confidence: 0.5599999999999999
+  derating_factor: 0.5
+  max_operating_voltage_V: 12.5
+  mpn_pattern: CAP_PPG_C0201_DISCRETE_27 PF_11
+  package: '0201'
+  source: mpn_decoder
+  temp_characteristic: null
+  voltage_rating_V: 25
   voltage_source: inferred_from_package
 - capacitance: 0.1UF
   capacitance_pf: 100000.0
@@ -1583,6 +1727,18 @@ capacitors:
   temp_characteristic: null
   voltage_rating_V: 16
   voltage_source: inferred_from_package
+- capacitance: 100UF
+  capacitance_pf: 100000000.0
+  category: capacitor
+  confidence: 0.5599999999999999
+  derating_factor: 0.5
+  max_operating_voltage_V: 5.0
+  mpn_pattern: CAP_P_C7343_DISCRETE_100UF_110-
+  package: '7343'
+  source: mpn_decoder
+  temp_characteristic: null
+  voltage_rating_V: 10
+  voltage_source: inferred_from_package
 - capacitance: 0.1UF
   capacitance_pf: 100000.0
   category: capacitor
@@ -1667,6 +1823,18 @@ capacitors:
   temp_characteristic: null
   voltage_rating_V: 16
   voltage_source: inferred_from_package
+- capacitance: 0.1UF
+  capacitance_pf: 100000.0
+  category: capacitor
+  confidence: 0.5599999999999999
+  derating_factor: 0.5
+  max_operating_voltage_V: 5.0
+  mpn_pattern: 719_CAP_PPG_C0402_DISCRETE_0.1U
+  package: '0402'
+  source: mpn_decoder
+  temp_characteristic: null
+  voltage_rating_V: 10
+  voltage_source: inferred_from_package
 - capacitance: 1UF
   capacitance_pf: 1000000.0
   category: capacitor
@@ -1679,8 +1847,20 @@ capacitors:
   temp_characteristic: null
   voltage_rating_V: 6.3
   voltage_source: inferred_from_package
+- capacitance: 2.2UF
+  capacitance_pf: 2200000.0
+  category: capacitor
+  confidence: 0.5599999999999999
+  derating_factor: 0.5
+  max_operating_voltage_V: 3.15
+  mpn_pattern: 719_CAP_PPG_C0402_DISCRETE_2.2U
+  package: '0402'
+  source: mpn_decoder
+  temp_characteristic: null
+  voltage_rating_V: 6.3
+  voltage_source: inferred_from_package
 metadata:
-  amr_entries: 473
+  amr_entries: 492
   min_confidence: 0.5
   source: mpn_decoder_batch
   total_unique_models: 619
@@ -4530,6 +4710,15 @@ resistors:
   resistance_ohm: null
   source: mpn_decoder
 - category: resistor
+  confidence: 0.8
+  derating_factor: 0.5
+  max_operating_power_W: 0.375
+  mpn_pattern: RES_R2010_DISCRETE_250M_100-000
+  package: '2010'
+  power_rating_W: 0.75
+  resistance_ohm: 250000000.0
+  source: mpn_decoder
+- category: resistor
   confidence: 0.5
   derating_factor: 0.5
   max_operating_power_W: 0.5
@@ -4537,6 +4726,33 @@ resistors:
   package: '2512'
   power_rating_W: 1.0
   resistance_ohm: null
+  source: mpn_decoder
+- category: resistor
+  confidence: 0.8
+  derating_factor: 0.5
+  max_operating_power_W: 0.5
+  mpn_pattern: RES_R2512_DISCRETE_1.5M_100-002
+  package: '2512'
+  power_rating_W: 1.0
+  resistance_ohm: 1500000.0
+  source: mpn_decoder
+- category: resistor
+  confidence: 0.8
+  derating_factor: 0.5
+  max_operating_power_W: 0.5
+  mpn_pattern: RES_R2512_DISCRETE_1M_100-00301
+  package: '2512'
+  power_rating_W: 1.0
+  resistance_ohm: 1000000.0
+  source: mpn_decoder
+- category: resistor
+  confidence: 0.8
+  derating_factor: 0.5
+  max_operating_power_W: 0.5
+  mpn_pattern: RES_R2512_DISCRETE_5M_100-00018
+  package: '2512'
+  power_rating_W: 1.0
+  resistance_ohm: 5000000.0
   source: mpn_decoder
 - category: resistor
   confidence: 0.5

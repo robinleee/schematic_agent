@@ -119,6 +119,17 @@ class ETLWebExecutor:
             # Step 3: 加载到 Neo4j
             load_result = self._load_to_neo4j(components, topology)
 
+            # Step 4: 生成电源树 POWERED_BY 关系
+            from neo4j import GraphDatabase
+            driver = GraphDatabase.driver(
+                self.neo4j_uri,
+                auth=(self.neo4j_user, self.neo4j_password)
+            )
+            try:
+                generate_power_tree(driver)
+            finally:
+                driver.close()
+
             return ETLResult(
                 success=True,
                 components_count=len(components),

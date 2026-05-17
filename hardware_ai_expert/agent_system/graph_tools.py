@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Graph Tools - Neo4j 图谱查询工具集 (Smart Graph Tools V2)
 

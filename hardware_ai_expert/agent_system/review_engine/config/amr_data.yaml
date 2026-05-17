@@ -15,6 +15,38 @@ components:
         value: 100000.0
       package:
         value: '0402'
+  381_CAP_C0201_DISCRETE_2.2 PF_1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 25.0
+      capacitance:
+        value: 2.2PF
+      capacitance_pf:
+        value: 2.2
+      package:
+        value: '0201'
+  381_CAP_C0201_DISCRETE_5 PF_110:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 25.0
+      capacitance:
+        value: 5PF
+      capacitance_pf:
+        value: 5.0
+      package:
+        value: '0201'
   381_CAP_C0402_DISCRETE_0.1UF_11:
     parameters:
       _confidence:
@@ -239,6 +271,22 @@ components:
         value: 1000000.0
       package:
         value: '0402'
+  719_CAP_PPG_C0402_DISCRETE_0.1U:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.1UF
+      capacitance_pf:
+        value: 100000.0
+      package:
+        value: '0402'
   719_CAP_PPG_C0402_DISCRETE_1UF_:
     parameters:
       _confidence:
@@ -253,6 +301,22 @@ components:
         value: 1UF
       capacitance_pf:
         value: 1000000.0
+      package:
+        value: '0402'
+  719_CAP_PPG_C0402_DISCRETE_2.2U:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 2.2UF
+      capacitance_pf:
+        value: 2200000.0
       package:
         value: '0402'
   719_RES#1_R0402_DISCRETE_10K_10:
@@ -435,6 +499,22 @@ components:
         value: 10000.0
       package:
         value: '0402'
+  CAP#1_C0201_DISCRETE_0.22 UF_11:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.22UF
+      capacitance_pf:
+        value: 220000.0
+      package:
+        value: '0201'
   CAP#1_C0402_DISCRETE_0.1 UF_110:
     parameters:
       _confidence:
@@ -499,6 +579,102 @@ components:
         value: 220000.0
       package:
         value: '0402'
+  CAP_C0201_DISCRETE_0.1UF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.1UF
+      capacitance_pf:
+        value: 100000.0
+      package:
+        value: '0201'
+  CAP_C0201_DISCRETE_0.1UF_110-_1:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.1UF
+      capacitance_pf:
+        value: 100000.0
+      package:
+        value: '0201'
+  CAP_C0201_DISCRETE_0.22 UF_110-:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.22UF
+      capacitance_pf:
+        value: 220000.0
+      package:
+        value: '0201'
+  CAP_C0201_DISCRETE_0.22UF_110-0:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.22UF
+      capacitance_pf:
+        value: 220000.0
+      package:
+        value: '0201'
+  CAP_C0201_DISCRETE_10 PF_110-00:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 25.0
+      capacitance:
+        value: 10PF
+      capacitance_pf:
+        value: 10.0
+      package:
+        value: '0201'
+  CAP_C0201_DISCRETE_1UF_110-0047:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 6.3
+      capacitance:
+        value: 1UF
+      capacitance_pf:
+        value: 1000000.0
+      package:
+        value: '0201'
   CAP_C0402_DISCRETE_0.015UF_110-:
     parameters:
       _confidence:
@@ -657,6 +833,22 @@ components:
         value: 0.22UF
       capacitance_pf:
         value: 220000.0
+      package:
+        value: '0402'
+  CAP_C0402_DISCRETE_0.47 F_110:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.47UF
+      capacitance_pf:
+        value: 470000.0
       package:
         value: '0402'
   CAP_C0402_DISCRETE_0.47UF_110-0:
@@ -1964,7 +2156,7 @@ components:
       _voltage_source:
         value: inferred_from_package
       cap_voltage_rating:
-        value: 25.0
+        value: 16.0
       capacitance:
         value: 10UF
       capacitance_pf:
@@ -1980,7 +2172,7 @@ components:
       _voltage_source:
         value: inferred_from_package
       cap_voltage_rating:
-        value: 25.0
+        value: 16.0
       capacitance:
         value: 22UF
       capacitance_pf:
@@ -1996,7 +2188,7 @@ components:
       _voltage_source:
         value: inferred_from_package
       cap_voltage_rating:
-        value: 25.0
+        value: 16.0
       capacitance:
         value: 22UF
       capacitance_pf:
@@ -2012,7 +2204,7 @@ components:
       _voltage_source:
         value: inferred_from_package
       cap_voltage_rating:
-        value: 25.0
+        value: 16.0
       capacitance:
         value: 10UF
       capacitance_pf:
@@ -2052,6 +2244,22 @@ components:
       package:
         value: '0402'
   CAP_IT_SMC0402A_DISCRETE_0.1UF_:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 0.1UF
+      capacitance_pf:
+        value: 100000.0
+      package:
+        value: '0402'
+  CAP_IT_SMC0402A_DISCRETE_0.1U_1:
     parameters:
       _confidence:
         value: 0.5599999999999999
@@ -2147,6 +2355,22 @@ components:
         value: 1000000.0
       package:
         value: '0402'
+  CAP_PPG_C0201_DISCRETE_27 PF_11:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 25.0
+      capacitance:
+        value: 27PF
+      capacitance_pf:
+        value: 27.0
+      package:
+        value: '0201'
   CAP_PPG_C0402_DISCRETE_0.1UF_11:
     parameters:
       _confidence:
@@ -2291,6 +2515,22 @@ components:
         value: 10000000.0
       package:
         value: 0805
+  CAP_P_C7343_DISCRETE_100UF_110-:
+    parameters:
+      _confidence:
+        value: 0.5599999999999999
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: inferred_from_package
+      cap_voltage_rating:
+        value: 10.0
+      capacitance:
+        value: 100UF
+      capacitance_pf:
+        value: 100000000.0
+      package:
+        value: '7343'
   CAP_SMC0402A_DISCRETE_0.1UF_110:
     parameters:
       _confidence:
@@ -6395,6 +6635,20 @@ components:
         value: '1210'
       res_power_rating:
         value: 0.3333333333333333
+  RES_R2010_DISCRETE_250M_100-000:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '2010'
+      res_power_rating:
+        value: 0.75
+      resistance_ohm:
+        value: 250000000.0
   RES_R2512_330_100-00460-00:
     parameters:
       _confidence:
@@ -6407,6 +6661,48 @@ components:
         value: '2512'
       res_power_rating:
         value: 1.0
+  RES_R2512_DISCRETE_1.5M_100-002:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '2512'
+      res_power_rating:
+        value: 1.0
+      resistance_ohm:
+        value: 1500000.0
+  RES_R2512_DISCRETE_1M_100-00301:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '2512'
+      res_power_rating:
+        value: 1.0
+      resistance_ohm:
+        value: 1000000.0
+  RES_R2512_DISCRETE_5M_100-00018:
+    parameters:
+      _confidence:
+        value: 0.8
+      _source:
+        value: mpn_decoder
+      _voltage_source:
+        value: decoded
+      package:
+        value: '2512'
+      res_power_rating:
+        value: 1.0
+      resistance_ohm:
+        value: 5000000.0
   RES_RES1206_W_0-75_0.003_100-00:
     parameters:
       _confidence:
@@ -6672,8 +6968,8 @@ components:
       voltage_min:
         value: -0.3
 metadata:
-  capacitors_with_voltage: 140
+  capacitors_with_voltage: 155
   description: AMR data for schematic_agent - generated from MPN decoder + TI datasheets
   ics_with_voltage_range: 1
-  resistors_with_power: 333
-  total_components: 474
+  resistors_with_power: 337
+  total_components: 493

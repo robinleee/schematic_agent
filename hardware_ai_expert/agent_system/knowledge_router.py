@@ -23,6 +23,8 @@ try:
 except ImportError:
     chromadb = None
 
+from agent_system.embedding import embed, embed_batch, EMBEDDING_DIM
+
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(ROOT_DIR, ".env"))
 
@@ -99,7 +101,10 @@ class LocalRAGRetriever:
             except Exception:
                 self._col = client.create_collection(
                     self.COLLECTION,
-                    metadata={"description": "Hardware Datasheet Vector Store"},
+                    metadata={
+                        "description": "Hardware Datasheet Vector Store",
+                        "hnsw:space": "cosine",
+                    },
                     get_or_create=True
                 )
         return self._col
@@ -111,8 +116,7 @@ class LocalRAGRetriever:
 
         chunk_id = f"{chunk.mpn}_p{chunk.page}_{chunk.chunk_type}"
 
-        # 使用纯 Python 的简单位嵌入（避免额外依赖）
-        embedding = self._simple_embed(chunk.content)
+        embedding = embed(chunk.content)
 
         try:
             self.collection.add(
@@ -134,7 +138,7 @@ class LocalRAGRetriever:
 
     def search(self, mpn: str, query: str, n: int = 5) -> list[RetrievalResult]:
         """搜索本地向量库"""
-        query_emb = self._simple_embed(query)
+        query_emb = embed(query)
 
         try:
             results = self.collection.query(
@@ -167,25 +171,6 @@ class LocalRAGRetriever:
             ))
 
         return retrieval_results
-
-    def _simple_embed(self, text: str) -> list[float]:
-        """
-        简单位嵌入实现。
-        使用字符频率向量作为占位符，避免引入 sentence-transformers 依赖。
-        生产环境应替换为 BAAI/bge-large-zh-v1.5 等模型。
-        """
-        import math
-        words = text.lower().split()
-        vocab_size = 512
-        vec = [0.0] * vocab_size
-        for word in words:
-            for char in word[:8]:
-                idx = (ord(char) * 31) % vocab_size
-                vec[idx] += 1.0
-        norm = math.sqrt(sum(v * v for v in vec))
-        if norm > 0:
-            vec = [v / norm for v in vec]
-        return vec
 
     def count(self) -> int:
         """返回向量库中的切片数量"""
@@ -261,7 +246,7 @@ class KnowledgeRouter:
         tier1_results = self.tier1.search(mpn, query, n=max_results)
         if tier1_results:
             best = max(tier1_results, key=lambda r: r.confidence)
-            if best.confidence >= 0.5:
+            if best.confidence >= 0.3:
                 logger.info(f"Tier1 hit: {mpn} confidence={best.confidence:.2f}")
                 return best
 

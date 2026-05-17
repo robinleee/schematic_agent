@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import re
 import math
+import logging
 from typing import Optional
 from dataclasses import dataclass
 from enum import Enum
@@ -32,6 +33,18 @@ try:
     _FILE_BASED_AMR_AVAILABLE = True
 except ImportError:
     _FILE_BASED_AMR_AVAILABLE = False
+
+try:
+    from agent_system.knowledge_router import KnowledgeRouter
+    _KNOWLEDGE_ROUTER_AVAILABLE = True
+except ImportError:
+    _KNOWLEDGE_ROUTER_AVAILABLE = False
+
+try:
+    from agent_system.graph_rag_bridge import GraphRAGBridge
+    _GRAPH_RAG_AVAILABLE = True
+except ImportError:
+    _GRAPH_RAG_AVAILABLE = False
 
 
 # ============================================================
@@ -100,28 +113,90 @@ class VoltageLevelExtractor:
     """
     从网络名称推断电压等级
 
-    支持模式：
-      VDD_3V3, VCC_1V8, VCCINT_0V85, 5V_USB, 12V_IN, VBAT_3V7, etc.
+    支持模式（30+ patterns）：
+      VDD_3V3, VCC_1V8, VCCINT_0V85, 5V_USB, 12V_IN, VBAT_3V7
+      VDDQ, VPP, VTT (DDR)
+      1V0_DDR, 1V2_DDR, 1V35_DDR, 2V5_DDR
+      VCC_WL_1V8, VCC_BL_1V2 (project specific)
+      3V3_SW, 5V0_SW (switched)
+      VDD_CORE, VDD_SOC, VDD_IO
+      VDDO3P3, PVCC3V3, VSYS3V3, FB_V1V0
     """
 
-    # 统一的电压数字捕获组: 支持 3V3, 3P3, 12V, 0V85, 5 等格式
+    # Voltage number capture: 3V3, 3P3, 12V, 0V85, 5, 1V0
     _VNUM = r'([0-9]+V(?:[0-9]+)?|[0-9]+P(?:[0-9]+)?|[0-9]+)'
-    # 自定义"词边界"：前后不是字母或数字（下划线不算，因为它在网络名中常见）
+    # Strict voltage: only matches patterns with V or P (not bare numbers)
+    _VNUM_STRICT = r'([0-9]+V(?:[0-9]+)?|[0-9]+P(?:[0-9]+)?)'
+    # Custom word boundary: no letter/digit before/after (underscores OK)
     _WB = r'(?<![A-Za-z0-9])'
     _WB_END = r'(?![A-Za-z0-9])'
 
     PATTERNS = [
-        # VDD_3V3, VCC_1V8, VCCINT_0V85_LARK
-        (rf'{_WB}V(?:DD|CC|CCINT|CCIO|CCA|BAT|PP|IN|OUT)_{_VNUM}{_WB_END}', 'underscore'),
-        # 3V3_TCXO, 5V_USB, 0V85
-        (rf'{_WB}{_VNUM}(?:V|{_WB_END})', 'leading'),
-        # VCC5V, VCC3V3, VCC3P3
-        (rf'{_WB}VCC{_VNUM}(?:V|{_WB_END})', 'vcc'),
-        # VDD5V, VDD3V3
-        (rf'{_WB}VDD{_VNUM}(?:V|{_WB_END})', 'vdd'),
-        # P3V3, P1V8, P12V (如 VCC_P3V3, VCC_P12V_SAFETY)
+        # Group 1: Standard underscore-separated patterns (most reliable)
+        # VDD_3V3, VCC_1V8, VCCINT_0V85, VDDQ_1V2, VPP_2V5, VTT_0V675
+        (rf'{_WB}V(?:DD|CC|CCINT|CCIO|CCA|BAT|PP|IN|OUT|DDQ|TT)_{_VNUM}{_WB_END}', 'v_prefix_underscore'),
+
+        # VDD_CORE_1V0, VDD_SOC_0V8, VDD_IO_3V3, VDD_MEM_1V35
+        (rf'{_WB}VDD_(?:CORE|SOC|IO|MEM|PLL|ANA|DIG|RAM)_{_VNUM}{_WB_END}', 'vdd_subsystem'),
+
+        # VCC_WL_1V8, VCC_BL_1V2 (project specific subdomains)
+        (rf'{_WB}VCC_(?:WL|BL|AUX|MAIN|STBY|RTC|PHY|IO|DDR)_{_VNUM}{_WB_END}', 'vcc_subdomain'),
+
+        # 3V3_SW, 5V0_SW (switched rails)
+        (rf'{_WB}{_VNUM_STRICT}_(?:SW|STBY|ALWAYS|MAIN|AUX|RTC){_WB_END}', 'voltage_suffix_type'),
+
+        # 1V0_DDR, 1V2_DDR, 1V35_DDR, 2V5_DDR, 1V8_DDR
+        (rf'{_WB}{_VNUM_STRICT}_DDR{_WB_END}', 'ddr_suffixed'),
+
+        # Group 2: Concatenated V-prefix patterns (no underscore)
+        # VDDO3P3, VDDA3P3, VCC3V3, VDD1V8
+        (rf'{_WB}V(?:DDO|DDA|DDB|DDQ|CCA|CCB|CCC|CCIO)({_VNUM}){_WB_END}', 'vddo_concat'),
+
+        # VCC5V, VCC3V3, VCC3P3, VDD1V8 (strict: number must contain V or P)
+        (rf'{_WB}VCC{_VNUM_STRICT}(?:V|{_WB_END})', 'vcc_concat'),
+        (rf'{_WB}VDD{_VNUM_STRICT}(?:V|{_WB_END})', 'vdd_concat'),
+
+        # Group 3: P-prefix patterns
+        # P3V3, P1V8, P12V, P5V0
         (rf'{_WB}P{_VNUM}{_WB_END}', 'p_prefix'),
+
+        # PVCC3V3, PVCC1V8, PVIN5V
+        (rf'{_WB}PV(?:CC|DD|IN|OUT|BAT)({_VNUM}){_WB_END}', 'pvcc_concat'),
+
+        # Group 4: VSYS, VBATT, VBUS patterns with voltage
+        # VSYS3V3, VSYS5V0, VBUS5V, VBATT3V7
+        (rf'{_WB}V(?:SYS|BUS|BATT|BATT)({_VNUM}){_WB_END}', 'vsys_concat'),
+
+        # Group 5: Leading voltage patterns (strict: must contain V or P)
+        # 3V3_TCXO, 5V_USB, 0V85, 1V8_PLL
+        (rf'{_WB}{_VNUM_STRICT}(?:V|{_WB_END})', 'leading'),
+
+        # Group 6: V + number without separator
+        # V1V0, V1V8, V3V3, V0V8
+        (rf'{_WB}V({_VNUM}){_WB_END}', 'v_direct'),
+
+        # Group 7: Specialized patterns
+        # VDDQ_DDR (DDR data strobe voltage, typically 1.2V)
+        (rf'{_WB}VDDQ{_WB_END}', 'vddq_ddr'),
+        # VTT_DDR (DDR termination voltage, typically half of VDDQ)
+        (rf'{_WB}VTT{_WB_END}', 'vtt_ddr'),
+        # VPP_DDR (DDR programming voltage, typically 2.5V)
+        (rf'{_WB}VPP{_WB_END}', 'vpp_ddr'),
     ]
+
+    # Fixed voltage values for named rails without explicit voltage numbers
+    KNOWN_VOLTAGES = {
+        'VDDQ': 1.2,    # DDR4 VDDQ (typical)
+        'VTT': 0.6,     # DDR4 VTT (half of VDDQ)
+        'VPP': 2.5,     # DDR4 VPP
+        'VDDQ_DDR': 1.2,
+        'VTT_DDR': 0.6,
+        'VPP_DDR': 2.5,
+    }
+
+    # Additional GND variants
+    GND_NAMES = {'GND', 'DGND', 'AGND', 'PGND', 'SGND', 'VSS', 'VSSA', 'VSSD', 'VSSIO',
+                 'EPAD', 'SHIELD', 'CHASSIS_GND', 'EARTH'}
 
     @classmethod
     def extract(cls, net_name: str) -> Optional[float]:
@@ -132,25 +207,57 @@ class VoltageLevelExtractor:
         net_upper = net_name.upper()
 
         # 排除地线
-        if net_upper in ('GND', 'DGND', 'AGND', 'PGND', 'VSS', 'VSSA'):
+        if net_upper in cls.GND_NAMES or net_upper.rstrip('#').rstrip('_') in cls.GND_NAMES:
             return 0.0
+
+        # Check known named voltages first
+        if net_upper in cls.KNOWN_VOLTAGES:
+            return cls.KNOWN_VOLTAGES[net_upper]
 
         for pattern, ptype in cls.PATTERNS:
             match = re.search(pattern, net_upper)
             if match:
-                volt_str = match.group(1)
-                # 统一替换 V/P 为小数点: 3V3 → 3.3, 3P3 → 3.3, 0V85 → 0.85, 12V → 12.
+                # Handle patterns without capturing groups (named rails)
+                if ptype in ('vddq_ddr', 'vtt_ddr', 'vpp_ddr'):
+                    return cls.KNOWN_VOLTAGES.get(ptype.rsplit('_', 1)[0].upper())
+
+                try:
+                    volt_str = match.group(1)
+                except IndexError:
+                    continue
+
+                if not volt_str:
+                    continue
+
+                # Replace V/P with decimal point: 3V3 → 3.3, 3P3 → 3.3, 0V85 → 0.85, 12V → 12.
                 volt_str = volt_str.replace('V', '.').replace('P', '.')
                 try:
-                    return float(volt_str)
+                    voltage = float(volt_str)
+                    # Sanity check: voltage should be 0-100V for board-level
+                    if 0 <= voltage <= 100:
+                        return voltage
                 except ValueError:
                     continue
 
-        # 兜底模式: 纯数字 + V 结尾 (如 12V, 5V, 1.8V)
+        # Fallback: pure number + V at end (12V, 5V, 1.8V)
         match = re.search(r'([0-9]+(?:\.[0-9]+)?)V$', net_upper)
         if match:
             try:
-                return float(match.group(1))
+                voltage = float(match.group(1))
+                if 0 <= voltage <= 100:
+                    return voltage
+            except ValueError:
+                pass
+
+        # Fallback: voltage number in middle of name with underscore
+        # e.g., BIAS_PVCC3V3, EN_PVCC3V3, FB_PVCC3V3, VSYS3V3
+        match = re.search(r'(?:PVCC|PVDD|VSYS|VBUS)([0-9]+V[0-9]+)', net_upper)
+        if match:
+            volt_str = match.group(1).replace('V', '.')
+            try:
+                voltage = float(volt_str)
+                if 0 <= voltage <= 100:
+                    return voltage
             except ValueError:
                 pass
 
@@ -167,18 +274,188 @@ class VoltageLevelExtractor:
             nets = [(r["name"], cls.extract(r["name"])) for r in result]
 
         # 2. 更新有电压值的 Net
+        voltage_map = {}
         updated = 0
         with driver.session() as session:
             for name, voltage in nets:
                 if voltage is not None:
+                    voltage_map[name] = voltage
                     session.run("""
                         MATCH (n:Net {Name: $name})
                         SET n.VoltageLevel = $voltage
                     """, name=name, voltage=voltage)
                     updated += 1
 
-        print(f"  已标注 {updated} / {len(nets)} 个网络的 VoltageLevel")
-        return updated
+        print(f"  名称提取: {updated} / {len(nets)} 个网络")
+
+        # 3. 传播电压：通过电容 (DC 通路) — 多轮传播
+        round_num = 0
+        total_propagated_cap = 0
+        while True:
+            round_num += 1
+            propagated = cls._propagate_through_caps(driver, voltage_map)
+            total_propagated_cap += propagated
+            if propagated == 0 or round_num >= 5:
+                break
+        print(f"  电容传播: +{total_propagated_cap} 个网络 ({round_num} 轮)")
+
+        # 4. 传播电压：通过小阻值电阻 / 磁珠 (DC 近似通路) — 多轮传播
+        round_num = 0
+        total_propagated_res = 0
+        while True:
+            round_num += 1
+            propagated = cls._propagate_through_resistors(driver, voltage_map)
+            total_propagated_res += propagated
+            if propagated == 0 or round_num >= 5:
+                break
+        print(f"  电阻传播: +{total_propagated_res} 个网络 ({round_num} 轮)")
+
+        # 5. 传播电压：通过电感/磁珠 (DC 直通)
+        round_num = 0
+        total_propagated_ind = 0
+        while True:
+            round_num += 1
+            propagated = cls._propagate_through_inductors(driver, voltage_map)
+            total_propagated_ind += propagated
+            if propagated == 0 or round_num >= 5:
+                break
+        print(f"  电感传播: +{total_propagated_ind} 个网络 ({round_num} 轮)")
+
+        # 6. 传播电压：通过IC电源引脚 (同一IC的电源引脚电压一致)
+        round_num = 0
+        total_propagated_ic = 0
+        while True:
+            round_num += 1
+            propagated = cls._propagate_through_ic_power(driver, voltage_map)
+            total_propagated_ic += propagated
+            if propagated == 0 or round_num >= 3:
+                break
+        print(f"  IC电源传播: +{total_propagated_ic} 个网络 ({round_num} 轮)")
+
+        # 7. 写入传播结果
+        name_extracted = {name: v for name, v in nets if v is not None}
+        propagated_total = 0
+        with driver.session() as session:
+            for name, voltage in voltage_map.items():
+                if name not in name_extracted:  # New from propagation
+                    session.run("""
+                        MATCH (n:Net {Name: $name})
+                        SET n.VoltageLevel = $voltage
+                    """, name=name, voltage=voltage)
+                    propagated_total += 1
+
+        total = updated + propagated_total
+        print(f"  已标注 {total} / {len(nets)} 个网络的 VoltageLevel")
+        return total
+
+    @classmethod
+    def _propagate_through_caps(cls, driver, voltage_map: dict) -> int:
+        """Propagate voltage through capacitors (both pins see same DC voltage)."""
+        propagated = 0
+        with driver.session() as session:
+            result = session.run("""
+                MATCH (c:Component)-[:HAS_PIN]->(p1:Pin)-[:CONNECTS_TO]->(n1:Net)
+                WHERE c.PartType = 'CAPACITOR'
+                MATCH (c)-[:HAS_PIN]->(p2:Pin)-[:CONNECTS_TO]->(n2:Net)
+                WHERE n1.Name <> n2.Name
+                RETURN DISTINCT n1.Name AS net1, n2.Name AS net2
+            """)
+            for r in result:
+                net1, net2 = r["net1"], r["net2"]
+                if net1 in voltage_map and net2 not in voltage_map:
+                    v = voltage_map[net1]
+                    if v > 0:
+                        voltage_map[net2] = v
+                        propagated += 1
+                elif net2 in voltage_map and net1 not in voltage_map:
+                    v = voltage_map[net2]
+                    if v > 0:
+                        voltage_map[net1] = v
+                        propagated += 1
+        return propagated
+
+    @classmethod
+    def _propagate_through_resistors(cls, driver, voltage_map: dict) -> int:
+        """Propagate voltage through small resistors (< 10 ohm) and ferrite beads."""
+        propagated = 0
+        with driver.session() as session:
+            result = session.run("""
+                MATCH (c:Component)-[:HAS_PIN]->(p1:Pin)-[:CONNECTS_TO]->(n1:Net)
+                WHERE c.PartType = 'RESISTOR' AND c.Value IS NOT NULL
+                MATCH (c)-[:HAS_PIN]->(p2:Pin)-[:CONNECTS_TO]->(n2:Net)
+                WHERE n1.Name <> n2.Name
+                RETURN DISTINCT n1.Name AS net1, n2.Name AS net2, c.Value AS value
+            """)
+            for r in result:
+                net1, net2, value = r["net1"], r["net2"], r["value"]
+                if not value:
+                    continue
+                r_val = parse_resistance(value)
+                if r_val is not None and 0 < r_val < 10:
+                    if net1 in voltage_map and net2 not in voltage_map:
+                        voltage_map[net2] = voltage_map[net1]
+                        propagated += 1
+                    elif net2 in voltage_map and net1 not in voltage_map:
+                        voltage_map[net1] = voltage_map[net2]
+                        propagated += 1
+        return propagated
+
+    @classmethod
+    def _propagate_through_inductors(cls, driver, voltage_map: dict) -> int:
+        """Propagate voltage through inductors/ferrite beads (DC pass-through)."""
+        propagated = 0
+        with driver.session() as session:
+            result = session.run("""
+                MATCH (c:Component)-[:HAS_PIN]->(p1:Pin)-[:CONNECTS_TO]->(n1:Net)
+                WHERE c.PartType = 'INDUCTOR'
+                MATCH (c)-[:HAS_PIN]->(p2:Pin)-[:CONNECTS_TO]->(n2:Net)
+                WHERE n1.Name <> n2.Name
+                RETURN DISTINCT n1.Name AS net1, n2.Name AS net2
+            """)
+            for r in result:
+                net1, net2 = r["net1"], r["net2"]
+                if net1 in voltage_map and net2 not in voltage_map:
+                    voltage_map[net2] = voltage_map[net1]
+                    propagated += 1
+                elif net2 in voltage_map and net1 not in voltage_map:
+                    voltage_map[net1] = voltage_map[net2]
+                    propagated += 1
+        return propagated
+
+    @classmethod
+    def _propagate_through_ic_power(cls, driver, voltage_map: dict) -> int:
+        """Propagate voltage through IC power pins (same IC, same voltage domain)."""
+        propagated = 0
+        with driver.session() as session:
+            # Find ICs with multiple power pins where some connect to known-voltage nets
+            result = session.run("""
+                MATCH (c:Component)-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
+                WHERE c.PartType IN ['IC', 'MCU', 'FPGA', 'PMIC', 'TRANSISTOR']
+                  AND (p.PinType = 'POWER' OR p.PinType = 'POWER' OR p.Number STARTS WITH 'V')
+                RETURN c.RefDes AS refdes, collect(DISTINCT n.Name) AS power_nets
+            """)
+            for r in result:
+                refdes = r["refdes"]
+                power_nets = r["power_nets"]
+                # Find the most common non-zero voltage among this IC's power nets
+                known_voltages = {}
+                for net in power_nets:
+                    if net in voltage_map and voltage_map[net] > 0:
+                        v = voltage_map[net]
+                        known_voltages[v] = known_voltages.get(v, 0) + 1
+
+                if not known_voltages:
+                    continue
+
+                # Use the most common voltage as the IC's operating voltage
+                dominant_voltage = max(known_voltages, key=known_voltages.get)
+
+                # Propagate to unknown power nets on this IC
+                for net in power_nets:
+                    if net not in voltage_map:
+                        voltage_map[net] = dominant_voltage
+                        propagated += 1
+        return propagated
 
 
 # ============================================================
@@ -260,9 +537,10 @@ class AMRDataSource:
     """
     AMR 数据源接口
 
-    支持两种数据源（优先级从高到低）：
+    支持三种数据源（优先级从高到低）：
     1. FileBasedAMRSource: 从 amr_data.yaml 读取工程师审批后的参数
-    2. 子类自定义: 连接 PLM/ERP 等外部系统
+    2. KnowledgeRouter (ChromaDB): 从语义索引的 datasheet 知识库查询
+    3. GraphRAGBridge (Neo4j): 从图关联的 VectorChunk 查询
     """
 
     def __init__(self):
@@ -273,6 +551,20 @@ class AMRDataSource:
             except Exception as e:
                 logging.warning(f"FileBasedAMRSource init failed: {e}")
 
+        self._router = None
+        if _KNOWLEDGE_ROUTER_AVAILABLE:
+            try:
+                self._router = KnowledgeRouter()
+            except Exception as e:
+                logging.warning(f"KnowledgeRouter init failed: {e}")
+
+        self._bridge = None
+        if _GRAPH_RAG_AVAILABLE:
+            try:
+                self._bridge = GraphRAGBridge()
+            except Exception as e:
+                logging.warning(f"GraphRAGBridge init failed: {e}")
+
     def get_capacitor_voltage_rating(self, refdes: str, model: str, value: str) -> Optional[float]:
         """获取电容耐压值 (V)。优先从审批后的 Datasheet 数据读取"""
         # 1. 尝试 FileBasedAMRSource
@@ -280,7 +572,19 @@ class AMRDataSource:
             result = self._file_source.get_capacitor_voltage_rating(refdes, model, value)
             if result is not None:
                 return result
-        # 2. 子类可在此扩展外部系统查询
+
+        # 2. 尝试 KnowledgeRouter (ChromaDB semantic search)
+        if self._router:
+            result = self._query_kb_voltage_rating(model)
+            if result is not None:
+                return result
+
+        # 3. 尝试 GraphRAGBridge (Neo4j VectorChunk)
+        if self._bridge:
+            result = self._query_graph_rag_voltage(model)
+            if result is not None:
+                return result
+
         return None
 
     def get_resistor_power_rating(self, refdes: str, model: str, value: str) -> Optional[float]:
@@ -289,6 +593,13 @@ class AMRDataSource:
             result = self._file_source.get_resistor_power_rating(refdes, model, value)
             if result is not None:
                 return result
+
+        # Try knowledge base
+        if self._router:
+            result = self._query_kb_power_rating(model)
+            if result is not None:
+                return result
+
         return None
 
     def get_ic_voltage_range(self, refdes: str, model: str) -> Optional[tuple[float, float]]:
@@ -297,6 +608,81 @@ class AMRDataSource:
             result = self._file_source.get_ic_voltage_range(refdes, model)
             if result is not None:
                 return result
+        return None
+
+    def _query_kb_voltage_rating(self, model: str) -> Optional[float]:
+        """Query ChromaDB for capacitor voltage rating via semantic search."""
+        try:
+            result = self._router.search(model, "voltage rating maximum rated voltage")
+            if result.status == "success" and result.confidence >= 0.3:
+                voltage = self._extract_voltage_from_text(result.content)
+                if voltage is not None:
+                    logging.info(f"KB voltage rating for {model}: {voltage}V (confidence={result.confidence:.2f})")
+                    return voltage
+        except Exception as e:
+            logging.debug(f"KB voltage query failed for {model}: {e}")
+        return None
+
+    def _query_kb_power_rating(self, model: str) -> Optional[float]:
+        """Query ChromaDB for resistor power rating via semantic search."""
+        try:
+            result = self._router.search(model, "power rating maximum power dissipation")
+            if result.status == "success" and result.confidence >= 0.3:
+                power = self._extract_power_from_text(result.content)
+                if power is not None:
+                    return power
+        except Exception as e:
+            logging.debug(f"KB power query failed for {model}: {e}")
+        return None
+
+    def _query_graph_rag_voltage(self, model: str) -> Optional[float]:
+        """Query Neo4j GraphRAG for capacitor voltage rating."""
+        try:
+            results = self._bridge.graph_rag_query("voltage rating", mpn=model, n_results=3)
+            for r in results:
+                voltage = self._extract_voltage_from_text(r.content)
+                if voltage is not None:
+                    return voltage
+        except Exception as e:
+            logging.debug(f"GraphRAG voltage query failed for {model}: {e}")
+        return None
+
+    @staticmethod
+    def _extract_voltage_from_text(text: str) -> Optional[float]:
+        """Extract voltage value (V) from text using regex."""
+        # Patterns for voltage ratings in datasheet text
+        patterns = [
+            r'(?:rated\s+)?voltage[:\s]+(\d+(?:\.\d+)?)\s*V',
+            r'(\d+(?:\.\d+)?)\s*V\s*(?:DC|dc)',
+            r'voltage\s+rating[:\s]+(\d+(?:\.\d+)?)\s*V',
+            r'cap_voltage_rating[:\s]+(\d+(?:\.\d+)?)',
+            r'max(?:imum)?\s+voltage[:\s]+(\d+(?:\.\d+)?)\s*V',
+        ]
+        for pat in patterns:
+            m = re.search(pat, text, re.IGNORECASE)
+            if m:
+                try:
+                    return float(m.group(1))
+                except ValueError:
+                    continue
+        return None
+
+    @staticmethod
+    def _extract_power_from_text(text: str) -> Optional[float]:
+        """Extract power rating (W) from text using regex."""
+        patterns = [
+            r'(?:rated\s+)?power[:\s]+(\d+(?:\.\d+)?)\s*W',
+            r'power\s+rating[:\s]+(\d+(?:\.\d+)?)\s*W',
+            r'(\d+(?:\.\d+)?)\s*W\s*(?:max)?',
+            r'res_power_rating[:\s]+(\d+(?:\.\d+)?)',
+        ]
+        for pat in patterns:
+            m = re.search(pat, text, re.IGNORECASE)
+            if m:
+                try:
+                    return float(m.group(1))
+                except ValueError:
+                    continue
         return None
 
 

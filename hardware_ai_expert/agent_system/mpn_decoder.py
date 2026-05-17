@@ -510,11 +510,13 @@ class MPNDecoder:
         elif "RES" in desc.upper() or part_type == "RESISTOR":
             result.category = "resistor"
 
-        # 提取封装 (C0402, R0402, C0603, C0805, SMX0402, SMC1206 等)
+        # 提取封装 (C0402, R0402, C0603, C0805, SMX0402, SMC1206, C7343 等)
         pkg_patterns = [
-            r"[CR](0201|0402|0603|0805|1206|1210|1812)",
-            r"SM[CX](0402|0603|0805|1206|1210)",
-            r"SMR(0402|0603|0805)",
+            r"[CR](0201|0402|0603|0805|1206|1210|1812|2010|2512)",
+            r"SM[CXR](0201|0402|0603|0805|1206|1210)",
+            r"SMC(2626|3018|7343)",  # tantalum
+            r"C(7343|2626|3018)",     # tantalum without prefix
+            r"PPG_C(0201|0402|0603)",
         ]
         for pat in pkg_patterns:
             m = re.search(pat, desc, re.IGNORECASE)
@@ -528,20 +530,31 @@ class MPNDecoder:
 
         # 提取容值
         if result.category == "capacitor":
-            # 匹配: 0.1UF, 10UF, 22UF, 1UF, 100NF, 10NF, 1000PF, 22 UF
-            # Neo4j format: DISCRETE_0.1UF_ or DISCRETE_22 UF_
-            cap_match = re.search(r"(\d+\.?\d*)\s*(UF|μF|NF|PF)(?:[_\s]|$)", desc, re.IGNORECASE)
+            # 匹配: 0.1UF, 10UF, 22UF, 1UF, 100NF, 10NF, 1000PF, 22 UF, 0.47 F
+            # Neo4j format: DISCRETE_0.1UF_ or DISCRETE_22 UF_ or DISCRETE_0.47 F_
+            cap_match = re.search(r"(\d+\.?\d*)\s*(UF|μF|F|NF|PF)(?:[_\s]|$)", desc, re.IGNORECASE)
             if cap_match:
                 val = cap_match.group(1)
                 unit = cap_match.group(2).upper()
+                # Normalize bare F to UF
+                if unit == 'F' and float(val) < 1:
+                    unit = 'UF'
                 result.capacitance = f"{val}{unit}"
                 fval = float(val)
-                if unit == "UF":
+                if unit in ("UF", "F"):
                     result.capacitance_pf = fval * 1_000_000
                 elif unit == "NF":
                     result.capacitance_pf = fval * 1_000
                 elif unit == "PF":
                     result.capacitance_pf = fval
+            
+            # Fallback: match 0.1U_ format (missing F)
+            if not result.capacitance:
+                cap_match2 = re.search(r"(\d+\.?\d*)\s*U(?:[_\s]|$)", desc, re.IGNORECASE)
+                if cap_match2:
+                    val = cap_match2.group(1)
+                    result.capacitance = f"{val}UF"
+                    result.capacitance_pf = float(val) * 1_000_000
 
         # 提取阻值
         if result.category == "resistor":
@@ -632,6 +645,10 @@ class AMRDataGenerator:
     # 基于 MLCC 通用规格：同一封装容值越大耐压越低
     CAP_PACKAGE_VOLTAGE = {
         # (package, capacitance_pf_range) -> voltage_rating_V
+        # 0201
+        ("0201", (0, 100000)): 25,       # <=0.1uF: 25V (C0G)
+        ("0201", (100000, 1000000)): 10, # 0.1~1uF: 10V
+        ("0201", (1000000, 1e9)): 6.3,  # >1uF: rare
         # 0402
         ("0402", (0, 100000)): 16,       # <=0.1uF: 16V
         ("0402", (100000, 1000000)): 10, # 0.1~1uF: 10V
@@ -649,6 +666,17 @@ class AMRDataGenerator:
         ("1206", (0, 100000)): 50,
         ("1206", (100000, 1000000)): 25,
         ("1206", (1000000, 1e9)): 16,
+        # 1210
+        ("1210", (0, 1000000)): 25,
+        ("1210", (1000000, 1e9)): 16,
+        # 1812
+        ("1812", (0, 1e9)): 25,
+        # 7343 (tantalum)
+        ("7343", (0, 1e9)): 10,
+        # 2626 (tantalum)
+        ("2626", (0, 1e9)): 10,
+        # 3018 (tantalum)
+        ("3018", (0, 1e9)): 10,
     }
 
     def generate_amr_entry(self, decoded: DecodedComponent) -> Optional[Dict]:

@@ -28,49 +28,77 @@ from agent_system.etl_web_bridge import ETLWebExecutor, ETLResult
 # 页面配置
 # ============================================================
 
-st.set_page_config(
-    page_title="ETL 数据导入",
-    page_icon="🔧",
-    layout="wide",
-)
+# Page config removed - set in app.py
 
 # ============================================================
-# CSS 样式
+# CSS 样式 — uses theme variables from app.py
 # ============================================================
 
 st.markdown("""
 <style>
     .etl-header {
-        font-size: 1.8rem;
-        font-weight: bold;
-        color: #1f77b4;
-        margin-bottom: 1rem;
+        font-size: 1.75rem;
+        font-weight: 700;
+        background: var(--gradient-hero, linear-gradient(135deg, #1a237e 0%, #00bcd4 100%));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 0.5rem;
+        letter-spacing: -0.02em;
     }
     .file-card {
-        background-color: #f8f9fa;
+        background-color: var(--bg-card, #f8f9fa);
         padding: 15px;
-        border-radius: 10px;
-        border: 1px solid #dee2e6;
+        border-radius: var(--radius-md, 10px);
+        border: 1px solid var(--border-color, #dee2e6);
         margin-bottom: 10px;
+        transition: all 0.25s ease;
+    }
+    .file-card:hover {
+        border-color: var(--accent-cyan, #00bcd4);
+        box-shadow: var(--shadow-hover, 0 4px 12px rgba(0,0,0,0.12));
     }
     .stat-card {
-        background-color: #f0f7ff;
+        background-color: var(--bg-card, #1c2333);
         padding: 15px;
-        border-radius: 10px;
-        border: 1px solid #b3d9ff;
+        border-radius: var(--radius-md, 10px);
+        border: 1px solid var(--border-color, #30363d);
         text-align: center;
+        box-shadow: var(--shadow, 0 2px 8px rgba(0,0,0,0.3));
+        transition: all 0.25s ease;
+    }
+    .stat-card:hover {
+        box-shadow: var(--shadow-hover, 0 4px 16px rgba(0,0,0,0.4));
+        transform: translateY(-2px);
+        border-color: var(--accent-cyan, #00bcd4);
     }
     .stat-number {
         font-size: 2rem;
-        font-weight: bold;
-        color: #1f77b4;
+        font-weight: 700;
+        color: var(--accent-cyan, #00bcd4);
+        line-height: 1.2;
     }
     .stat-label {
-        font-size: 0.9rem;
-        color: #666;
+        font-size: 0.85rem;
+        color: var(--text-secondary, #8b949e);
+        margin-top: 4px;
     }
-    .quality-pass { color: #21c354; font-weight: bold; }
-    .quality-fail { color: #ff4b4b; font-weight: bold; }
+    .quality-pass { color: var(--success, #2ea043); font-weight: bold; }
+    .quality-fail { color: var(--error, #f85149); font-weight: bold; }
+    .header-line {
+        height: 3px;
+        background: var(--gradient-hero, linear-gradient(135deg, #1a237e 0%, #00bcd4 100%));
+        border-radius: 2px;
+        margin-bottom: 16px;
+    }
+    .section-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--accent-cyan, #00bcd4);
+        margin-bottom: 8px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -389,8 +417,8 @@ def render_load():
 
 def main():
     st.markdown("<div class='etl-header'>🔧 ETL 数据导入</div>", unsafe_allow_html=True)
-    st.markdown("将 Cadence 网表导入 Neo4j 图谱，建立原理图数据底座")
-    st.markdown("---")
+    st.markdown("<div class='header-line'></div>", unsafe_allow_html=True)
+    st.markdown("<span style='color:var(--text-secondary);font-size:0.9rem;'>将 Cadence 网表导入 Neo4j 图谱，建立原理图数据底座</span>", unsafe_allow_html=True)
 
     tab1, tab2, tab3, tab4 = st.tabs([
         "📤 文件上传",
