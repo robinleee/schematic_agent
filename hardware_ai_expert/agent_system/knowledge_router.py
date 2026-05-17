@@ -114,7 +114,7 @@ class LocalRAGRetriever:
         if not chunk.content_hash:
             chunk.content_hash = hashlib.md5(chunk.content.encode()).hexdigest()
 
-        chunk_id = f"{chunk.mpn}_p{chunk.page}_{chunk.chunk_type}"
+        chunk_id = f"{chunk.mpn}_p{chunk.page}_{chunk.chunk_type}_{chunk.content_hash[:8]}"
 
         embedding = embed(chunk.content)
 
@@ -344,7 +344,7 @@ class KnowledgeRouter:
                 mpn=source_id,  # 用 source_id 替代 MPN
                 page=i,
                 content=enriched_content,
-                chunk_type=f"design_guide_{chunk.category}",
+                chunk_type=f"design_guide_{chunk.category}_{i:03d}",  # 加序号避免ID冲突
             )
             db_chunk.content_hash = chunk.content_hash
 
