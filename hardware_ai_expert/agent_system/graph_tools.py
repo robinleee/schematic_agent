@@ -558,6 +558,198 @@ def get_power_tree(root_refdes: str = None, voltage: str = None) -> str:
 # ============================================================
 
 @tool
+def find_common_cause(refdes_list: str) -> str:
+    """
+    定位多个故障器件的共同上游电源（共因失效分析）。
+
+    给定一组故障器件位号，追踪它们各自的电源供给路径，
+    找到共同的上游电源网络或器件，定位可能的共因失效点。
+
+    Args:
+        refdes_list: 逗号分隔的器件位号，如 "U40000,U50000,R40005"
+
+    Returns:
+        共因失效分析报告（文本格式）
+    """
+    try:
+        refdes_items = [r.strip() for r in refdes_list.split(',') if r.strip()]
+        if len(refdes_items) < 2:
+            return "共因失效分析至少需要 2 个器件位号"
+
+        # 对每个器件，查找其电源网络
+        power_nets_by_refdes = {}
+        for refdes in refdes_items:
+            query = """
+            MATCH (c:Component {RefDes: $refdes})-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
+            WHERE p.Type = 'POWER' OR p.Type = 'GROUND'
+            RETURN n.Name AS net_name, n.VoltageLevel AS voltage, p.Type AS pin_type
+            """
+            records = _run_cypher(query, {"refdes": refdes})
+            if records:
+                power_nets_by_refdes[refdes] = [
+                    {"net": r['net_name'], "voltage": r['voltage'], "pin_type": r['pin_type']}
+                    for r in records
+                ]
+
+        if not power_nets_by_refdes:
+            return f"未找到任何器件的电源信息: {refdes_list}"
+
+        # 找共同电源网络
+        all_nets = {}
+        for refdes, nets in power_nets_by_refdes.items():
+            for net_info in nets:
+                if net_info['pin_type'] == 'POWER':  # 只看电源，不看地
+                    net_name = net_info['net']
+                    all_nets.setdefault(net_name, []).append(refdes)
+
+        common_nets = {net: refs for net, refs in all_nets.items() if len(refs) >= 2}
+
+        # 对共同电源网络，查找上游电源器件
+        lines = [f"共因失效分析 (故障器件: {', '.join(refdes_items)}):\n"]
+        lines.append("各器件电源连接:")
+        for refdes, nets in power_nets_by_refdes.items():
+            pwr_nets = [f"{n['net']}({n['voltage'] or '?'}V)" for n in nets if n['pin_type'] == 'POWER']
+            lines.append(f"  {refdes}: {', '.join(pwr_nets[:5]) or '无电源引脚'}")
+
+        if common_nets:
+            lines.append(f"\n🔴 共同电源网络:")
+            for net, refs in sorted(common_nets.items(), key=lambda x: -len(x[1])):
+                lines.append(f"  {net}: 共同供给 {', '.join(refs)}")
+
+                # 查找该网络的上游电源器件
+                src_query = """
+                MATCH (c:Component)-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net {Name: $net_name})
+                WHERE c.PartType IN ['LDO', 'BUCK', 'PMIC', 'DCDC']
+                RETURN c.RefDes AS refdes, c.PartType AS pt, c.Model AS model
+                LIMIT 3
+                """
+                src_records = _run_cypher(src_query, {"net_name": net})
+                if src_records:
+                    for sr in src_records:
+                        lines.append(f"    └── 上游电源器件: {sr['refdes']} [{sr['pt']}] {sr['model']}")
+                else:
+                    lines.append(f"    └── (未找到上游电源器件)")
+        else:
+            lines.append("\n🟢 未发现共同电源网络 — 故障可能独立发生")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        return f"共因失效分析出错: {str(e)}"
+
+
+def analyze_power_sequence(refdes: str) -> str:
+    """
+    分析指定电源器件的上下电时序依赖。
+
+    追踪该器件的输入电源来源和输出电源负载，
+    推断上电/下电顺序依赖关系。
+
+    Args:
+        refdes: 电源器件位号，如 "U40000"
+
+    Returns:
+        电源时序分析报告
+    """
+    try:
+        # 1. 获取器件信息
+        info_query = """
+        MATCH (c:Component {RefDes: $refdes})
+        RETURN c.RefDes AS refdes, c.PartType AS pt, c.Model AS model, c.Value AS value
+        """
+        info = _run_cypher(info_query, {"refdes": refdes})
+        if not info:
+            return f"未找到器件 {refdes}"
+
+        dev = info[0]
+        lines = [f"电源时序分析: {refdes} [{dev['pt']}] {dev['model'] or dev['value'] or ''}\n"]
+
+        # 2. 查找输入电源网络 (VIN/VCC)
+        input_query = """
+        MATCH (c:Component {RefDes: $refdes})-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
+        WHERE p.Type = 'POWER' AND (n.Name CONTAINS 'VIN' OR n.Name CONTAINS 'VCC' OR n.Name CONTAINS 'VDD')
+        RETURN n.Name AS net, n.VoltageLevel AS voltage
+        """
+        input_nets = _run_cypher(input_query, {"refdes": refdes})
+
+        # 3. 查找输出电源网络
+        # 策略：所有有 VoltageLevel 的非输入非地非控制网络
+        output_query = """
+        MATCH (c:Component {RefDes: $refdes})-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
+        WHERE n.VoltageLevel IS NOT NULL
+              AND NOT (n.Name CONTAINS 'VIN' OR n.Name STARTS WITH 'VCC' OR n.Name STARTS WITH 'VDD' OR n.Name = 'VIN')
+              AND NOT (n.Name CONTAINS 'GND' OR n.Name = 'DGND' OR n.Name = 'NC')
+              AND NOT (n.Name STARTS WITH 'EN' OR n.Name STARTS WITH 'NR' OR n.Name STARTS WITH 'FB')
+        WITH DISTINCT n.Name AS net, n.VoltageLevel AS voltage, count(p) AS pin_count
+        RETURN net, voltage
+        ORDER BY voltage DESC
+        """
+        output_nets = _run_cypher(output_query, {"refdes": refdes})
+
+        # 4. 查找使能引脚
+        en_query = """
+        MATCH (c:Component {RefDes: $refdes})-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
+        WHERE (n.Name CONTAINS 'EN_' OR n.Name STARTS WITH 'EN' OR n.Name CONTAINS '_EN')
+              AND NOT n.Name = 'NC'
+        RETURN DISTINCT n.Name AS net, p.Number AS pin
+        """
+        en_nets = _run_cypher(en_query, {"refdes": refdes})
+
+        # 5. 组装时序报告
+        if input_nets:
+            lines.append("📥 输入电源:")
+            for n in input_nets:
+                lines.append(f"  {n['net']} ({n['voltage'] or '?'}V)")
+                # 查找上游电源器件
+                upstream_query = """
+                MATCH (src:Component)-[:HAS_PIN]->(sp:Pin)-[:CONNECTS_TO]->(n:Net {Name: $net_name})
+                WHERE src.PartType IN ['LDO', 'BUCK', 'PMIC', 'DCDC'] AND src.RefDes <> $refdes
+                RETURN src.RefDes AS refdes, src.PartType AS pt
+                LIMIT 3
+                """
+                upstream = _run_cypher(upstream_query, {"net_name": n['net'], "refdes": refdes})
+                for u in upstream:
+                    lines.append(f"    └── 由 {u['refdes']} [{u['pt']}] 供给")
+        else:
+            lines.append("📥 输入电源: 未检测到标准 VIN/VCC 网络")
+
+        if output_nets:
+            lines.append("\n📤 输出电源:")
+            for n in output_nets:
+                v = n['voltage'] or '?'
+                # 查找负载
+                load_query = """
+                MATCH (n:Net {Name: $net_name})<-[:CONNECTS_TO]-(lp:Pin)<-[:HAS_PIN]-(lc:Component)
+                WHERE lc.RefDes <> $refdes
+                RETURN count(DISTINCT lc) AS cnt,
+                       collect(DISTINCT lc.PartType)[0..3] AS types
+                """
+                loads = _run_cypher(load_query, {"net_name": n['net'], "refdes": refdes})
+                load_info = f"{loads[0]['cnt']}个负载" if loads else "0个负载"
+                lines.append(f"  {n['net']} ({v}V) → {load_info}")
+        else:
+            lines.append("\n📤 输出电源: 未检测到")
+
+        if en_nets:
+            lines.append("\n🔌 使能控制:")
+            for n in en_nets:
+                lines.append(f"  {n['net']} (Pin {n['pin']})")
+
+        # 6. 时序推断
+        lines.append("\n⏱️ 上电时序推断:")
+        if input_nets and output_nets:
+            lines.append(f"  1. 先上电: {', '.join(n['net'] for n in input_nets)}")
+            lines.append(f"  2. 使能: {', '.join(n['net'] for n in en_nets) if en_nets else '自动使能'}")
+            lines.append(f"  3. 输出稳定: {', '.join(n['net'] for n in output_nets)}")
+        else:
+            lines.append("  信息不足，无法推断")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        return f"电源时序分析出错: {str(e)}"
+
+
 def trace_differential_pair(start_pin_id: str) -> str:
     """
     [预留接口] 追踪差分对信号链路。
@@ -593,6 +785,8 @@ def get_graph_tools() -> list:
         get_power_tree,
         get_i2c_devices,
         get_signal_path,
+        find_common_cause,
+        analyze_power_sequence,
         trace_differential_pair,
         get_graph_summary,
     ]
