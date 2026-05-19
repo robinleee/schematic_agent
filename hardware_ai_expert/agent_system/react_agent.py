@@ -142,9 +142,12 @@ def _build_tool_schemas() -> list[dict]:
 
     # 图谱工具 — 从 LangChain StructuredTool 提取
     for tool_obj in _get_all_graph_tools():
-        if "预留接口" in (tool_obj.description or ""):
+        desc = getattr(tool_obj, 'description', '') or ''
+        if "预留接口" in desc:
             continue
-        fn = tool_obj.func if hasattr(tool_obj, "func") else tool_obj
+        if not hasattr(tool_obj, 'func'):
+            continue  # skip non-StructuredTool entries
+        fn = tool_obj.func
         sig = inspect.signature(fn)
         params = {}
         required = []

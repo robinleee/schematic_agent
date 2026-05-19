@@ -638,6 +638,7 @@ def find_common_cause(refdes_list: str) -> str:
         return f"共因失效分析出错: {str(e)}"
 
 
+@tool
 def analyze_power_sequence(refdes: str) -> str:
     """
     分析指定电源器件的上下电时序依赖。
