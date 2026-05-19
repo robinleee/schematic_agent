@@ -71,12 +71,23 @@ def _get_chroma_client():
     if _chroma_client is None:
         if chromadb is None:
             raise RuntimeError("chromadb not installed")
-        persist_dir = os.path.join(ROOT_DIR, "data", "chroma_db")
-        os.makedirs(persist_dir, exist_ok=True)
-        _chroma_client = chromadb.PersistentClient(
-            path=persist_dir,
-            settings=ChromaSettings(anonymized_telemetry=False, allow_reset=True)
-        )
+        # 优先使用 HttpClient（ChromaDB server），fallback 到 PersistentClient
+        try:
+            _chroma_client = chromadb.HttpClient(
+                host=os.getenv("CHROMA_HOST", "localhost"),
+                port=int(os.getenv("CHROMA_PORT", "8000")),
+                settings=ChromaSettings(anonymized_telemetry=False)
+            )
+            # Verify connection
+            _chroma_client.heartbeat()
+        except Exception:
+            logger.warning("ChromaDB server unavailable, falling back to PersistentClient")
+            persist_dir = os.path.join(ROOT_DIR, "data", "chroma_db")
+            os.makedirs(persist_dir, exist_ok=True)
+            _chroma_client = chromadb.PersistentClient(
+                path=persist_dir,
+                settings=ChromaSettings(anonymized_telemetry=False, allow_reset=True)
+            )
     return _chroma_client
 
 
@@ -192,6 +203,70 @@ class LocalRAGRetriever:
 # Tier 3: 公网 MPN 检索（示例实现）
 # ============================================================
 
+class ChromaDBTier2Retriever:
+    """Tier 2: ChromaDB hardware_knowledge 全文检索（Datasheet chunks）"""
+
+    COLLECTION = "hardware_knowledge"
+
+    def __init__(self):
+        self._col = None
+
+    @property
+    def collection(self):
+        if self._col is None:
+            client = _get_chroma_client()
+            try:
+                self._col = client.get_collection(self.COLLECTION)
+            except Exception:
+                self._col = None
+        return self._col
+
+    def search(self, mpn: str, query: str, n: int = 5) -> Optional[RetrievalResult]:
+        """查询 ChromaDB hardware_knowledge collection"""
+        if self.collection is None:
+            return None
+
+        try:
+            query_emb = embed(query)
+            where_filter = {"mpn": {"$eq": mpn}} if mpn else None
+            results = self.collection.query(
+                query_embeddings=[query_emb],
+                n_results=n,
+                where=where_filter,
+                include=["documents", "metadatas", "distances"]
+            )
+
+            if not results or not results["documents"] or not results["documents"][0]:
+                return None
+
+            docs = results["documents"][0]
+            metas = results["metadatas"][0]
+            dists = results["distances"][0]
+
+            # Combine top results
+            contents = []
+            for doc, meta, dist in zip(docs, metas, dists):
+                score = 1.0 - dist  # cosine distance -> similarity
+                if score >= 0.3:
+                    contents.append(f"[{meta.get('mpn', '?')} Page {meta.get('chunk_index', '?')}] {doc}")
+
+            if not contents:
+                return None
+
+            best_score = 1.0 - dists[0]
+            return RetrievalResult(
+                status="success",
+                tier=TierLevel.TIER_2,
+                content="\n\n".join(contents[:3]),
+                source=metas[0].get("source", "chromadb"),
+                confidence=best_score,
+                mpn=mpn,
+            )
+        except Exception as e:
+            logger.error(f"ChromaDB Tier2 search error: {e}")
+            return None
+
+
 class PublicMPNRetriever:
     """
     公网 MPN 检索器。
@@ -227,7 +302,7 @@ class KnowledgeRouter:
 
     def __init__(self):
         self.tier1 = LocalRAGRetriever()
-        self.tier2 = None  # 预留
+        self.tier2 = ChromaDBTier2Retriever()  # ChromaDB hardware_knowledge
         self.tier3 = PublicMPNRetriever()
 
     def search(self, mpn: str, query: str, max_results: int = 5) -> RetrievalResult:

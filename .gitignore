@@ -8,3 +8,4 @@ __pycache__/
 
 # Netlist source files (may contain proprietary data)
 netlist_parser/netlist/
+chroma_data/
