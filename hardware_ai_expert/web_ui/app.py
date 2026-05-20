@@ -924,8 +924,7 @@ def render_chat():
 # ============================================================
 
 def render_review_report():
-    st.markdown("<div class='main-header'>📋 审查报告</div>", unsafe_allow_html=True)
-    st.markdown("<div class='header-line'></div>", unsafe_allow_html=True)
+    st.markdown("📋 审查报告", unsafe_allow_html=False)
 
     if not st.session_state.review_results:
         st.info("暂无审查结果。请在对话页面执行审查任务，或点击下方的'运行全板审查'。")
@@ -944,146 +943,147 @@ def render_review_report():
     result = st.session_state.review_results
     violations = result.get("violations", [])
 
-    # ---- Summary Cards ----
+    # ============================================================
+    # 统计摘要区 — st.metric
+    # ============================================================
     error_count = sum(1 for v in violations if v.get("severity") == "ERROR")
     warn_count = sum(1 for v in violations if v.get("severity") == "WARNING")
     info_count = sum(1 for v in violations if v.get("severity") == "INFO")
 
-    scol1, scol2, scol3, scol4 = st.columns(4)
-    with scol1:
-        st.markdown(f"""
-        <div class='dash-card'>
-            <div class='value'>{len(violations)}</div>
-            <div class='label'>总违规数</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with scol2:
-        st.markdown(f"""
-        <div class='dash-card'>
-            <div class='value' style='color:var(--error)'>{error_count}</div>
-            <div class='label'>ERROR</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with scol3:
-        st.markdown(f"""
-        <div class='dash-card'>
-            <div class='value' style='color:var(--warning)'>{warn_count}</div>
-            <div class='label'>WARNING</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with scol4:
-        st.markdown(f"""
-        <div class='dash-card'>
-            <div class='value' style='color:var(--info)'>{info_count}</div>
-            <div class='label'>INFO</div>
-        </div>
-        """, unsafe_allow_html=True)
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("总违规数", len(violations))
+    col2.metric("🔴 CRITICAL", error_count)
+    col3.metric("🟠 WARNING", warn_count)
+    col4.metric("🔵 INFO", info_count)
 
-    st.markdown("---")
+    st.divider()
 
-    # ---- Severity Distribution Chart ----
-    if violations:
-        st.markdown("<div class='section-label'>严重级别分布</div>", unsafe_allow_html=True)
-        import pandas as pd
-        sev_df = pd.DataFrame({
-            "级别": ["ERROR", "WARNING", "INFO"],
-            "数量": [error_count, warn_count, info_count],
-        })
-        st.bar_chart(sev_df.set_index("级别"), use_container_width=True, height=250)
-
-        # Rule violation count by rule_name
-        rule_counts = {}
-        for v in violations:
-            name = v.get("rule_name", "Unknown")
-            rule_counts[name] = rule_counts.get(name, 0) + 1
-
-        if len(rule_counts) > 1:
-            st.markdown("<div class='section-label'>规则违规统计</div>", unsafe_allow_html=True)
-            rule_df = pd.DataFrame([
-                {"规则": k, "次数": v}
-                for k, v in sorted(rule_counts.items(), key=lambda x: -x[1])
-            ])
-            st.bar_chart(rule_df.set_index("规则"), use_container_width=True, height=250)
-
-    st.markdown("---")
-
-    # ---- Violation List ----
     if not violations:
         st.success("🎉 未发现违规项！设计完全合规。")
         return
 
-    # Filter badges
-    st.markdown("<div class='section-label'>严重级别筛选</div>", unsafe_allow_html=True)
-    filter_col1, filter_col2, filter_col3 = st.columns(3)
+    # ============================================================
+    # 严重级别分布图
+    # ============================================================
+    import pandas as pd
+    sev_df = pd.DataFrame({
+        "级别": ["CRITICAL", "WARNING", "INFO"],
+        "数量": [error_count, warn_count, info_count],
+    })
+    st.bar_chart(sev_df.set_index("级别"), use_container_width=True, height=250)
 
-    if "review_severity_filter" not in st.session_state:
-        st.session_state.review_severity_filter = {"ERROR": True, "WARNING": True, "INFO": False}
+    # ============================================================
+    # 筛选区 — st.selectbox
+    # ============================================================
+    filter_col1, filter_col2 = st.columns(2)
+
+    # 收集所有规则类型
+    all_rule_ids = sorted(set(v.get("rule_id", "Unknown") for v in violations))
 
     with filter_col1:
-        e_active = "active" if st.session_state.review_severity_filter["ERROR"] else ""
-        if st.button(f"🔴 ERROR ({error_count})", key="_filter_error"):
-            st.session_state.review_severity_filter["ERROR"] = not st.session_state.review_severity_filter["ERROR"]
-            st.rerun()
-        st.markdown(f"<div class='filter-badge {e_active}'>🔴 ERROR: {error_count}</div>", unsafe_allow_html=True)
+        selected_rule = st.selectbox(
+            "按规则类型筛选",
+            options=["全部"] + all_rule_ids,
+            key="review_rule_filter",
+        )
 
     with filter_col2:
-        w_active = "active" if st.session_state.review_severity_filter["WARNING"] else ""
-        if st.button(f"🟡 WARNING ({warn_count})", key="_filter_warning"):
-            st.session_state.review_severity_filter["WARNING"] = not st.session_state.review_severity_filter["WARNING"]
-            st.rerun()
-        st.markdown(f"<div class='filter-badge {w_active}'>🟡 WARNING: {warn_count}</div>", unsafe_allow_html=True)
+        selected_severity = st.selectbox(
+            "按严重程度筛选",
+            options=["全部", "CRITICAL", "WARNING", "INFO"],
+            key="review_severity_filter_select",
+        )
 
-    with filter_col3:
-        i_active = "active" if st.session_state.review_severity_filter["INFO"] else ""
-        if st.button(f"🔵 INFO ({info_count})", key="_filter_info"):
-            st.session_state.review_severity_filter["INFO"] = not st.session_state.review_severity_filter["INFO"]
-            st.rerun()
-        st.markdown(f"<div class='filter-badge {i_active}'>🔵 INFO: {info_count}</div>", unsafe_allow_html=True)
+    # 应用筛选
+    filtered = violations
+    if selected_rule != "全部":
+        filtered = [v for v in filtered if v.get("rule_id") == selected_rule]
+    if selected_severity != "全部":
+        # Map CRITICAL -> ERROR for backward compat
+        sev_map = {"CRITICAL": "ERROR", "WARNING": "WARNING", "INFO": "INFO"}
+        filtered = [v for v in filtered if v.get("severity") == sev_map.get(selected_severity, selected_severity)]
 
-    active_severities = [k for k, v in st.session_state.review_severity_filter.items() if v]
-    filtered = [v for v in violations if v.get("severity", "") in active_severities]
+    st.caption(f"显示 **{len(filtered)}** / {len(violations)} 条违规项")
 
-    st.markdown(f"<div style='color:var(--text-secondary);font-size:0.9rem;margin:8px 0;'>显示 <strong>{len(filtered)}</strong> / {len(violations)} 条违规项</div>", unsafe_allow_html=True)
+    # ============================================================
+    # 按规则类型分组展示
+    # ============================================================
+    from collections import OrderedDict
+    grouped: dict[str, list] = OrderedDict()
+    for v in filtered:
+        rid = v.get("rule_id", "Unknown")
+        grouped.setdefault(rid, []).append(v)
 
-    for i, v in enumerate(filtered, 1):
-        severity = v.get("severity", "INFO")
+    # Severity display helpers
+    SEVERITY_EMOJI = {"ERROR": "🔴", "WARNING": "🟠", "INFO": "🔵"}
+    SEVERITY_LABEL = {"ERROR": "CRITICAL", "WARNING": "WARNING", "INFO": "INFO"}
 
-        with st.expander(f"{i}. [{severity}] {v.get('rule_name', 'Unknown')} - {v.get('refdes', 'N/A')}"):
-            st.markdown(f"""
-            <div class='violation-card severity-{severity}'>
-                <div style='display:flex;align-items:center;gap:8px;margin-bottom:8px;'>
-                    <span class='severity-badge {severity}'>{severity}</span>
-                    <strong>{v.get('rule_name', 'Unknown')}</strong>
-                </div>
-                <div style='display:grid;grid-template-columns:120px 1fr;gap:4px 12px;font-size:0.9rem;'>
-                    <span style='color:var(--text-secondary);'>规则 ID</span><code>{v.get('rule_id', 'N/A')}</code>
-                    <span style='color:var(--text-secondary);'>器件位号</span><code>{v.get('refdes', 'N/A')}</code>
-                    <span style='color:var(--text-secondary);'>网络</span><code>{v.get('net_name', 'N/A')}</code>
-                    <span style='color:var(--text-secondary);'>描述</span><span>{v.get('description', '')}</span>
-                    <span style='color:var(--text-secondary);'>期望</span><span style='color:var(--success)'>{v.get('expected', '')}</span>
-                    <span style='color:var(--text-secondary);'>实际</span><span style='color:var(--error)'>{v.get('actual', '')}</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+    for rule_id, rule_violations in grouped.items():
+        rule_name = rule_violations[0].get("rule_name", rule_id)
+        # Count severities in this group
+        e = sum(1 for v in rule_violations if v.get("severity") == "ERROR")
+        w = sum(1 for v in rule_violations if v.get("severity") == "WARNING")
+        inf = sum(1 for v in rule_violations if v.get("severity") == "INFO")
+        parts = []
+        if e: parts.append(f"🔴 {e}")
+        if w: parts.append(f"🟠 {w}")
+        if inf: parts.append(f"🔵 {inf}")
+        header = f"**{rule_id}** — {rule_name}  ({', '.join(parts)})"
 
-            # 添加到 HITL
-            if st.button(f"📝 加入 HITL 审批", key=f"hitl_{i}"):
-                pr = PendingReview(
-                    review_id="",
-                    rule_id=v.get("rule_id", ""),
-                    rule_name=v.get("rule_name", ""),
-                    refdes=v.get("refdes", ""),
-                    net_name=v.get("net_name", ""),
-                    description=v.get("description", ""),
-                    severity=severity,
-                    expected=v.get("expected", ""),
-                    actual=v.get("actual", ""),
+        with st.expander(header, expanded=False):
+            for i, v in enumerate(rule_violations, 1):
+                severity = v.get("severity", "INFO")
+                emoji = SEVERITY_EMOJI.get(severity, "⚪")
+                label = SEVERITY_LABEL.get(severity, severity)
+
+                st.markdown(
+                    f"{emoji} **{label}** | "
+                    f"器件: `{v.get('refdes', 'N/A')}` | "
+                    f"网络: `{v.get('net_name', 'N/A')}`"
                 )
-                st.session_state.hitl_manager.add_pending(pr)
-                st.success(f"已添加 {v.get('refdes', '')} 到 HITL 审批队列")
+                st.markdown(f"- **描述:** {v.get('description', '')}")
+                st.markdown(f"- **期望:** {v.get('expected', '')}  |  **实际:** {v.get('actual', '')}")
 
+                # 加入 HITL 审批
+                if st.button(f"📝 加入 HITL 审批", key=f"hitl_{rule_id}_{i}"):
+                    pr = PendingReview(
+                        review_id="",
+                        rule_id=v.get("rule_id", ""),
+                        rule_name=v.get("rule_name", ""),
+                        refdes=v.get("refdes", ""),
+                        net_name=v.get("net_name", ""),
+                        description=v.get("description", ""),
+                        severity=severity,
+                        expected=v.get("expected", ""),
+                        actual=v.get("actual", ""),
+                    )
+                    st.session_state.hitl_manager.add_pending(pr)
+                    st.success(f"已添加 {v.get('refdes', '')} 到 HITL 审批队列")
+
+                if i < len(rule_violations):
+                    st.divider()
+
+    # ============================================================
+    # 规则违规统计图
+    # ============================================================
+    rule_counts = {}
+    for v in violations:
+        name = v.get("rule_id", "Unknown")
+        rule_counts[name] = rule_counts.get(name, 0) + 1
+
+    if len(rule_counts) > 1:
+        st.divider()
+        st.markdown("**规则违规统计**")
+        rule_df = pd.DataFrame([
+            {"规则": k, "次数": v}
+            for k, v in sorted(rule_counts.items(), key=lambda x: -x[1])
+        ])
+        st.bar_chart(rule_df.set_index("规则"), use_container_width=True, height=250)
+
+    # ============================================================
     # 导出按钮
-    st.markdown("---")
+    # ============================================================
+    st.divider()
     if st.button("📥 导出报告为 Markdown"):
         report_md = _generate_markdown_report(result)
         st.download_button(
