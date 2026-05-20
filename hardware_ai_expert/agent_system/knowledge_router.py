@@ -100,8 +100,9 @@ class LocalRAGRetriever:
 
     COLLECTION = "hardware_datasheets"
 
-    def __init__(self):
+    def __init__(self, project_id: str = "default"):
         self._col = None
+        self.project_id = project_id
 
     @property
     def collection(self):
@@ -151,11 +152,19 @@ class LocalRAGRetriever:
         """搜索本地向量库"""
         query_emb = embed(query)
 
+        # 构建 where 过滤：mpn + project_id
+        where_filter = {}
+        if mpn:
+            where_filter["mpn"] = {"$eq": mpn}
+        if self.project_id and self.project_id != "default":
+            where_filter["project_id"] = {"$eq": self.project_id}
+        where_clause = where_filter if where_filter else None
+
         try:
             results = self.collection.query(
                 query_embeddings=[query_emb],
                 n_results=n,
-                where={"mpn": {"$eq": mpn}} if mpn else None,
+                where=where_clause,
                 include=["documents", "metadatas", "distances"]
             )
         except Exception as e:
@@ -208,8 +217,9 @@ class ChromaDBTier2Retriever:
 
     COLLECTION = "hardware_knowledge"
 
-    def __init__(self):
+    def __init__(self, project_id: str = "default"):
         self._col = None
+        self.project_id = project_id
 
     @property
     def collection(self):
@@ -228,11 +238,16 @@ class ChromaDBTier2Retriever:
 
         try:
             query_emb = embed(query)
-            where_filter = {"mpn": {"$eq": mpn}} if mpn else None
+            where_filter = {}
+            if mpn:
+                where_filter["mpn"] = {"$eq": mpn}
+            if self.project_id and self.project_id != "default":
+                where_filter["project_id"] = {"$eq": self.project_id}
+            where_clause = where_filter if where_filter else None
             results = self.collection.query(
                 query_embeddings=[query_emb],
                 n_results=n,
-                where=where_filter,
+                where=where_clause,
                 include=["documents", "metadatas", "distances"]
             )
 
@@ -300,9 +315,9 @@ class KnowledgeRouter:
     Tier 3 命中后自动缓存到 Tier 1。
     """
 
-    def __init__(self):
-        self.tier1 = LocalRAGRetriever()
-        self.tier2 = ChromaDBTier2Retriever()  # ChromaDB hardware_knowledge
+    def __init__(self, project_id: str = "default"):
+        self.tier1 = LocalRAGRetriever(project_id=project_id)
+        self.tier2 = ChromaDBTier2Retriever(project_id=project_id)  # ChromaDB hardware_knowledge
         self.tier3 = PublicMPNRetriever()
 
     def search(self, mpn: str, query: str, max_results: int = 5) -> RetrievalResult:

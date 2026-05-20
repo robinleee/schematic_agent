@@ -116,8 +116,22 @@ class ETLWebExecutor:
                         details=quality_result,
                     )
 
-            # Step 3: 加载到 Neo4j
-            load_result = self._load_to_neo4j(components, topology)
+            # Step 3: 加载到 Neo4j（按项目隔离）
+            pid = project_name or "default"
+            
+            # 先清空该项目的旧数据
+            from neo4j import GraphDatabase
+            driver = GraphDatabase.driver(
+                self.neo4j_uri,
+                auth=(self.neo4j_user, self.neo4j_password)
+            )
+            try:
+                from etl_pipeline.run_real_etl import clear_and_init_neo4j
+                clear_and_init_neo4j(driver, project_id=pid)
+            finally:
+                driver.close()
+            
+            load_result = self._load_to_neo4j(components, topology, project_id=pid)
 
             # Step 4: 生成电源树 POWERED_BY 关系
             from neo4j import GraphDatabase
@@ -217,9 +231,10 @@ class ETLWebExecutor:
         unknown = sum(1 for c in components.values() if c.get("PartType") == "UNKNOWN")
         return (total - unknown) / total * 100
 
-    def _load_to_neo4j(self, components: dict, topology: list) -> dict:
+    def _load_to_neo4j(self, components: dict, topology: list, project_id: str = "default") -> dict:
         """加载到 Neo4j"""
-        db = HardwareTopologyDB(self.neo4j_uri, self.neo4j_user, self.neo4j_password)
+        db = HardwareTopologyDB(self.neo4j_uri, self.neo4j_user, self.neo4j_password,
+                                project_id=project_id)
         try:
             # 创建索引
             db.create_topology_indexes()
@@ -230,7 +245,7 @@ class ETLWebExecutor:
             # 加载拓扑
             db.batch_insert_topology(topology)
 
-            return {"loaded": True}
+            return {"loaded": True, "project_id": project_id}
         finally:
             db.close()
 

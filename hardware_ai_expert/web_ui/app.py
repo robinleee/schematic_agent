@@ -1745,15 +1745,54 @@ with st.sidebar:
         projects = list_projects()
         if not projects:
             projects = ["default"]
-        current_project = st.selectbox(
-            "项目",
-            options=projects,
-            index=projects.index("default") if "default" in projects else 0,
-            key="_project_selector",
-            help="选择当前项目，用于多网表数据隔离",
-        )
+        
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            current_project = st.selectbox(
+                "📁 项目",
+                options=projects,
+                index=projects.index("default") if "default" in projects else 0,
+                key="_project_selector",
+                help="选择当前项目，用于多网表数据隔离",
+            )
+        with col2:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("➕ 新建", key="_new_project_btn", help="新建项目"):
+                st.session_state._show_new_project = True
+        
+        # 新建项目对话框
+        if st.session_state.get("_show_new_project", False):
+            new_name = st.text_input("项目名称", key="_new_project_name", placeholder="如: ProjectB_V2")
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("✅ 创建", key="_create_project_btn"):
+                    if new_name and new_name not in projects:
+                        # 创建 Project 节点
+                        from neo4j import GraphDatabase
+                        driver = GraphDatabase.driver(
+                            os.environ.get("NEO4J_URI", "bolt://localhost:7687"),
+                            auth=("neo4j", os.environ.get("NEO4J_PASSWORD", "SecretPassword123"))
+                        )
+                        try:
+                            with driver.session() as session:
+                                session.run("MERGE (p:Project {id: $pid}) ON CREATE SET p.created_at = datetime()", pid=new_name)
+                        finally:
+                            driver.close()
+                        st.session_state._show_new_project = False
+                        st.session_state._project_selector = new_name
+                        set_current_project(new_name)
+                        st.session_state.current_project = new_name
+                        st.rerun()
+            with col_b:
+                if st.button("❌ 取消", key="_cancel_project_btn"):
+                    st.session_state._show_new_project = False
+        
         set_current_project(current_project)
         st.session_state.current_project = current_project
+        
+        # 显示当前项目信息
+        if current_project != "default":
+            st.caption(f"🔄 当前项目: **{current_project}**")
     except Exception:
         pass  # Neo4j may not be available
 

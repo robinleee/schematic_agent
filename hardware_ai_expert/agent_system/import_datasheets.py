@@ -89,8 +89,13 @@ def chunk_text_simple(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = OV
     return chunks
 
 
-def import_datasheets(data_dir: Path = DEFAULT_DATA_DIR):
-    """批量导入 Datasheet PDF 到 ChromaDB"""
+def import_datasheets(data_dir: Path = DEFAULT_DATA_DIR, project_id: str = "default"):
+    """批量导入 Datasheet PDF 到 ChromaDB
+    
+    Args:
+        data_dir: Datasheet PDF 目录
+        project_id: 项目 ID，用于多项目数据隔离
+    """
     
     logger.info(f"Loading embedding model: {EMBEDDING_MODEL} (CPU)")
     embedder = SentenceTransformer(EMBEDDING_MODEL, device='cpu')
@@ -141,7 +146,7 @@ def import_datasheets(data_dir: Path = DEFAULT_DATA_DIR):
             embeddings = embedder.encode(batch, show_progress_bar=False).tolist()
             ids = [f"{mpn}_chunk_{i+j}" for j in range(len(batch))]
             metadatas = [
-                {"mpn": mpn, "source": pdf_path.name, "chunk_index": i+j, "type": "datasheet", "char_count": len(batch[j])}
+                {"mpn": mpn, "source": pdf_path.name, "chunk_index": i+j, "type": "datasheet", "char_count": len(batch[j]), "project_id": project_id}
                 for j in range(len(batch))
             ]
             collection.add(ids=ids, documents=batch, embeddings=embeddings, metadatas=metadatas)

@@ -104,33 +104,13 @@ def list_projects() -> list[str]:
     """列出 Neo4j 中所有 Project 节点"""
     try:
         records = _run_cypher("MATCH (p:Project) RETURN p.id AS id ORDER BY p.id")
-        return [r["id"] for r in records] if records else []
+        projects = [r["id"] for r in records] if records else []
+        # 始终包含 default
+        if "default" not in projects:
+            projects.insert(0, "default")
+        return projects
     except Exception:
-        return []
-
-
-# 默认 project_id，可通过 set_current_project() 切换
-_current_project_id = "default"
-
-
-def set_current_project(project_id: str):
-    """设置当前 project_id，用于多项目数据隔离"""
-    global _current_project_id
-    _current_project_id = project_id
-
-
-def get_current_project() -> str:
-    """获取当前 project_id"""
-    return _current_project_id
-
-
-def list_projects() -> list[str]:
-    """列出 Neo4j 中所有 Project 节点"""
-    try:
-        records = _run_cypher("MATCH (p:Project) RETURN p.id AS id ORDER BY p.id")
-        return [r["id"] for r in records] if records else []
-    except Exception:
-        return []
+        return ["default"]
 
 # ============================================================
 # Tool 1: 查找器件的所有连接网络

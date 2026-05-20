@@ -137,7 +137,8 @@ if "kb_dispatcher" not in st.session_state:
     st.session_state.kb_dispatcher = StorageDispatcher()
 
 if "kb_router" not in st.session_state:
-    st.session_state.kb_router = KnowledgeRouter()
+    project_id = st.session_state.get("current_project", "default")
+    st.session_state.kb_router = KnowledgeRouter(project_id=project_id)
 
 # ============================================================
 # 辅助函数

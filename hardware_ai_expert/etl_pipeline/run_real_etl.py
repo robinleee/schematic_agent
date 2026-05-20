@@ -95,17 +95,47 @@ def fuse_components(net_topology, ref_to_prim, chip_library):
     return graph_components
 
 
-def clear_and_init_neo4j(driver):
-    """清空 Neo4j 并初始化约束"""
-    print("\n🗑️  清空 Neo4j 并初始化...")
+def clear_and_init_neo4j(driver, project_id: str = None):
+    """清空 Neo4j 并初始化约束
+    
+    Args:
+        driver: Neo4j driver
+        project_id: 如果指定，只删除该项目的数据；None 则全库清空
+    """
+    if project_id:
+        print(f"\n🗑️  清空项目 '{project_id}' 数据并初始化...")
+    else:
+        print("\n🗑️  清空 Neo4j 并初始化...")
+    
     with driver.session() as session:
-        # 清空（保留约束）
-        result = session.run("MATCH (n) RETURN count(n) as cnt")
-        before = result.single()["cnt"]
-        print(f"  清空前节点数: {before:,}")
-
-        session.run("MATCH (n) DETACH DELETE n")
-
+        if project_id:
+            # 只删除指定项目的数据
+            result = session.run(
+                "MATCH (n) WHERE n.project_id = $pid RETURN count(n) as cnt",
+                pid=project_id
+            )
+            before = result.single()["cnt"]
+            print(f"  项目 '{project_id}' 节点数: {before:,}")
+            
+            # 删除关系和节点
+            session.run(
+                """MATCH (n) WHERE n.project_id = $pid
+                DETACH DELETE n""",
+                pid=project_id
+            )
+            
+            # 创建 Project 节点
+            session.run(
+                "MERGE (p:Project {id: $pid}) ON CREATE SET p.created_at = datetime()",
+                pid=project_id
+            )
+        else:
+            # 全库清空（向后兼容）
+            result = session.run("MATCH (n) RETURN count(n) as cnt")
+            before = result.single()["cnt"]
+            print(f"  清空前节点数: {before:,}")
+            session.run("MATCH (n) DETACH DELETE n")
+        
         result = session.run("MATCH (n) RETURN count(n) as cnt")
         after = result.single()["cnt"]
         print(f"  清空后节点数: {after:,}")
@@ -256,8 +286,8 @@ def main():
     driver = GraphDatabase.driver(uri, auth=(user, password))
 
     try:
-        # 5. 清空 + 初始化
-        clear_and_init_neo4j(driver)
+        # 5. 清空 + 初始化（按项目隔离）
+        clear_and_init_neo4j(driver, project_id=args.project_id if hasattr(args, 'project_id') else None)
 
         # 6. 批量插入
         batch_insert_components(driver, graph_components)
