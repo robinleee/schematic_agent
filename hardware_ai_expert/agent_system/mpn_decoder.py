@@ -441,6 +441,178 @@ class MPNDecoder:
         return result
 
     # --------------------------------------------------------
+    # Ferrite bead MPN 解码
+    # Murata BLMxx, GZ/Hz series, etc.
+    # --------------------------------------------------------
+    def _decode_ferrite_mpn(self, mpn: str) -> DecodedComponent:
+        result = DecodedComponent(
+            category="ferrite_bead",
+            manufacturer="Murata" if mpn.startswith(("BLM", "GZ", "HZ", "MPZ", "NFM", "DLP")) else "Generic",
+            mpn=mpn,
+        )
+
+        # Package extraction from common patterns
+        pkg_map = {
+            "18": "0603", "21": "0805", "31": "1206", "32": "1210",
+            "2A": "0805", "3A": "1206",
+            "01": "0402", "15": "0402",
+        }
+        m = re.match(r"BLM(\d{2})", mpn)
+        if m:
+            result.package = pkg_map.get(m.group(1), f"size_{m.group(1)}")
+
+        # Current rating from suffix
+        if mpn.endswith(("H", "H7")):
+            result.current_rating = "500mA"
+            result.current_rating_a = 0.5
+        elif mpn.endswith(("K", "K7")):
+            result.current_rating = "1A"
+            result.current_rating_a = 1.0
+        elif mpn.endswith(("M", "M7")):
+            result.current_rating = "2A"
+            result.current_rating_a = 2.0
+
+        result.notes = "Ferrite bead - impedance specified at 100MHz"
+        result.confidence = 0.5
+        return result
+
+    # --------------------------------------------------------
+    # Inductor MPN 解码
+    # Murata LQH/LQM/MLZ series, etc.
+    # --------------------------------------------------------
+    def _decode_inductor_mpn(self, mpn: str) -> DecodedComponent:
+        result = DecodedComponent(
+            category="inductor",
+            manufacturer="Murata" if mpn.startswith(("LQH", "LQM", "MLZ", "LQG", "DFE")) else "Generic",
+            mpn=mpn,
+        )
+
+        # Package from Murata coding
+        pkg_map = {
+            "18": "0603", "21": "0805", "31": "1206", "32": "1210",
+            "2M": "0805", "3M": "1206", "55": "2220",
+        }
+        m = re.match(r"(?:LQH|LQM|MLZ)(\d{2})", mpn)
+        if m:
+            result.package = pkg_map.get(m.group(1), f"size_{m.group(1)}")
+
+        # Inductance from suffix
+        ind_match = re.search(r"(\d+[RNM]?\d*)([KMU]?)(?:[_-]|$)", mpn)
+        if ind_match:
+            val_str = ind_match.group(1).replace('R', '.').replace('N', '.').replace('M', '.')
+            unit_char = ind_match.group(2)
+            try:
+                val = float(val_str)
+                if unit_char == 'N':
+                    result.inductance = f"{val}nH"
+                    result.inductance_uh = val / 1000
+                elif unit_char == 'U' or not unit_char:
+                    result.inductance = f"{val}uH"
+                    result.inductance_uh = val
+            except ValueError:
+                pass
+
+        result.confidence = 0.4
+        return result
+
+    # --------------------------------------------------------
+    # Diode MPN 解码
+    # --------------------------------------------------------
+    def _decode_diode_mpn(self, mpn: str) -> DecodedComponent:
+        result = DecodedComponent(
+            category="diode",
+            mpn=mpn,
+        )
+
+        mpn_upper = mpn.upper()
+
+        # Diode type classification
+        if mpn_upper.startswith(("1N4148", "MMBD", "MMBA")):
+            result.diode_type = "general"
+            result.manufacturer = "Generic"
+        elif mpn_upper.startswith(("BAV", "BAS", "BAT")):
+            result.diode_type = "general"
+            result.manufacturer = "NXP"
+        elif mpn_upper.startswith(("BZX", "BZV")):
+            result.diode_type = "zener"
+            result.manufacturer = "Generic"
+            zv = re.search(r"(\d+)V(\d)", mpn_upper)
+            if zv:
+                result.voltage_rating = f"{zv.group(1)}.{zv.group(2)}V"
+                result.voltage_rating_v = float(f"{zv.group(1)}.{zv.group(2)}")
+        elif mpn_upper.startswith(("SZ", "SM3", "SM0", "SM1", "SM5", "SM7", "SM8", "SM9")) or "TVS" in mpn_upper or mpn_upper.startswith("RCL"):
+            result.diode_type = "tvs"
+            result.manufacturer = "Littelfuse" if mpn_upper.startswith("SM") else "Generic"
+            tv = re.search(r"S(\d{2,3})", mpn_upper)
+            if tv:
+                v = int(tv.group(1))
+                if 3 <= v <= 600:
+                    result.voltage_rating = f"{v}V"
+                    result.voltage_rating_v = float(v)
+        elif mpn_upper.startswith(("B05", "B13", "B54", "B58", "MSS", "US1", "RS1")):
+            result.diode_type = "schottky"
+            result.manufacturer = "Diodes Inc" if mpn_upper.startswith(("B05", "B54", "B58")) else "Generic"
+        elif mpn_upper.startswith("ESD"):
+            result.diode_type = "tvs"
+            result.manufacturer = "Generic"
+        else:
+            result.diode_type = "general"
+            result.manufacturer = "Generic"
+
+        # Package detection
+        pkg_patterns = [
+            (r"SOD[-_]?323", "SOD-323"),
+            (r"SOD[-_]?123", "SOD-123"),
+            (r"SOD[-_]?523", "SOD-523"),
+            (r"SOD[-_]?923", "SOD-923"),
+            (r"SOT[-_]?23", "SOT-23"),
+            (r"SOT[-_]?723", "SOT-723"),
+            (r"SOT[-_]?563", "SOT-563"),
+            (r"DO[-_]?214", "DO-214AB"),
+            (r"DO[-_]?219", "DO-219AD"),
+            (r"DFN", "DFN"),
+        ]
+        for pat, pkg in pkg_patterns:
+            if re.search(pat, mpn_upper):
+                result.package = pkg
+                break
+
+        result.confidence = 0.5 if result.diode_type != "general" else 0.3
+        return result
+
+    # --------------------------------------------------------
+    # LED MPN 解码
+    # --------------------------------------------------------
+    def _decode_led_mpn(self, mpn: str) -> DecodedComponent:
+        result = DecodedComponent(
+            category="led",
+            diode_type="led",
+            manufacturer="Generic",
+            mpn=mpn,
+        )
+
+        mpn_upper = mpn.upper()
+        if mpn_upper.startswith("SML"):
+            result.manufacturer = "Rohm"
+        elif mpn_upper.startswith("598"):
+            result.manufacturer = "Broadcom"
+        elif mpn_upper.startswith("LTST"):
+            result.manufacturer = "Lite-On"
+        elif mpn_upper.startswith("XZV"):
+            result.manufacturer = "SunLED"
+
+        # Package
+        if "0402" in mpn_upper or "1005" in mpn_upper:
+            result.package = "0402"
+        elif "0603" in mpn_upper or "1608" in mpn_upper:
+            result.package = "0603"
+        elif "0805" in mpn_upper or "2012" in mpn_upper:
+            result.package = "0805"
+
+        result.confidence = 0.4
+        return result
+
+    # --------------------------------------------------------
     # 通用解码 - 从描述字符串提取参数
     # --------------------------------------------------------
     def _decode_generic(self, text: str) -> DecodedComponent:
@@ -529,10 +701,50 @@ class MPNDecoder:
         )
 
         # 判断类型
-        if "CAP" in desc.upper() or part_type == "CAPACITOR":
+        desc_upper = desc.upper()
+        if "CAP" in desc_upper or part_type == "CAPACITOR":
             result.category = "capacitor"
-        elif "RES" in desc.upper() or part_type == "RESISTOR":
+        elif "RES" in desc_upper or part_type == "RESISTOR":
             result.category = "resistor"
+        elif part_type == "PASSIVE" or "IND_FB" in desc_upper or "FERRITE" in desc_upper or "FB" in desc_upper[:10]:
+            result.category = "ferrite_bead"
+        elif part_type == "INDUCTOR" or "IND_" in desc_upper or "INDITG" in desc_upper or "IND_CMC" in desc_upper:
+            result.category = "inductor"
+        elif part_type == "DIODE" or desc_upper.startswith("DIODE"):
+            result.category = "diode"
+            # Sub-classify diode type from model string
+            if "TVS" in desc_upper:
+                result.diode_type = "tvs"
+            elif "SCHOTTKY" in desc_upper:
+                result.diode_type = "schottky"
+            elif "ZENER" in desc_upper:
+                result.diode_type = "zener"
+            else:
+                result.diode_type = "general"
+        elif part_type == "LED" or desc_upper.startswith("LED"):
+            result.category = "led"
+            result.diode_type = "led"
+            # Color
+            if "GRN" in desc_upper or "GREEN" in desc_upper:
+                result.led_color = "GRN"
+            elif "BLU" in desc_upper or "BLUE" in desc_upper:
+                result.led_color = "BLU"
+            elif "RED" in desc_upper:
+                result.led_color = "RED"
+            elif "YEL" in desc_upper or "AMBER" in desc_upper:
+                result.led_color = "YEL"
+        elif part_type == "CRYSTAL" or "XTAL" in desc_upper or "CRYSTAL" in desc_upper or "OSC_" in desc_upper or "TCXO" in desc_upper:
+            result.category = "crystal"
+            # Frequency
+            freq_match = re.search(r"(\d+\.?\d*)\s*(MHZ|KHZ)", desc_upper)
+            if freq_match:
+                result.frequency = f"{freq_match.group(1)}{freq_match.group(2)}"
+                fval = float(freq_match.group(1))
+                result.frequency_hz = fval * 1e6 if freq_match.group(2) == "MHZ" else fval * 1e3
+        elif part_type == "MOSFET" or "MOSFET" in desc_upper:
+            result.category = "mosfet"
+        elif part_type == "TRANSISTOR" or "BJT" in desc_upper or "NPN" in desc_upper or "PNP" in desc_upper:
+            result.category = "transistor"
 
         # 提取封装 (C0402, R0402, C0603, C0805, SMX0402, SMC1206, C7343 等)
         pkg_patterns = [
@@ -597,7 +809,75 @@ class MPNDecoder:
                     result.resistance = f"{val}Ω"
                     result.resistance_ohm = val
 
-        result.confidence = 0.8 if result.capacitance or result.resistance else 0.3
+        # Ferrite bead: extract impedance @ 100MHz
+        if result.category == "ferrite_bead":
+            # Package: FB0402, FB0603, FB0805, FB1206, SFB0805
+            fb_pkg = re.search(r"(?:FB|SFB)(0402|0603|0805|1206|1210)", desc_upper)
+            if fb_pkg:
+                result.package = fb_pkg.group(1)
+            else:
+                # Try IND_FB format
+                fb_pkg2 = re.search(r"(0402|0603|0805|1206|1210)", desc_upper)
+                if fb_pkg2:
+                    result.package = fb_pkg2.group(1)
+
+            # Impedance: 120OHMS@100MHZ, 100 OHMS @ 100MHZ, 22 OHMS @ 100
+            imp_match = re.search(r"(\d+\.?\d*)\s*(?:OHMS?|Ω)\s*@\s*(\d+)\s*(?:MHZ|MHZ)?", desc, re.IGNORECASE)
+            if imp_match:
+                result.resistance = f"{imp_match.group(1)}Ω@{imp_match.group(2)}MHz"
+                result.resistance_ohm = float(imp_match.group(1))
+                result.notes = f"Impedance {imp_match.group(1)}Ω at {imp_match.group(2)}MHz"
+
+        # Inductor: extract inductance value
+        if result.category == "inductor":
+            # Package
+            ind_pkg = re.search(r"(0402|0603|0805|1206|1210)", desc_upper)
+            if ind_pkg:
+                result.package = ind_pkg.group(1)
+
+            # Inductance: 1.5UH, 0.1UH, 200UH, 680NH, 68NH, 0.56UH
+            ind_match = re.search(r"(\d+\.?\d*)\s*(UH|NH|MH)(?:[_\s]|$)", desc, re.IGNORECASE)
+            if ind_match:
+                val = float(ind_match.group(1))
+                unit = ind_match.group(2).upper()
+                result.inductance = f"{val}{unit}"
+                if unit == "UH":
+                    result.inductance_uh = val
+                elif unit == "NH":
+                    result.inductance_uh = val / 1000
+                elif unit == "MH":
+                    result.inductance_uh = val * 1000
+
+        # Diode: extract package
+        if result.category == "diode":
+            diode_pkgs = [
+                (r"SOD[-_]?323", "SOD-323"), (r"SOD[-_]?123", "SOD-123"),
+                (r"SOD[-_]?523", "SOD-523"), (r"SOD[-_]?923", "SOD-923"),
+                (r"SOT[-_]?23", "SOT-23"), (r"SOT[-_]?723", "SOT-723"),
+                (r"SOT[-_]?563", "SOT-563"), (r"DO[-_]?214", "DO-214AB"),
+                (r"DO[-_]?219", "DO-219AD"), (r"DFN", "DFN"),
+            ]
+            for pat, pkg in diode_pkgs:
+                if re.search(pat, desc_upper):
+                    result.package = pkg
+                    break
+
+        # LED: extract package and color
+        if result.category == "led":
+            led_pkg = re.search(r"(0402|0603|0805|1206|1005|1608|2012)", desc_upper)
+            if led_pkg:
+                result.package = led_pkg.group(1)
+
+        # Crystal: package
+        if result.category == "crystal":
+            xtal_pkg = re.search(r"(3225|2520|2016|1612)", desc_upper)
+            if xtal_pkg:
+                result.package = xtal_pkg.group(1)
+
+        has_params = (result.capacitance or result.resistance or result.inductance
+                      or result.frequency or result.diode_type
+                      or result.category in ("ferrite_bead", "crystal", "mosfet", "transistor"))
+        result.confidence = 0.8 if has_params else 0.3
         return result
 
 
@@ -741,6 +1021,72 @@ class AMRDataGenerator:
                     "source": "mpn_decoder",
                     "confidence": decoded.confidence,
                 }
+        elif decoded.category == "ferrite_bead":
+            entry = {
+                "category": "ferrite_bead",
+                "mpn_pattern": decoded.mpn,
+                "package": decoded.package,
+                "source": "mpn_decoder",
+                "confidence": decoded.confidence,
+            }
+            if decoded.current_rating_a is not None:
+                entry["current_rating_A"] = decoded.current_rating_a
+                entry["derating_factor"] = 0.5
+                entry["max_operating_current_A"] = decoded.current_rating_a * 0.5
+            if decoded.resistance_ohm is not None:
+                entry["impedance_ohm_100MHz"] = decoded.resistance_ohm
+            return entry
+        elif decoded.category == "inductor":
+            entry = {
+                "category": "inductor",
+                "mpn_pattern": decoded.mpn,
+                "package": decoded.package,
+                "source": "mpn_decoder",
+                "confidence": decoded.confidence,
+            }
+            if decoded.inductance_uh is not None:
+                entry["inductance_uH"] = decoded.inductance_uh
+                entry["derating_factor"] = 0.7  # 70% current derating for inductors
+            if decoded.current_rating_a is not None:
+                entry["current_rating_A"] = decoded.current_rating_a
+                entry["max_operating_current_A"] = decoded.current_rating_a * 0.7
+            return entry
+        elif decoded.category in ("diode", "led"):
+            entry = {
+                "category": decoded.category,
+                "mpn_pattern": decoded.mpn,
+                "package": decoded.package,
+                "source": "mpn_decoder",
+                "confidence": decoded.confidence,
+            }
+            if decoded.diode_type:
+                entry["diode_type"] = decoded.diode_type
+            if decoded.voltage_rating_v is not None:
+                entry["voltage_rating_V"] = decoded.voltage_rating_v
+                entry["derating_factor"] = 0.5
+                entry["max_operating_voltage_V"] = decoded.voltage_rating_v * 0.5
+            if decoded.led_color:
+                entry["led_color"] = decoded.led_color
+            return entry
+        elif decoded.category == "crystal":
+            entry = {
+                "category": "crystal",
+                "mpn_pattern": decoded.mpn,
+                "package": decoded.package,
+                "source": "mpn_decoder",
+                "confidence": decoded.confidence,
+            }
+            if decoded.frequency_hz is not None:
+                entry["frequency_Hz"] = decoded.frequency_hz
+            return entry
+        elif decoded.category in ("mosfet", "transistor"):
+            return {
+                "category": decoded.category,
+                "mpn_pattern": decoded.mpn,
+                "package": decoded.package,
+                "source": "mpn_decoder",
+                "confidence": decoded.confidence,
+            }
         return None
 
 
