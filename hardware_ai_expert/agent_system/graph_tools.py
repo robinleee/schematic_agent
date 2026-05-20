@@ -56,13 +56,14 @@ def _is_write_cypher(query: str) -> bool:
     return bool(_WRITE_KEYWORDS.search(cleaned))
 
 
-def _run_cypher(query: str, params: dict = None, timeout: int = None) -> list[dict]:
+def _run_cypher(query: str, params: dict = None, timeout: int = None, project_id: str = None) -> list[dict]:
     """执行 Cypher 并返回结果
 
     Args:
         query: Cypher 查询语句
         params: 查询参数
         timeout: 超时秒数，默认使用 CYPHER_TIMEOUT_SECONDS
+        project_id: 项目 ID，用于多项目数据隔离
     """
     # 只读模式拦截
     if READ_ONLY_MODE and _is_write_cypher(query):
@@ -70,12 +71,42 @@ def _run_cypher(query: str, params: dict = None, timeout: int = None) -> list[di
             f"[Read-Only Mode] 写入操作被拦截: {query[:80]}..."
         )
 
+    # 注入 project_id 参数
+    params = dict(params or {})
+    if project_id is not None:
+        params["project_id"] = project_id
+
     driver = _get_driver()
     timeout = timeout or CYPHER_TIMEOUT_SECONDS
     with driver.session() as session:
-        result = session.run(query, params or {})
+        result = session.run(query, params)
         records = [dict(record) for record in result]
         return records
+
+
+
+# 默认 project_id，可通过 set_current_project() 切换
+_current_project_id = "default"
+
+
+def set_current_project(project_id: str):
+    """设置当前 project_id，用于多项目数据隔离"""
+    global _current_project_id
+    _current_project_id = project_id
+
+
+def get_current_project() -> str:
+    """获取当前 project_id"""
+    return _current_project_id
+
+
+def list_projects() -> list[str]:
+    """列出 Neo4j 中所有 Project 节点"""
+    try:
+        records = _run_cypher("MATCH (p:Project) RETURN p.id AS id ORDER BY p.id")
+        return [r["id"] for r in records] if records else []
+    except Exception:
+        return []
 
 
 # ============================================================
@@ -96,8 +127,10 @@ def get_component_nets(refdes: str) -> str:
     Example:
         get_component_nets("U30004")
     """
+    pid = get_current_project()
     query = """
     MATCH (c:Component {RefDes: $refdes})-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
+    WHERE c.project_id = $project_id OR c.project_id IS NULL
     RETURN p.Number AS pin_number,
            p.Type AS pin_type,
            n.Name AS net_name,
@@ -106,7 +139,7 @@ def get_component_nets(refdes: str) -> str:
     ORDER BY p.Number
     """
     try:
-        records = _run_cypher(query, {"refdes": refdes})
+        records = _run_cypher(query, {"refdes": refdes, "project_id": pid})
         if not records:
             return f"未找到器件 {refdes}"
 
@@ -147,11 +180,13 @@ def get_net_components(net_name: str, threshold: int = DEFAULT_AGGREGATION_THRES
     """
     try:
         # 第一步：计数判断
+        pid = get_current_project()
         count_query = """
         MATCH (c:Component)-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net {Name: $net_name})
+        WHERE c.project_id = $project_id OR c.project_id IS NULL
         RETURN count(DISTINCT c) AS total_components, count(p) AS total_pins
         """
-        count_result = _run_cypher(count_query, {"net_name": net_name})
+        count_result = _run_cypher(count_query, {"net_name": net_name, "project_id": pid})
         total_components = count_result[0]["total_components"] if count_result else 0
         total_pins = count_result[0]["total_pins"] if count_result else 0
 
@@ -162,6 +197,7 @@ def get_net_components(net_name: str, threshold: int = DEFAULT_AGGREGATION_THRES
         if total_components <= threshold:
             query = """
             MATCH (c:Component)-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net {Name: $net_name})
+            WHERE c.project_id = $project_id OR c.project_id IS NULL
             RETURN c.RefDes AS refdes,
                    c.PartType AS part_type,
                    c.Value AS value,
@@ -170,7 +206,7 @@ def get_net_components(net_name: str, threshold: int = DEFAULT_AGGREGATION_THRES
             ORDER BY c.RefDes, p.Number
             LIMIT $limit
             """
-            records = _run_cypher(query, {"net_name": net_name, "limit": threshold * 5})
+            records = _run_cypher(query, {"net_name": net_name, "project_id": pid, "limit": threshold * 5})
             lines = [f"网络 '{net_name}' 的连接器件 ({total_components} 个器件, {total_pins} 个引脚):"]
             for r in records:
                 lines.append(
@@ -182,13 +218,14 @@ def get_net_components(net_name: str, threshold: int = DEFAULT_AGGREGATION_THRES
         # 大网络：返回聚合摘要
         agg_query = """
         MATCH (c:Component)-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net {Name: $net_name})
+        WHERE c.project_id = $project_id OR c.project_id IS NULL
         RETURN c.PartType AS part_type,
                count(DISTINCT c) AS component_count,
                count(p) AS pin_count,
                collect(DISTINCT c.RefDes)[0..5] AS examples
         ORDER BY component_count DESC
         """
-        agg_records = _run_cypher(agg_query, {"net_name": net_name})
+        agg_records = _run_cypher(agg_query, {"net_name": net_name, "project_id": pid})
 
         lines = [
             f"网络 '{net_name}' 的连接摘要 (共 {total_components} 个器件, {total_pins} 个引脚):",
@@ -234,11 +271,12 @@ def get_power_domain(voltage_level: str = None, detail: bool = False) -> str:
         get_power_domain()  # 返回概览
     """
     try:
+        pid = get_current_project()
         if voltage_level:
             if detail:
                 query = """
                 MATCH (c:Component)-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
-                WHERE n.VoltageLevel = $voltage_level
+                WHERE n.VoltageLevel = $voltage_level AND (c.project_id = $project_id OR c.project_id IS NULL)
                 RETURN n.Name AS net_name,
                        n.VoltageLevel AS voltage,
                        collect({refdes: c.RefDes, pin: p.Number, part_type: c.PartType})[0..50] AS devices
@@ -247,24 +285,25 @@ def get_power_domain(voltage_level: str = None, detail: bool = False) -> str:
             else:
                 query = """
                 MATCH (c:Component)-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
-                WHERE n.VoltageLevel = $voltage_level
+                WHERE n.VoltageLevel = $voltage_level AND (c.project_id = $project_id OR c.project_id IS NULL)
                 RETURN n.Name AS net_name,
                        n.VoltageLevel AS voltage,
                        count(DISTINCT c) AS component_count,
                        collect(DISTINCT c.PartType) AS part_types
                 ORDER BY n.Name
                 """
-            params = {"voltage_level": voltage_level}
+            params = {"voltage_level": voltage_level, "project_id": pid}
         else:
             query = """
             MATCH (c:Component)-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
             WHERE n.NetType IN ['POWER', 'SIGNAL'] AND n.VoltageLevel IS NOT NULL
+                  AND (c.project_id = $project_id OR c.project_id IS NULL)
             RETURN n.VoltageLevel AS voltage,
                    collect(DISTINCT n.Name) AS nets,
                    count(DISTINCT c) AS component_count
             ORDER BY n.VoltageLevel
             """
-            params = {}
+            params = {"project_id": pid}
 
         records = _run_cypher(query, params)
         if not records:
@@ -312,9 +351,11 @@ def get_i2c_devices() -> str:
     Example:
         get_i2c_devices()
     """
+    pid = get_current_project()
     query = """
     MATCH (c:Component)-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
-    WHERE n.Name CONTAINS 'I2C' OR n.Name CONTAINS 'SDA' OR n.Name CONTAINS 'SCL'
+    WHERE (n.Name CONTAINS 'I2C' OR n.Name CONTAINS 'SDA' OR n.Name CONTAINS 'SCL')
+          AND (c.project_id = $project_id OR c.project_id IS NULL)
     RETURN n.Name AS net_name,
            c.RefDes AS refdes,
            c.PartType AS part_type,
@@ -323,7 +364,7 @@ def get_i2c_devices() -> str:
     LIMIT 200
     """
     try:
-        records = _run_cypher(query)
+        records = _run_cypher(query, {"project_id": pid})
         if not records:
             return "未找到 I2C 网络"
 
@@ -409,17 +450,19 @@ def get_graph_summary() -> str:
         get_graph_summary()
     """
     try:
+        pid = get_current_project()
         total_nodes = _run_cypher("MATCH (n) RETURN count(n) AS cnt")[0]["cnt"]
-        comp_count = _run_cypher("MATCH (c:Component) RETURN count(c) AS cnt")[0]["cnt"]
-        net_count = _run_cypher("MATCH (n:Net) RETURN count(n) AS cnt")[0]["cnt"]
-        pin_count = _run_cypher("MATCH (p:Pin) RETURN count(p) AS cnt")[0]["cnt"]
+        comp_count = _run_cypher("MATCH (c:Component) WHERE c.project_id = $project_id OR c.project_id IS NULL RETURN count(c) AS cnt", {"project_id": pid})[0]["cnt"]
+        net_count = _run_cypher("MATCH (n:Net) WHERE n.project_id = $project_id OR n.project_id IS NULL RETURN count(n) AS cnt", {"project_id": pid})[0]["cnt"]
+        pin_count = _run_cypher("MATCH (p:Pin) WHERE p.project_id = $project_id OR p.project_id IS NULL RETURN count(p) AS cnt", {"project_id": pid})[0]["cnt"]
 
         # 按类型统计器件
         by_type = _run_cypher("""
             MATCH (c:Component)
+            WHERE c.project_id = $project_id OR c.project_id IS NULL
             RETURN c.PartType AS part_type, count(c) AS cnt
             ORDER BY cnt DESC
-        """)
+        """, {"project_id": pid})
 
         lines = [
             "=" * 50,
