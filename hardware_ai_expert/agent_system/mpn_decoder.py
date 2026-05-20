@@ -267,6 +267,32 @@ class MPNDecoder:
             return self._decode_ic_mpn(mpn)  # 74 series logic
         if mpn.startswith(("TTL", "NC7")):
             return self._decode_ic_mpn(mpn)
+        if mpn.startswith("NTS"):
+            return self._decode_ic_mpn(mpn)  # NXP NTS level translator
+        if mpn.startswith("RENESAS_"):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("PCA"):
+            return self._decode_ic_mpn(mpn)  # NXP PCA series
+        if mpn.startswith("TXS"):
+            return self._decode_ic_mpn(mpn)  # TI TXS level translator
+        if mpn.startswith("TXB"):
+            return self._decode_ic_mpn(mpn)  # TI TXB level translator
+        if mpn.startswith("DS"):
+            return self._decode_ic_mpn(mpn)  # Maxim DS series
+        if mpn.startswith("SPI_FLASH"):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("SAK-"):
+            return self._decode_ic_mpn(mpn)  # Infineon Aurix
+        if mpn.startswith("MICRON_"):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("MICRO-FIT"):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("J7AHPSOC"):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("AST2600"):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("XCKU"):
+            return self._decode_ic_mpn(mpn)  # Xilinx FPGA
 
         # 12. FUSE / XFMR / CONNECTOR / MECHANICAL 通用前缀
         if mpn.startswith(("FUSE", "MF-", "MFNS")):

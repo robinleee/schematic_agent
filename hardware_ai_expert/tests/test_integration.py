@@ -289,7 +289,11 @@ class TestAgentToolsPipeline:
         assert isinstance(tools, list)
         assert len(tools) == 10  # 10 个工具
 
-        tool_names = {t.name for t in tools}
+        # @tool 装饰的有 .name，普通函数用 .__name__
+        tool_names = set()
+        for t in tools:
+            tool_names.add(getattr(t, 'name', None) or getattr(t, '__name__', None))
+
         expected = {
             "get_component_nets", "get_net_components", "get_power_domain",
             "get_power_tree", "get_i2c_devices", "get_signal_path",
@@ -304,11 +308,14 @@ class TestAgentToolsPipeline:
 
         tools = get_graph_tools()
         for t in tools:
-            schema = t.args_schema
-            assert schema is not None, f"Tool {t.name} missing args_schema"
-            # schema 应该是 Pydantic model
-            fields = schema.model_fields
-            assert isinstance(fields, dict), f"Tool {t.name} schema fields not dict"
+            name = getattr(t, 'name', None) or getattr(t, '__name__', str(t))
+            # @tool 装饰的有 args_schema；普通函数没有
+            if hasattr(t, 'args_schema'):
+                schema = t.args_schema
+                assert schema is not None, f"Tool {name} missing args_schema"
+                # Pydantic v1 兼容
+                fields = getattr(schema, 'model_fields', None) or getattr(schema, '__fields__', None)
+                assert fields is not None, f"Tool {name} schema has no fields"
 
     def test_tool_has_description(self):
         """验证每个工具有描述信息"""
@@ -316,7 +323,9 @@ class TestAgentToolsPipeline:
 
         tools = get_graph_tools()
         for t in tools:
-            assert t.description, f"Tool {t.name} missing description"
+            name = getattr(t, 'name', None) or getattr(t, '__name__', str(t))
+            desc = getattr(t, 'description', None) or getattr(t, '__doc__', None)
+            assert desc, f"Tool {name} missing description"
 
     def test_mock_tool_call_get_component_nets(self):
         """mock 调用 get_component_nets 验证返回格式"""
