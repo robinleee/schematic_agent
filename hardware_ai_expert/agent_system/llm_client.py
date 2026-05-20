@@ -21,6 +21,7 @@ import json
 import re
 import logging
 import time
+import hashlib
 from typing import Optional, Dict, Any, Callable
 from dataclasses import dataclass
 from dotenv import load_dotenv
@@ -66,12 +67,19 @@ class LLMClient:
         base_url: Optional[str] = None,
         timeout: float = 120.0,
         max_retries: int = 2,
+        enable_cache: bool = True,
     ):
         self.provider = (provider or DEFAULT_PROVIDER).lower()
         self.model = model or (OLLAMA_MODEL if self.provider == "ollama" else VLLM_MODEL)
         self.base_url = base_url or (OLLAMA_URL if self.provider == "ollama" else VLLM_URL)
         self.timeout = timeout
         self.max_retries = max_retries
+
+        # LLM 响应缓存
+        self._cache: Dict[str, LLMResponse] = {}
+        self._cache_enabled = enable_cache
+        self._cache_hits = 0
+        self._cache_misses = 0
 
         # 初始化对应客户端
         if self.provider == "ollama":
@@ -81,7 +89,33 @@ class LLMClient:
         else:
             raise ValueError(f"Unsupported LLM provider: {self.provider}")
 
-        logger.info(f"LLMClient initialized: provider={self.provider}, model={self.model}, url={self.base_url}")
+        logger.info(f"LLMClient initialized: provider={self.provider}, model={self.model}, url={self.base_url}, cache={self._cache_enabled}")
+
+    # --------------------------------------------------------
+    # Cache Management
+    # --------------------------------------------------------
+
+    def _cache_key(self, prompt: str, system_prompt: Optional[str], temperature: float, max_tokens: int) -> str:
+        """生成缓存 key: (model, prompt_hash)"""
+        raw = f"{self.model}::{system_prompt or ''}::{prompt}::{temperature}::{max_tokens}"
+        return hashlib.sha256(raw.encode('utf-8')).hexdigest()
+
+    def clear_cache(self) -> None:
+        """清空缓存"""
+        self._cache.clear()
+        self._cache_hits = 0
+        self._cache_misses = 0
+
+    def cache_stats(self) -> Dict[str, Any]:
+        """返回缓存统计信息"""
+        total = self._cache_hits + self._cache_misses
+        return {
+            "enabled": self._cache_enabled,
+            "size": len(self._cache),
+            "hits": self._cache_hits,
+            "misses": self._cache_misses,
+            "hit_rate": self._cache_hits / total if total > 0 else 0.0,
+        }
 
     # --------------------------------------------------------
     # Public API
@@ -94,6 +128,7 @@ class LLMClient:
         temperature: float = 0.1,
         max_tokens: int = 1024,
         strip_thinking: bool = True,
+        disable_cache: bool = False,
     ) -> LLMResponse:
         """
         单次对话调用
@@ -108,7 +143,17 @@ class LLMClient:
         Returns:
             LLMResponse 对象
         """
-        return self._call_with_retry(
+        # 缓存检查
+        use_cache = self._cache_enabled and not disable_cache
+        if use_cache:
+            key = self._cache_key(prompt, system_prompt, temperature, max_tokens)
+            if key in self._cache:
+                self._cache_hits += 1
+                logger.debug(f"LLM cache hit (key={key[:12]}...)")
+                return self._cache[key]
+            self._cache_misses += 1
+
+        result = self._call_with_retry(
             lambda: self._client.chat(
                 prompt=prompt,
                 system_prompt=system_prompt,
@@ -117,6 +162,13 @@ class LLMClient:
             ),
             strip_thinking=strip_thinking,
         )
+
+        # 写入缓存
+        if use_cache:
+            self._cache[key] = result
+            logger.debug(f"LLM cache stored (key={key[:12]}...)")
+
+        return result
 
     def chat_json(
         self,
