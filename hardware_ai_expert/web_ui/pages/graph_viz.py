@@ -434,7 +434,7 @@ def render_graph_viz():
             "电压等级过滤",
             options=voltage_options,
             index=0,
-            help="选择电压等级过滤电源树，或选"全部"显示完整电源树",
+            help='选择电压等级过滤电源树，或选"全部"显示完整电源树',
         )
 
         if st.button("⚡ 生成电源树", type="primary"):
