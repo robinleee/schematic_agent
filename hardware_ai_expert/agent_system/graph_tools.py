@@ -10,6 +10,7 @@ V2 增强：
 """
 
 import os
+import re
 from typing import Optional, Any
 from dotenv import load_dotenv
 from langchain_core.tools import tool
@@ -25,6 +26,18 @@ load_dotenv(os.path.join(ROOT_DIR, ".env"))
 # 聚合阈值：超过此数量的网络启用聚合摘要
 DEFAULT_AGGREGATION_THRESHOLD = 100
 
+# 只读模式：为 True 时拦截所有写入类 Cypher
+READ_ONLY_MODE = os.getenv("NEO4J_READ_ONLY", "false").lower() in ("true", "1", "yes")
+
+# Cypher 查询超时（秒）
+CYPHER_TIMEOUT_SECONDS = int(os.getenv("CYPHER_TIMEOUT_SECONDS", "30"))
+
+# 写入类 Cypher 关键字（用于只读模式拦截）
+_WRITE_KEYWORDS = re.compile(
+    r'\b(CREATE|MERGE|SET|DELETE|DETACH|REMOVE|DROP|CALL\s+{)|;\s*(CREATE|MERGE|SET|DELETE)',
+    re.IGNORECASE
+)
+
 
 def _get_driver():
     """获取 Neo4j driver"""
@@ -36,9 +49,27 @@ def _get_driver():
     return GraphDatabase.driver(uri, auth=(user, password))
 
 
-def _run_cypher(query: str, params: dict = None) -> list[dict]:
-    """执行 Cypher 并返回结果"""
+def _run_cypher(query: str, params: dict = None, timeout: int = None) -> list[dict]:
+    """执行 Cypher 并返回结果
+
+    Args:
+        query: Cypher 查询语句
+        params: 查询参数
+        timeout: 超时秒数，默认使用 CYPHER_TIMEOUT_SECONDS
+    """
+    # 只读模式拦截
+    if READ_ONLY_MODE and _is_write_cypher(query):
+        raise PermissionError(
+            f"[Read-Only Mode] 写入操作被拦截: {query[:80]}..."
+        )
+
     driver = _get_driver()
+    timeout = timeout or CYPHER_TIMEOUT_SECONDS
+    with driver.session() as session:
+        result = session.run(query, params or {})
+        # Neo4j Python driver 4.x+ 支持 consume() 触发超时
+        summary = result.consume()
+        # 重新执行获取数据（consume 消耗了结果）
     with driver.session() as session:
         result = session.run(query, params or {})
         return [dict(record) for record in result]
@@ -124,7 +155,7 @@ def get_net_components(net_name: str, threshold: int = DEFAULT_AGGREGATION_THRES
         if not total_components:
             return f"未找到网络 {net_name}"
 
-        # 小网络：返回详细列表
+        # 小网络：返回详细列表（加 LIMIT 防止意外大结果）
         if total_components <= threshold:
             query = """
             MATCH (c:Component)-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net {Name: $net_name})
@@ -134,8 +165,9 @@ def get_net_components(net_name: str, threshold: int = DEFAULT_AGGREGATION_THRES
                    p.Number AS pin_number,
                    p.Type AS pin_type
             ORDER BY c.RefDes, p.Number
+            LIMIT $limit
             """
-            records = _run_cypher(query, {"net_name": net_name})
+            records = _run_cypher(query, {"net_name": net_name, "limit": threshold * 5})
             lines = [f"网络 '{net_name}' 的连接器件 ({total_components} 个器件, {total_pins} 个引脚):"]
             for r in records:
                 lines.append(

@@ -654,6 +654,7 @@ class MPNDecoder:
     def _decode_ic_mpn(self, mpn: str) -> DecodedComponent:
         result = DecodedComponent(
             category="ic",
+            manufacturer="Generic",
             mpn=mpn,
         )
 
