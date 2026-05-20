@@ -173,6 +173,8 @@ class MPNDecoder:
 
     def decode(self, mpn: str) -> DecodedComponent:
         """解码 MPN，返回 DecodedComponent"""
+        if not mpn:
+            return DecodedComponent(category="unknown", manufacturer="Generic", mpn="")
         mpn = mpn.strip().upper()
 
         # 1. Murata MLCC (GRM / GRM_MLCC)
@@ -211,7 +213,41 @@ class MPNDecoder:
         if mpn.startswith(("SML", "XZV", "598", "LTST", "KP", "APTD", "ACDA")):
             return self._decode_led_mpn(mpn)
 
-        # 10. 通用 - 从描述字符串提取参数
+        # 10. IC 型号前缀 - TI TPS 系列
+        if mpn.startswith(("TPS", "TCS", "TLV", "TPS3", "TPS6", "TPS7", "TPS8", "TPS9", "LM", "LP", "SN", "UC", "BQ")):
+            return self._decode_ic_mpn(mpn)
+
+        # 11. IC 型号前缀 - 其他厂商
+        if mpn.startswith(("MAX", "LTC", "LT", "ADP", "ADM")):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith(("TLE", "TLF")):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("NC7"):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith(("MT25", "MT40", "MT53", "MT60")):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("MX25"):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith(("93LC", "25LC", "25AA")):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith(("SIT", "SI91", "SIT9")):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith(("USB", "USB2", "USB3")):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith(("USB_TYPEC", "USBC", "USBPCA")):
+            return self._decode_ic_mpn(mpn)
+
+        # 12. FUSE / XFMR / CONNECTOR / MECHANICAL 通用前缀
+        if mpn.startswith(("FUSE", "MF-", "MFNS")):
+            return self._decode_generic(mpn)
+        if mpn.startswith("XFMR"):
+            return self._decode_generic(mpn)
+        if "PEMNUT" in mpn.upper():
+            return self._decode_generic(mpn)
+        if "SCONN" in mpn.upper() or "HDR_" in mpn.upper() or "CON_" in mpn.upper():
+            return self._decode_generic(mpn)
+
+        # 13. 通用 - 从描述字符串提取参数
         return self._decode_generic(mpn)
 
     # --------------------------------------------------------
@@ -608,6 +644,102 @@ class MPNDecoder:
             result.package = "0603"
         elif "0805" in mpn_upper or "2012" in mpn_upper:
             result.package = "0805"
+
+        result.confidence = 0.4
+        return result
+
+    # --------------------------------------------------------
+    # IC MPN 解码 — 通用 IC 分类
+    # --------------------------------------------------------
+    def _decode_ic_mpn(self, mpn: str) -> DecodedComponent:
+        result = DecodedComponent(
+            category="ic",
+            mpn=mpn,
+        )
+
+        mpn_upper = mpn.upper()
+
+        # Manufacturer detection
+        if mpn_upper.startswith(("TPS", "TCS", "TLV", "LM", "LP", "SN", "UC", "BQ", "TC397", "TC4", "TC3")):
+            result.manufacturer = "Texas Instruments"
+        elif mpn_upper.startswith(("MAX", "DS", "MAX9", "MAX3")):
+            result.manufacturer = "Maxim"
+        elif mpn_upper.startswith("LTC"):
+            result.manufacturer = "Analog Devices (LTC)"
+        elif mpn_upper.startswith("TLE"):
+            result.manufacturer = "Infineon"
+        elif mpn_upper.startswith("NC7"):
+            result.manufacturer = "ON Semiconductor"
+        elif mpn_upper.startswith(("MT25", "MT40", "MT53", "MT60")):
+            result.manufacturer = "Micron"
+        elif mpn_upper.startswith("MX25"):
+            result.manufacturer = "Macronix"
+        elif mpn_upper.startswith(("93LC", "25LC", "25AA")):
+            result.manufacturer = "Microchip"
+        elif mpn_upper.startswith("SIT"):
+            result.manufacturer = "SiTime"
+        elif mpn_upper.startswith(("USB_TYPEC", "USBC", "USBPCA", "USB2", "USB3")):
+            result.manufacturer = "Generic"
+        elif mpn_upper.startswith("TPS7A") or mpn_upper.startswith("TPS628"):
+            result.manufacturer = "Texas Instruments"
+        elif mpn_upper.startswith("TPS3808"):
+            result.manufacturer = "Texas Instruments"
+        elif mpn_upper.startswith("TPS3711"):
+            result.manufacturer = "Texas Instruments"
+        elif mpn_upper.startswith("TPS229"):
+            result.manufacturer = "Texas Instruments"
+        elif mpn_upper.startswith("TPS745"):
+            result.manufacturer = "Texas Instruments"
+        elif mpn_upper.startswith("TPS748"):
+            result.manufacturer = "Texas Instruments"
+        elif mpn_upper.startswith("TPS659"):
+            result.manufacturer = "Texas Instruments"
+        elif mpn_upper.startswith("TPS6"):
+            result.manufacturer = "Texas Instruments"
+        elif mpn_upper.startswith("BMA280"):
+            result.manufacturer = "Bosch"
+        elif mpn_upper.startswith("PCF850"):
+            result.manufacturer = "NXP"
+        elif mpn_upper.startswith("NTB0102"):
+            result.manufacturer = "NXP"
+        elif mpn_upper.startswith("LT8610"):
+            result.manufacturer = "Analog Devices"
+        elif mpn_upper.startswith("DS3232"):
+            result.manufacturer = "Maxim"
+        elif mpn_upper.startswith("MAX9634"):
+            result.manufacturer = "Maxim"
+        elif mpn_upper.startswith("MAX96712"):
+            result.manufacturer = "Maxim"
+        elif mpn_upper.startswith("MAX20087"):
+            result.manufacturer = "Maxim"
+        elif mpn_upper.startswith("LM5143"):
+            result.manufacturer = "Texas Instruments"
+        elif mpn_upper.startswith("LM4668"):
+            result.manufacturer = "Texas Instruments"
+        elif mpn_upper.startswith("PCA9517"):
+            result.manufacturer = "NXP"
+        elif mpn_upper.startswith("ADP165"):
+            result.manufacturer = "Analog Devices"
+        elif mpn_upper.startswith("AD2428"):
+            result.manufacturer = "Analog Devices"
+        else:
+            result.manufacturer = "Generic"
+
+        # Package detection
+        pkg_patterns = [
+            (r"SOT[-_]?23", "SOT-23"), (r"SOT[-_]?23[-_]?6", "SOT-23-6"),
+            (r"SOT[-_]?563", "SOT-563"), (r"SSOP[-_]?\d+", "SSOP"),
+            (r"TSSOP[-_]?\d+", "TSSOP"), (r"QFN[-_]?\d+", "QFN"),
+            (r"VQFN[-_]?\d+", "VQFN"), (r"WSON[-_]?\d+", "WSON"),
+            (r"SON[-_]?\d+", "SON"), (r"LFCSP[-_]?\d+", "LFCSP"),
+            (r"SOIC[-_]?\d+", "SOIC"), (r"LGA[-_]?\d+", "LGA"),
+            (r"BGA[-_]?\d+", "BGA"), (r"FBGA", "FBGA"),
+            (r"VQFN56", "VQFN-56"), (r"QFN48", "QFN-48"),
+        ]
+        for pat, pkg in pkg_patterns:
+            if re.search(pat, mpn_upper):
+                result.package = pkg
+                break
 
         result.confidence = 0.4
         return result

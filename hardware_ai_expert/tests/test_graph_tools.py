@@ -33,17 +33,18 @@ class TestToolRegistry:
     def test_get_graph_tools_returns_list(self):
         tools = get_graph_tools()
         assert isinstance(tools, list)
-        assert len(tools) >= 8
+        assert len(tools) >= 9
 
     def test_tool_names(self):
-        tools = get_graph_tools()
-        names = {getattr(t, 'name', None) for t in tools} - {None}
+        # Only StructuredTool has .name; trace_differential_pair is plain function
+        tools = [t for t in get_graph_tools() if hasattr(t, 'name')]
+        names = {t.name for t in tools}
         expected = {
             "get_component_nets", "get_net_components", "get_power_domain",
             "get_power_tree", "get_i2c_devices", "get_signal_path",
-            "find_common_cause", "get_graph_summary",
+            "find_common_cause", "analyze_power_sequence", "get_graph_summary",
         }
-        assert expected.issubset(names), f"Missing: {expected - names}"
+        assert expected.issubset(names)
 
     def test_default_aggregation_threshold(self):
         assert DEFAULT_AGGREGATION_THRESHOLD == 100
@@ -55,12 +56,10 @@ class TestToolRegistry:
 
 class TestToolSchemas:
     def test_get_component_nets_args(self):
-        """get_component_nets 需要 refdes 参数"""
         schema = get_component_nets.args_schema
         assert "refdes" in schema.__fields__
 
     def test_get_net_components_args(self):
-        """get_net_components 有 net_name 和 threshold"""
         schema = get_net_components.args_schema
         assert "net_name" in schema.__fields__
         assert "threshold" in schema.__fields__
@@ -99,17 +98,17 @@ class TestToolSchemas:
 # ============================================================
 
 class TestToolDescriptions:
-    def test_all_tools_have_description(self):
+    def test_structured_tools_have_description(self):
         for tool in get_graph_tools():
-            name = getattr(tool, 'name', '?')
-            desc = getattr(tool, 'description', '')
-            if hasattr(tool, 'description'):
-                assert desc, f"{name} missing description"
+            if not hasattr(tool, 'name'):
+                continue
+            assert tool.description, f"{tool.name} missing description"
 
-    def test_all_tools_have_name(self):
+    def test_structured_tools_have_name(self):
         for tool in get_graph_tools():
-            if hasattr(tool, 'name'):
-                assert tool.name, f"Tool missing name"
+            if not hasattr(tool, 'name'):
+                continue
+            assert tool.name, "Tool missing name"
 
 
 # ============================================================
@@ -149,8 +148,8 @@ class TestGetNetComponents:
     def test_small_net(self, mock_run):
         """小网络返回详细列表"""
         mock_run.side_effect = [
-            [{"total_components": 3, "total_pins": 5}],  # count
-            [  # detail
+            [{"total_components": 3, "total_pins": 5}],
+            [
                 {"refdes": "U1", "part_type": "IC", "value": "MCU", "pin_number": "1", "pin_type": "POWER"},
                 {"refdes": "C1", "part_type": "CAP", "value": "0.1uF", "pin_number": "1", "pin_type": "PASSIVE"},
             ],
@@ -168,8 +167,8 @@ class TestGetNetComponents:
     def test_large_net_aggregation(self, mock_run):
         """大网络启用聚合模式"""
         mock_run.side_effect = [
-            [{"total_components": 200, "total_pins": 300}],  # count > threshold
-            [  # agg
+            [{"total_components": 200, "total_pins": 300}],
+            [
                 {"part_type": "CAP", "component_count": 150, "pin_count": 200, "examples": ["C1", "C2", "C3", "C4", "C5"]},
                 {"part_type": "IC", "component_count": 50, "pin_count": 100, "examples": ["U1", "U2"]},
             ],
@@ -204,7 +203,6 @@ class TestGetPowerDomain:
 
 class TestDifferentialPair:
     def test_returns_placeholder(self):
-        # trace_differential_pair is a plain function, not a StructuredTool
         result = trace_differential_pair("U1_A4")
         assert "预留接口" in result
         assert "Phase 3" in result
@@ -218,10 +216,10 @@ class TestGetGraphSummary:
     @patch("agent_system.graph_tools._run_cypher")
     def test_summary(self, mock_run):
         mock_run.side_effect = [
-            [{"cnt": 100}],   # total nodes
-            [{"cnt": 30}],    # components
-            [{"cnt": 40}],    # nets
-            [{"cnt": 30}],    # pins
+            [{"cnt": 100}],
+            [{"cnt": 30}],
+            [{"cnt": 40}],
+            [{"cnt": 30}],
             [{"part_type": "IC", "cnt": 20}, {"part_type": "CAP", "cnt": 10}],
         ]
         result = get_graph_summary.invoke({})
@@ -236,13 +234,11 @@ class TestGetGraphSummary:
 class TestFindCommonCause:
     @patch("agent_system.graph_tools._run_cypher")
     def test_too_few_refdes(self, mock_run):
-        """少于 2 个器件时提示"""
         result = find_common_cause.invoke({"refdes_list": "U1"})
         assert "至少需要 2" in result
 
     @patch("agent_system.graph_tools._run_cypher")
     def test_no_power_info(self, mock_run):
-        """无电源信息"""
         mock_run.return_value = []
         result = find_common_cause.invoke({"refdes_list": "U1,U2"})
         assert "未找到" in result
