@@ -614,6 +614,7 @@ class MPNDecoder:
     def _decode_diode_mpn(self, mpn: str) -> DecodedComponent:
         result = DecodedComponent(
             category="diode",
+            manufacturer="Generic",
             mpn=mpn,
         )
 
