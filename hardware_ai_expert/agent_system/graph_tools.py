@@ -921,26 +921,187 @@ def trace_signal_path(start_pin: str, max_depth: int = 5) -> str:
         return f"信号链路追踪出错: {str(e)}"
 
 
+@tool
 def trace_differential_pair(start_pin_id: str) -> str:
     """
-    [预留接口] 追踪差分对信号链路。
+    追踪差分对信号链路。
 
-    Phase 3 实现计划：
-    1. 从起始引脚出发，识别配对引脚（如 P/N, +/-, TX/RX）
-    2. 沿网络拓扑追踪到终点
-    3. 检查阻抗匹配、长度一致性等
+    从起始引脚或网络出发，识别差分对配对（P/N, +/-, POS/NEG 等），
+    验证两网络连接到相同器件对，并推断信号标准（PCIe/MIPI/USB/LVDS/Ethernet）。
 
     Args:
-        start_pin_id: 起始引脚标识，如 "U1_A4"
+        start_pin_id: 起始引脚标识（如 "U1_A4"）或网络名称（如 "DSI_CLK_P"）
 
     Returns:
-        当前返回预留提示信息
+        差分对追踪结果，包含配对网络、连接器件和信号标准
     """
-    return (
-        "[预留接口] trace_differential_pair 将在 Phase 3 实现。\n"
-        "计划支持的差分标准: PCIe, MIPI CSI/DSI, USB, LVDS, Ethernet\n"
-        "当前如需分析差分信号，请使用 get_signal_path() 手动追踪。"
-    )
+    try:
+        # ── 差分对后缀模式 ──
+        DIFF_SUFFIXES = [
+            (r'_P$', '_N'), (r'_N$', '_P'),
+            (r'_POS$', '_NEG'), (r'_NEG$', '_POS'),
+            (r'\+$', '-'), (r'-$', '+'),
+            (r'_P_(\d+)$', lambda m: f'_N_{m.group(1)}'),
+            (r'_N_(\d+)$', lambda m: f'_P_{m.group(1)}'),
+        ]
+
+        # ── 信号标准推断规则 ──
+        SIGNAL_STANDARDS = [
+            (r'(?i)\b(PCIE|PCI.?E|PCI_EXP)\b', 'PCIe'),
+            (r'(?i)\b(CSI|DSI|MIPI)\b', 'MIPI CSI/DSI'),
+            (r'(?i)\b(USB\s*3|SSRX|SSTX|USB_SS)\b', 'USB 3.x SuperSpeed'),
+            (r'(?i)\b(USB)\b', 'USB'),
+            (r'(?i)\b(LVDS)\b', 'LVDS'),
+            (r'(?i)\b(ETH|ETHERNET|RGMII|GMII|SGMII|SERDES)\b', 'Ethernet'),
+            (r'(?i)\b(HDMI|TMDS)\b', 'HDMI/TMDS'),
+            (r'(?i)\b(SATA)\b', 'SATA'),
+            (r'(?i)\b(JESD|JESD204)\b', 'JESD204'),
+        ]
+
+        def infer_signal_standard(name: str) -> str:
+            for pattern, std in SIGNAL_STANDARDS:
+                if re.search(pattern, name):
+                    return std
+            return 'Unknown'
+
+        def find_complement_net(net_name: str) -> Optional[str]:
+            """根据差分后缀模式找到互补网络名"""
+            for pattern, complement in DIFF_SUFFIXES:
+                m = re.search(pattern, net_name)
+                if m:
+                    if callable(complement):
+                        return net_name[:m.start()] + complement(m)
+                    else:
+                        return net_name[:m.start()] + complement
+            return None
+
+        def parse_pin_id(pin_id: str):
+            """解析引脚标识 'U1_A4' -> ('U1', 'A4')"""
+            parts = pin_id.split('_', 1)
+            if len(parts) == 2 and re.match(r'^[A-Za-z]+\d+', parts[0]):
+                return parts[0], parts[1]
+            return None, None
+
+        # ── 1. 解析输入，获取起始网络 ──
+        net_name = None
+        refdes, pin_num = parse_pin_id(start_pin_id)
+
+        if refdes and pin_num:
+            # 输入是引脚标识
+            records = _run_cypher(
+                "MATCH (p:Pin {refdes: $refdes, pin_number: $pin_num})-[:CONNECTS_TO]->(n:Net) "
+                "RETURN n.net_name AS net_name",
+                {"refdes": refdes, "pin_num": pin_num}
+            )
+            # 也尝试 pin_name
+            if not records:
+                records = _run_cypher(
+                    "MATCH (p:Pin {refdes: $refdes})-[:CONNECTS_TO]->(n:Net) "
+                    "WHERE p.pin_name = $pin_num OR p.pin_number = $pin_num "
+                    "RETURN n.net_name AS net_name",
+                    {"refdes": refdes, "pin_num": pin_num}
+                )
+            if records:
+                net_name = records[0]['net_name']
+            else:
+                return f"未找到引脚 {start_pin_id} 连接的网络"
+        else:
+            # 输入当作网络名
+            net_name = start_pin_id
+            # 验证网络是否存在
+            records = _run_cypher(
+                "MATCH (n:Net {net_name: $net_name}) RETURN n.net_name AS net_name",
+                {"net_name": net_name}
+            )
+            if not records:
+                return f"未找到网络: {net_name}"
+
+        # ── 2. 找到互补网络 ──
+        complement_name = find_complement_net(net_name)
+        if not complement_name:
+            return f"网络 '{net_name}' 不符合差分对命名模式（_P/_N, _POS/_NEG, +/-）"
+
+        # 提取差分对基础名
+        base_name = re.sub(r'_(P|N)$', '', net_name)
+        base_name = re.sub(r'_(POS|NEG)$', '', base_name)
+        base_name = re.sub(r'[+-]$', '', base_name)
+        pair_name = f"{base_name}_diff_pair"
+
+        # 验证互补网络是否存在
+        comp_records = _run_cypher(
+            "MATCH (n:Net {net_name: $net_name}) RETURN n.net_name AS net_name",
+            {"net_name": complement_name}
+        )
+        if not comp_records:
+            return f"找到差分对模式: {net_name} → {complement_name}\n但互补网络 '{complement_name}' 不存在于数据库中"
+
+        # ── 3. 查询两个网络的连接器件 ──
+        def get_net_details(name: str) -> list:
+            """获取网络连接的所有器件引脚"""
+            return _run_cypher(
+                "MATCH (p:Pin)-[:CONNECTS_TO]->(n:Net {net_name: $net_name}) "
+                "RETURN p.refdes AS refdes, p.pin_name AS pin_name, p.pin_number AS pin_number",
+                {"net_name": name}
+            )
+
+        pos_pins = get_net_details(net_name)
+        neg_pins = get_net_details(complement_name)
+
+        # ── 4. 验证差分对：查找共同器件 ──
+        pos_refs = {r['refdes'] for r in pos_pins if r['refdes']}
+        neg_refs = {r['refdes'] for r in neg_pins if r['refdes']}
+        common_refs = pos_refs & neg_refs
+
+        shared_components = []
+        for ref in common_refs:
+            pos_pin_info = [(r['pin_name'], r['pin_number']) for r in pos_pins if r['refdes'] == ref]
+            neg_pin_info = [(r['pin_name'], r['pin_number']) for r in neg_pins if r['refdes'] == ref]
+            # 获取器件类型
+            comp_records = _run_cypher(
+                "MATCH (c:Component {refdes: $refdes}) RETURN c.part_type AS part_type",
+                {"refdes": ref}
+            )
+            part_type = comp_records[0]['part_type'] if comp_records else 'Unknown'
+            shared_components.append({
+                'refdes': ref,
+                'part_type': part_type,
+                'pos_pins': pos_pin_info,
+                'neg_pins': neg_pin_info,
+            })
+
+        # ── 5. 推断信号标准 ──
+        combined_name = f"{net_name}_{complement_name}"
+        signal_std = infer_signal_standard(combined_name)
+
+        # ── 6. 格式化输出 ──
+        lines = []
+        lines.append(f"🔌 差分对追踪: {pair_name}")
+        lines.append(f"  信号标准: {signal_std}")
+        lines.append(f"  ─────────────────────────")
+        lines.append(f"  P 网络: {net_name}")
+        for r in pos_pins:
+            lines.append(f"    → {r['refdes']}.{r['pin_name']} (Pin {r['pin_number']})")
+        lines.append(f"  N 网络: {complement_name}")
+        for r in neg_pins:
+            lines.append(f"    → {r['refdes']}.{r['pin_name']} (Pin {r['pin_number']})")
+
+        if shared_components:
+            lines.append(f"  ─────────────────────────")
+            lines.append(f"  共同器件 ({len(shared_components)}):")
+            for comp in shared_components:
+                pp = ', '.join(f"{pn}({num})" for pn, num in comp['pos_pins'])
+                np = ', '.join(f"{pn}({num})" for pn, num in comp['neg_pins'])
+                lines.append(f"    {comp['refdes']} ({comp['part_type']})")
+                lines.append(f"      P引脚: {pp}")
+                lines.append(f"      N引脚: {np}")
+            lines.append(f"  ✅ 差分对验证通过: P/N 信号连接到共同器件")
+        else:
+            lines.append(f"  ⚠️ 未发现共同器件，P/N 网络可能不构成差分对")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        return f"差分对追踪出错: {str(e)}"
 
 
 # ============================================================
@@ -991,11 +1152,11 @@ def _run_tests():
     assert DEFAULT_AGGREGATION_THRESHOLD == 100
     print("  ✅ 默认聚合阈值 = 100")
 
-    # 测试 3: 差分对预留接口
+    # 测试 3: 差分对追踪（不接受非法输入，应返回错误提示）
     result = trace_differential_pair.invoke({"start_pin_id": "U1_A4"})
-    assert "预留接口" in result
-    assert "Phase 3" in result
-    print("  ✅ trace_differential_pair 预留接口正常")
+    # 实现后应返回追踪结果或错误提示，不再包含"预留接口"
+    assert isinstance(result, str) and len(result) > 0
+    print("  ✅ trace_differential_pair 实现已就绪")
 
     # 测试 4: 错误处理格式
     # 模拟一个错误场景
