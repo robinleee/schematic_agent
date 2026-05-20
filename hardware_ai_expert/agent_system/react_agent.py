@@ -568,6 +568,7 @@ class ReActAgent:
                     "action": t.action,
                     "action_input": t.action_input,
                     "observation": t.observation[:500],
+                    "timestamp": t.timestamp,
                 }
                 for t in trace
             ],

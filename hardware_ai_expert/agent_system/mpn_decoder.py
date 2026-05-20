@@ -150,6 +150,14 @@ class DecodedComponent:
     resistance_ohm: Optional[float] = None
     power_rating: Optional[str] = None    # "1/16W"
     power_rating_w: Optional[float] = None
+    inductance: Optional[str] = None      # "1.5uH"
+    inductance_uh: Optional[float] = None
+    current_rating: Optional[str] = None  # "500mA"
+    current_rating_a: Optional[float] = None
+    diode_type: Optional[str] = None      # "schottky"/"zener"/"tvs"/"general"/"led"
+    led_color: Optional[str] = None       # "GRN"/"BLU"/"RED"
+    frequency: Optional[str] = None       # "25MHz"
+    frequency_hz: Optional[float] = None
     confidence: float = 0.0               # 0.0~1.0 解码置信度
     notes: str = ""
 
@@ -187,7 +195,23 @@ class MPNDecoder:
         if mpn.startswith(("RC", "CRC", "RL", "RK")):
             return self._decode_resistor_mpn(mpn)
 
-        # 6. 通用 - 从描述字符串提取参数
+        # 6. Ferrite bead / Inductor MPN prefixes
+        if mpn.startswith(("BLM", "GZ", "HZ", "CBM", "MPZ", "NFM", "DLP")):
+            return self._decode_ferrite_mpn(mpn)
+
+        # 7. Inductor MPN prefixes (Murata LQH/LQM/MLZ, TDK TLP/MLF, Würth 7427)
+        if mpn.startswith(("LQH", "LQM", "MLZ", "LQG", "DFE", "VLS", "SRN", "SRR", "SRU", "7427", "7440")):
+            return self._decode_inductor_mpn(mpn)
+
+        # 8. Diode MPN prefixes
+        if mpn.startswith(("1N", "BAV", "BAS", "BAT", "BZX", "BZV", "MMBD", "MMBA", "SZ", "SM", "RS1", "US1", "MSS", "B05", "B13", "B54", "B58", "ESD", "RCL")):
+            return self._decode_diode_mpn(mpn)
+
+        # 9. LED MPN prefixes
+        if mpn.startswith(("SML", "XZV", "598", "LTST", "KP", "APTD", "ACDA")):
+            return self._decode_led_mpn(mpn)
+
+        # 10. 通用 - 从描述字符串提取参数
         return self._decode_generic(mpn)
 
     # --------------------------------------------------------

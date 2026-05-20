@@ -817,6 +817,131 @@ def render_quick_actions():
 # 页面 1: 智能对话
 # ============================================================
 
+def render_trace_timeline(trace: list):
+    """优化后的 ReAct 推理链路展示：时间线布局 + 折叠面板 + 步骤图标 + 耗时 + 错误高亮"""
+    if not trace:
+        return
+
+    # 步骤类型判定与图标映射
+    def _step_info(step):
+        action = step.get("action", "")
+        thought = step.get("thought", "")
+        obs = step.get("observation", "")
+        is_error = any(kw in obs.lower() for kw in ["error", "失败", "异常", "exception", "traceback"])
+        is_final = action == "final_answer"
+
+        if is_final:
+            icon, label, color = "✅", "结论", "var(--accent-green, #4caf50)"
+        elif is_error:
+            icon, label, color = "⚠️", "异常", "#ef5350"
+        else:
+            # 根据内容判断类型
+            if thought and not action:
+                icon, label, color = "💭", "思考", "var(--accent-cyan, #00bcd4)"
+            elif action and not obs:
+                icon, label, color = "🔧", "执行", "var(--accent-amber, #ffab40)"
+            else:
+                icon, label, color = "📋", "观察", "var(--text-secondary, #aaa)"
+
+        # 摘要：动作名称 + 简短描述
+        if is_final:
+            summary = "得出最终结论"
+        elif action and action != "final_answer":
+            summary = f"{action}({', '.join(f'{k}={v}' for k, v in list(step.get('action_input', {}).items())[:2])})"
+            if len(summary) > 50:
+                summary = summary[:47] + "...)"
+        elif thought:
+            summary = thought[:50] + ("..." if len(thought) > 50 else "")
+        else:
+            summary = "—"
+
+        # 耗时
+        ts = step.get("timestamp", "")
+        duration = ""
+        return icon, label, color, summary, is_error, ts, duration
+
+    # 计算每步耗时
+    timestamps = [s.get("timestamp", "") for s in trace if s.get("timestamp")]
+    durations = [""] * len(trace)
+    if len(timestamps) == len(trace):
+        from datetime import datetime as _dt
+        try:
+            parsed = [_dt.fromisoformat(t) for t in timestamps]
+            for i in range(1, len(parsed)):
+                delta = (parsed[i] - parsed[i - 1]).total_seconds()
+                if delta < 1:
+                    durations[i] = f"{delta * 1000:.0f}ms"
+                else:
+                    durations[i] = f"{delta:.1f}s"
+        except Exception:
+            pass
+
+    # 渲染时间线
+    st.markdown("""
+    <style>
+    .trace-timeline {{ position: relative; padding-left: 24px; }}
+    .trace-timeline::before {{
+        content: ''; position: absolute; left: 8px; top: 0; bottom: 0;
+        width: 2px; background: var(--border-color, #333);
+    }}
+    .trace-step {{ position: relative; margin-bottom: 4px; }}
+    .trace-step::before {{
+        content: ''; position: absolute; left: -20px; top: 8px;
+        width: 10px; height: 10px; border-radius: 50%;
+        background: var(--accent-cyan, #00bcd4); border: 2px solid var(--bg-primary, #1a1a2e);
+    }}
+    .trace-step.step-error::before {{ background: #ef5350; }}
+    .trace-step.step-final::before {{ background: var(--accent-green, #4caf50); }}
+    </style>
+    """, unsafe_allow_html=True)
+
+    for idx, step in enumerate(trace):
+        icon, label, color, summary, is_error, ts, _ = _step_info(step)
+        duration = durations[idx] if idx < len(durations) else ""
+        is_final = step.get("action") == "final_answer"
+
+        step_css = "trace-step"
+        if is_error:
+            step_css += " step-error"
+        elif is_final:
+            step_css += " step-final"
+
+        # 折叠面板标题
+        title_parts = [f"{icon} Step {step.get('step_id', idx + 1)}: {summary}"]
+        if duration:
+            title_parts.append(f"⏱ {duration}")
+        title = " ".join(title_parts)
+
+        with st.expander(title):
+            # Thought
+            if step.get("thought"):
+                st.markdown(f"<div style='color:var(--accent-cyan,#00bcd4);font-size:0.85rem;'><strong>💭 思考</strong></div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size:0.85rem;margin:2px 0 8px 4px;'>{step['thought']}</div>", unsafe_allow_html=True)
+
+            # Action
+            if step.get("action") and step["action"] != "final_answer":
+                st.markdown(f"<div style='color:var(--accent-amber,#ffab40);font-size:0.85rem;'><strong>🔧 执行</strong></div>", unsafe_allow_html=True)
+                action_str = f"{step['action']}({json.dumps(step.get('action_input', {}), ensure_ascii=False)})"
+                st.code(action_str, language="python")
+
+            # Observation
+            if step.get("observation"):
+                obs_label = "⚠️ 异常结果" if is_error else "📋 观察结果"
+                obs_color = "#ef5350" if is_error else "var(--text-secondary,#aaa)"
+                st.markdown(f"<div style='color:{obs_color};font-size:0.85rem;'><strong>{obs_label}</strong></div>", unsafe_allow_html=True)
+                obs_text = step["observation"]
+                # 长文本用 code 块展示
+                if len(obs_text) > 200:
+                    st.code(obs_text[:1000], language=None)
+                else:
+                    st.markdown(f"<div style='font-size:0.8rem;white-space:pre-wrap;'>{obs_text}</div>", unsafe_allow_html=True)
+
+            # Final answer
+            if step.get("action") == "final_answer" and step.get("action_input", {}).get("final_answer"):
+                st.markdown(f"<div style='color:var(--accent-green,#4caf50);font-size:0.85rem;'><strong>✅ 最终结论</strong></div>", unsafe_allow_html=True)
+                st.markdown(step["action_input"]["final_answer"])
+
+
 def render_chat():
     st.markdown("<div class='main-header'>💬 智能对话</div>", unsafe_allow_html=True)
     st.markdown("<div class='header-line'></div>", unsafe_allow_html=True)
@@ -837,18 +962,9 @@ def render_chat():
                 # 主回复内容
                 st.markdown(msg["content"], unsafe_allow_html=False)
 
-                # 推理过程（可展开）
+                # 推理过程（优化后时间线展示）
                 if msg.get("trace"):
-                    with st.expander(f"🔍 推理过程 ({len(msg['trace'])} 步)"):
-                        for step in msg["trace"]:
-                            st.markdown(f"""
-                            <div class='dash-card' style='text-align:left;padding:10px 16px;margin-bottom:8px;'>
-                                <div style='font-size:0.75rem;color:var(--accent-cyan);font-weight:600;'>Step {step['step_id']}</div>
-                                <div style='font-size:0.85rem;color:var(--text-secondary);margin:2px 0;'>💭 {step.get('thought','')}</div>
-                                <div style='font-size:0.8rem;'><code>{step['action']}({json.dumps(step['action_input'], ensure_ascii=False)})</code></div>
-                                <div style='font-size:0.8rem;color:var(--text-muted);margin-top:4px;white-space:pre-wrap;max-height:120px;overflow:auto;'>{step.get('observation','')[:300]}</div>
-                            </div>
-                            """, unsafe_allow_html=True)
+                    render_trace_timeline(msg["trace"])
 
     # 输入框
     user_input = st.chat_input("输入您的问题...（审查/诊断/查询均可）")
@@ -889,18 +1005,9 @@ def render_chat():
                     else:
                         st.warning("Agent 未生成报告")
 
-                    # 推理过程
+                    # 推理过程（优化后时间线展示）
                     if trace:
-                        with st.expander(f"🔍 推理过程 ({len(trace)} 步)"):
-                            for step in trace:
-                                st.markdown(f"""
-                                <div class='dash-card' style='text-align:left;padding:10px 16px;margin-bottom:8px;'>
-                                    <div style='font-size:0.75rem;color:var(--accent-cyan);font-weight:600;'>Step {step['step_id']}</div>
-                                    <div style='font-size:0.85rem;color:var(--text-secondary);margin:2px 0;'>💭 {step.get('thought','')}</div>
-                                    <div style='font-size:0.8rem;'><code>{step['action']}({json.dumps(step['action_input'], ensure_ascii=False)})</code></div>
-                                    <div style='font-size:0.8rem;color:var(--text-muted);margin-top:4px;white-space:pre-wrap;max-height:120px;overflow:auto;'>{step.get('observation','')[:300]}</div>
-                                </div>
-                                """, unsafe_allow_html=True)
+                        render_trace_timeline(trace)
 
                     # 保存到 session
                     st.session_state.messages.append({
