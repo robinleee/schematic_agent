@@ -36,6 +36,9 @@ from agent_system.graph_tools import (
     get_power_tree,
     get_i2c_devices,
     get_signal_path,
+    find_common_cause,
+    analyze_power_sequence,
+    trace_signal_path,
     get_graph_tools as _get_all_graph_tools,
 )
 from agent_system.knowledge_router import KnowledgeRouter
@@ -74,6 +77,9 @@ GRAPH_TOOLS = {
     "get_power_tree": get_power_tree,
     "get_i2c_devices": get_i2c_devices,
     "get_signal_path": get_signal_path,
+    "find_common_cause": find_common_cause,
+    "analyze_power_sequence": analyze_power_sequence,
+    "trace_signal_path": trace_signal_path,
 }
 
 

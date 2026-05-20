@@ -751,6 +751,140 @@ def analyze_power_sequence(refdes: str) -> str:
         return f"电源时序分析出错: {str(e)}"
 
 
+@tool
+def trace_signal_path(start_pin: str, max_depth: int = 5) -> str:
+    """
+    从指定引脚出发，沿网络拓扑 BFS 追踪信号链路路径。
+
+    追踪方式：引脚 → 所在网络 → 其他引脚 → 所属组件 → 继续展开。
+    使用 BFS 遍历，避免环路，最多展开 max_depth 层。
+
+    Args:
+        start_pin: 起始引脚标识，格式为 "组件位号.引脚号"（如 "U40000.3"）
+                   或引脚名称（如 "U40000_VOUT"），支持模糊匹配
+        max_depth: 最大追踪深度，默认 5
+
+    Returns:
+        信号链路路径报告（文本格式）
+    """
+    try:
+        # 1. 解析起始引脚
+        # 支持 "RefDes.PinNumber" 或 "RefDes_PinName" 格式
+        if '.' in start_pin:
+            refdes, pin_num = start_pin.split('.', 1)
+            pin_query = """
+            MATCH (c:Component {RefDes: $refdes})-[:HAS_PIN]->(p:Pin)
+            WHERE p.Number = $pin_num OR p.Name = $pin_num
+            RETURN c.RefDes AS refdes, p.Number AS pin_num, p.Name AS pin_name, id(p) AS pid
+            LIMIT 1
+            """
+            start_records = _run_cypher(pin_query, {"refdes": refdes, "pin_num": pin_num})
+        elif '_' in start_pin:
+            # 尝试 RefDes_PinName 格式
+            parts = start_pin.split('_', 1)
+            pin_query = """
+            MATCH (c:Component)-[:HAS_PIN]->(p:Pin)
+            WHERE c.RefDes = $refdes AND p.Name = $pin_name
+            RETURN c.RefDes AS refdes, p.Number AS pin_num, p.Name AS pin_name, id(p) AS pid
+            LIMIT 1
+            """
+            start_records = _run_cypher(pin_query, {"refdes": parts[0], "pin_name": parts[1]})
+        else:
+            # 模糊搜索引脚名
+            pin_query = """
+            MATCH (c:Component)-[:HAS_PIN]->(p:Pin)
+            WHERE p.Name CONTAINS $start_pin OR c.RefDes = $start_pin
+            RETURN c.RefDes AS refdes, p.Number AS pin_num, p.Name AS pin_name, id(p) AS pid
+            LIMIT 1
+            """
+            start_records = _run_cypher(pin_query, {"start_pin": start_pin})
+
+        if not start_records:
+            return f"未找到起始引脚: {start_pin}"
+
+        start = start_records[0]
+        lines = [f"信号链路追踪: {start['refdes']}.{start['pin_num']} ({start['pin_name'] or '?'})"]
+        lines.append(f"最大深度: {max_depth}\n")
+
+        # 2. BFS 遍历
+        # 队列元素: (pin_id, depth, path_list)
+        # path: ["Component:U1", "Pin:3", "Net:VCC_3V3", "Pin:5", "Component:U2", ...]
+        visited_pins = set()
+        visited_nets = set()
+        all_paths = []
+
+        # 获取起始引脚的内部 ID
+        start_pid = start['pid']
+        visited_pins.add(start_pid)
+        queue = [(start_pid, 0, [f"Component:{start['refdes']}", f"Pin:{start['pin_num']}({start['pin_name'] or '?'})"])]
+
+        while queue:
+            current_pid, depth, path = queue.pop(0)
+            if depth >= max_depth:
+                all_paths.append(path)
+                continue
+
+            # 从当前引脚找连接的网络
+            net_query = """
+            MATCH (p:Pin)-[:CONNECTS_TO]->(n:Net)
+            WHERE id(p) = $pid
+            RETURN n.Name AS net_name, id(n) AS nid
+            """
+            nets = _run_cypher(net_query, {"pid": current_pid})
+
+            if not nets:
+                all_paths.append(path)
+                continue
+
+            extended = False
+            for net_info in nets:
+                net_name = net_info['net_name']
+                net_id = net_info['nid']
+
+                if net_id in visited_nets and depth > 0:
+                    continue
+                visited_nets.add(net_id)
+
+                new_path = path + [f"Net:{net_name}"]
+
+                # 从网络找其他引脚
+                peer_query = """
+                MATCH (n:Net {Name: $net_name})<-[:CONNECTS_TO]-(p:Pin)<-[:HAS_PIN]-(c:Component)
+                WHERE id(p) <> $pid
+                RETURN c.RefDes AS refdes, p.Number AS pin_num, p.Name AS pin_name, id(p) AS peer_pid
+                ORDER BY c.RefDes
+                """
+                peers = _run_cypher(peer_query, {"net_name": net_name, "pid": current_pid})
+
+                if not peers:
+                    all_paths.append(new_path)
+                    continue
+
+                for peer in peers:
+                    peer_pid = peer['peer_pid']
+                    if peer_pid in visited_pins:
+                        continue
+                    visited_pins.add(peer_pid)
+                    extended = True
+                    peer_path = new_path + [f"Pin:{peer['pin_num']}({peer['pin_name'] or '?'})", f"Component:{peer['refdes']}"]
+                    queue.append((peer_pid, depth + 1, peer_path))
+
+            if not extended:
+                all_paths.append(path)
+
+        # 3. 格式化输出
+        if not all_paths:
+            lines.append("未追踪到任何信号路径")
+        else:
+            for i, path in enumerate(all_paths, 1):
+                lines.append(f"路径 {i}: {' → '.join(path)}")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        return f"信号链路追踪出错: {str(e)}"
+
+
 def trace_differential_pair(start_pin_id: str) -> str:
     """
     [预留接口] 追踪差分对信号链路。
