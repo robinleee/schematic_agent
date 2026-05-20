@@ -598,8 +598,14 @@ def find_common_cause(refdes_list: str) -> str:
     """
     定位多个故障器件的共同上游电源（共因失效分析）。
 
-    给定一组故障器件位号，追踪它们各自的电源供给路径，
-    找到共同的上游电源网络或器件，定位可能的共因失效点。
+    给定一组故障器件位号，沿 POWERED_BY 关系追踪每个器件的完整电源路径，
+    找到所有共同上游节点，识别单点故障风险，并计算电源冗余度。
+
+    功能增强：
+    - 电源树共同上游：追踪完整 POWERED_BY 链路，找到所有共同上游节点
+    - 单点故障识别：若某上游节点是多个下游器件的唯一电源路径，标记为单点故障风险
+    - 冗余度评分：计算每个器件的电源冗余度（1=无冗余, 2+=有冗余）
+    - 可视化输出：文本格式电源树片段，标注共同节点和风险点
 
     Args:
         refdes_list: 逗号分隔的器件位号，如 "U40000,U50000,R40005"
@@ -612,61 +618,143 @@ def find_common_cause(refdes_list: str) -> str:
         if len(refdes_items) < 2:
             return "共因失效分析至少需要 2 个器件位号"
 
-        # 对每个器件，查找其电源网络
-        power_nets_by_refdes = {}
+        # ── Phase 1: 追踪每个器件的完整电源路径（POWERED_BY 链） ──
+        MAX_DEPTH = 10
+        power_paths = {}  # refdes -> list of (ancestor_refdes, voltage, net)
+        redundancy = {}    # refdes -> direct_power_count
+
         for refdes in refdes_items:
-            query = """
-            MATCH (c:Component {RefDes: $refdes})-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
-            WHERE p.Type = 'POWER' OR p.Type = 'GROUND'
-            RETURN n.Name AS net_name, n.VoltageLevel AS voltage, p.Type AS pin_type
+            # 直接电源供给（POWERED_BY 一跳）
+            direct_query = """
+            MATCH (c:Component {RefDes: $refdes})-[r:POWERED_BY]->(p:Component)
+            RETURN p.RefDes AS parent, r.voltage AS voltage, r.net AS net
             """
-            records = _run_cypher(query, {"refdes": refdes})
-            if records:
-                power_nets_by_refdes[refdes] = [
-                    {"net": r['net_name'], "voltage": r['voltage'], "pin_type": r['pin_type']}
-                    for r in records
-                ]
+            direct_records = _run_cypher(direct_query, {"refdes": refdes})
+            redundancy[refdes] = len(direct_records) if direct_records else 0
 
-        if not power_nets_by_refdes:
-            return f"未找到任何器件的电源信息: {refdes_list}"
+            # 完整电源路径（BFS 沿 POWERED_BY 向上遍历）
+            path_query = """
+            MATCH path = (c:Component {RefDes: $refdes})-[:POWERED_BY*1..10]->(anc:Component)
+            RETURN [n IN nodes(path)[1..] | n.RefDes] AS ancestors,
+                   [r IN relationships(path) | {voltage: r.voltage, net: r.net}] AS edges
+            """
+            path_records = _run_cypher(path_query, {"refdes": refdes})
 
-        # 找共同电源网络
-        all_nets = {}
-        for refdes, nets in power_nets_by_refdes.items():
-            for net_info in nets:
-                if net_info['pin_type'] == 'POWER':  # 只看电源，不看地
-                    net_name = net_info['net']
-                    all_nets.setdefault(net_name, []).append(refdes)
+            # 收集所有上游节点（去重）
+            ancestors_set = set()
+            ancestors_info = []  # (ancestor, voltage, net)
+            for rec in path_records:
+                ancs = rec['ancestors']
+                edges = rec['edges']
+                for i, anc in enumerate(ancs):
+                    if anc not in ancestors_set:
+                        ancestors_set.add(anc)
+                        edge = edges[i] if i < len(edges) else {}
+                        ancestors_info.append((
+                            anc,
+                            edge.get('voltage'),
+                            edge.get('net')
+                        ))
 
-        common_nets = {net: refs for net, refs in all_nets.items() if len(refs) >= 2}
+            power_paths[refdes] = ancestors_info
 
-        # 对共同电源网络，查找上游电源器件
-        lines = [f"共因失效分析 (故障器件: {', '.join(refdes_items)}):\n"]
-        lines.append("各器件电源连接:")
-        for refdes, nets in power_nets_by_refdes.items():
-            pwr_nets = [f"{n['net']}({n['voltage'] or '?'}V)" for n in nets if n['pin_type'] == 'POWER']
-            lines.append(f"  {refdes}: {', '.join(pwr_nets[:5]) or '无电源引脚'}")
+        # ── Phase 2: 找到共同上游节点 ──
+        # 统计每个上游节点被多少故障器件共享
+        ancestor_to_refdes = {}  # ancestor -> set of refdes
+        for refdes, ancestors in power_paths.items():
+            for anc, volt, net in ancestors:
+                ancestor_to_refdes.setdefault(anc, set()).add(refdes)
 
-        if common_nets:
-            lines.append(f"\n🔴 共同电源网络:")
-            for net, refs in sorted(common_nets.items(), key=lambda x: -len(x[1])):
-                lines.append(f"  {net}: 共同供给 {', '.join(refs)}")
+        common_ancestors = {
+            anc: refs for anc, refs in ancestor_to_refdes.items()
+            if len(refs) >= 2
+        }
 
-                # 查找该网络的上游电源器件
-                src_query = """
-                MATCH (c:Component)-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net {Name: $net_name})
-                WHERE c.PartType IN ['LDO', 'BUCK', 'PMIC', 'DCDC']
+        # ── Phase 3: 单点故障识别 ──
+        # 对每个共同上游节点，检查它是否是某下游器件的唯一路径
+        spof_nodes = {}  # ancestor -> {details}
+        for anc, affected_refdes in common_ancestors.items():
+            # 检查每个受影响器件的冗余度
+            is_spof = False
+            for rd in affected_refdes:
+                if redundancy.get(rd, 0) <= 1:
+                    is_spof = True
+                    break
+            if is_spof:
+                # 获取上游器件信息
+                info_q = """
+                MATCH (c:Component {RefDes: $refdes})
                 RETURN c.RefDes AS refdes, c.PartType AS pt, c.Model AS model
-                LIMIT 3
                 """
-                src_records = _run_cypher(src_query, {"net_name": net})
-                if src_records:
-                    for sr in src_records:
-                        lines.append(f"    └── 上游电源器件: {sr['refdes']} [{sr['pt']}] {sr['model']}")
-                else:
-                    lines.append(f"    └── (未找到上游电源器件)")
+                info_r = _run_cypher(info_q, {"refdes": anc})
+                info = info_r[0] if info_r else {}
+                spof_nodes[anc] = {
+                    'part_type': info.get('pt', '?'),
+                    'model': info.get('model', '?'),
+                    'affected': sorted(affected_refdes),
+                    'low_redundancy': [rd for rd in affected_refdes if redundancy.get(rd, 0) <= 1]
+                }
+
+        # ── Phase 4: 生成报告 ──
+        lines = [f"⚡ 共因失效分析 (故障器件: {', '.join(refdes_items)}):\n"]
+
+        # 4a. 各器件电源路径 & 冗余度
+        lines.append("━━ 各器件电源路径与冗余度 ━━")
+        for refdes in refdes_items:
+            red = redundancy.get(refdes, 0)
+            red_label = "🔴无冗余" if red <= 1 else ("🟡低冗余" if red == 2 else "🟢有冗余")
+            paths = power_paths.get(refdes, [])
+            path_str = " → ".join([a for a, _, _ in paths]) if paths else "(无POWERED_BY路径)"
+            lines.append(f"  {refdes} [{red_label}, 冗余度={red}]: {path_str}")
+
+        # 4b. 共同上游节点
+        if common_ancestors:
+            lines.append(f"\n━━ 🔴 共同上游电源节点 ━━")
+            for anc, refs in sorted(common_ancestors.items(), key=lambda x: -len(x[1])):
+                # 获取节点信息
+                info_q = """
+                MATCH (c:Component {RefDes: $refdes})
+                RETURN c.RefDes AS refdes, c.PartType AS pt, c.Model AS model
+                """
+                info_r = _run_cypher(info_q, {"refdes": anc})
+                info = info_r[0] if info_r else {}
+                pt = info.get('pt', '?')
+                model = info.get('model', '?')
+                spof_mark = " ⚠️单点故障" if anc in spof_nodes else ""
+                lines.append(f"  {anc} [{pt}] {model}{spof_mark}")
+                lines.append(f"    └── 影响: {', '.join(sorted(refs))}")
         else:
-            lines.append("\n🟢 未发现共同电源网络 — 故障可能独立发生")
+            lines.append("\n🟢 未发现共同上游电源节点 — 故障可能独立发生")
+
+        # 4c. 单点故障风险汇总
+        if spof_nodes:
+            lines.append(f"\n━━ ⚠️ 单点故障风险 ━━")
+            for anc, details in sorted(spof_nodes.items(), key=lambda x: -len(x[1]['affected'])):
+                lines.append(
+                    f"  {anc} [{details['part_type']}] {details['model']}"
+                    f"\n    └── 无冗余下游: {', '.join(details['low_redundancy'])}"
+                )
+            lines.append("  建议: 为上述无冗余器件增加备用电源路径")
+
+        # 4d. 可视化电源树片段
+        lines.append(f"\n━━ 电源树片段 ━━")
+        for refdes in refdes_items:
+            paths = power_paths.get(refdes, [])
+            if not paths:
+                lines.append(f"  {refdes} ── (无POWERED_BY路径)")
+                continue
+            # 构建树形文本
+            lines.append(f"  {refdes}")
+            for i, (anc, volt, net) in enumerate(paths):
+                is_last = (i == len(paths) - 1)
+                prefix = "    └── " if is_last else "    ├── "
+                common_mark = " ★" if anc in common_ancestors else ""
+                spof_mark = " ⚠️" if anc in spof_nodes else ""
+                volt_str = f"{volt}V" if volt else "?V"
+                net_str = f" ({net})" if net else ""
+                lines.append(f"{prefix}{anc} [{volt_str}{net_str}]{common_mark}{spof_mark}")
+
+        lines.append("\n图例: ★=共同上游节点  ⚠️=单点故障风险  🔴=无冗余  🟡=低冗余  🟢=有冗余")
 
         return "\n".join(lines)
 

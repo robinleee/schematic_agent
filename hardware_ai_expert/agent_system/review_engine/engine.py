@@ -41,6 +41,8 @@ class RuleConfigManager:
 
     def __init__(self):
         self._rules: dict[str, RuleConfig] = {}
+        self._config_path: Path | None = None
+        self._last_mtime: float | None = None
 
     def load_from_file(self, path: str | Path):
         """从 YAML/JSON 文件加载规则配置"""
@@ -48,6 +50,9 @@ class RuleConfigManager:
 
         if not path.exists():
             raise FileNotFoundError(f"规则配置文件不存在: {path}")
+
+        self._config_path = path
+        self._last_mtime = path.stat().st_mtime
 
         if path.suffix in (".yaml", ".yml"):
             with open(path, "r", encoding="utf-8") as f:
@@ -60,11 +65,27 @@ class RuleConfigManager:
             raise ValueError(f"不支持的配置文件格式: {path.suffix}")
 
         rules_data = data.get("rules", [])
+        self._rules.clear()
         for rule_data in rules_data:
             rule = RuleConfig(**rule_data)
             self._rules[rule.id] = rule
 
         print(f"[RuleConfig] 已加载 {len(self._rules)} 条规则配置")
+
+    def is_stale(self) -> bool:
+        """检查配置文件是否已被修改（mtime 是否变化）"""
+        if self._config_path is None or self._last_mtime is None:
+            return False
+        if not self._config_path.exists():
+            return False
+        return self._config_path.stat().st_mtime > self._last_mtime
+    def reload_if_stale(self) -> bool:
+        """如果配置文件已变更则重载，返回是否重载"""
+        if self.is_stale():
+            print("[RuleConfig] 检测到规则配置文件变更，正在热重载...")
+            self.load_from_file(self._config_path)
+            return True
+        return False
 
     def get(self, rule_id: str) -> RuleConfig | None:
         return self._rules.get(rule_id)
@@ -97,17 +118,23 @@ class ReviewRuleEngine:
     Args:
         neo4j_driver: Neo4j 数据库驱动
         config_path: 规则配置文件路径，None 表示不加载配置
+        auto_reload: 是否启用规则热更新（检测 YAML 文件变更自动重载）
+        project_id: 当前项目 ID，用于多网表数据隔离
     """
 
     def __init__(
         self,
         neo4j_driver: Any,
         config_path: str | None = None,
+        auto_reload: bool = True,
+        project_id: str = "default",
     ):
         self.driver = neo4j_driver
         self.context = RuleContext(neo4j_driver=neo4j_driver)
         self.config_manager = RuleConfigManager()
         self.whitelist = WhitelistManager(neo4j_driver)
+        self.auto_reload = auto_reload
+        self.project_id = project_id
 
         # 加载默认配置
         if config_path:
@@ -117,6 +144,15 @@ class ReviewRuleEngine:
             default_path = Path(__file__).parent / "config" / "default_rules.yaml"
             if default_path.exists():
                 self.config_manager.load_from_file(default_path)
+
+    def reload_rules(self) -> bool:
+        """手动重载规则配置文件"""
+        return self.config_manager.reload_if_stale()
+
+    def _check_auto_reload(self):
+        """检查并执行自动热更新"""
+        if self.auto_reload:
+            self.config_manager.reload_if_stale()
 
     def run_rules(
         self,
@@ -133,6 +169,9 @@ class ReviewRuleEngine:
         Returns:
             违规列表（已过滤白名单）
         """
+        # 热更新检查
+        self._check_auto_reload()
+
         all_violations: list[Violation] = []
 
         # 获取规则列表
@@ -198,6 +237,9 @@ class ReviewRuleEngine:
 
     def generate_report(self, violations: list[Violation]) -> str:
         """生成 Markdown 格式审查报告"""
+        # 热更新检查
+        self._check_auto_reload()
+
         if not violations:
             return "# 原理图审查报告\n\n✅ 未发现违规，所有检查项通过。\n"
 
