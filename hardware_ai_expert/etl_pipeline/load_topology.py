@@ -73,8 +73,9 @@ def infer_net_properties(net_name: str) -> dict:
 
 
 class HardwareTopologyDB:
-    def __init__(self, uri, user, password):
+    def __init__(self, uri, user, password, project_id: str = "default"):
         self.driver = GraphDatabase.driver(uri, auth=(user, password))
+        self.project_id = project_id
 
     def close(self):
         self.driver.close()
@@ -100,6 +101,7 @@ class HardwareTopologyDB:
                         "Value": data.get("Value"),
                         "PartType": data.get("PartType"),
                         "RawPartType": data.get("RawPartType"),
+                        "project_id": self.project_id,
                     }
                     for ref, data in batch
                 ]
@@ -109,11 +111,13 @@ class HardwareTopologyDB:
                     ON CREATE SET c.Model = comp.Model,
                                   c.Value = comp.Value,
                                   c.PartType = comp.PartType,
-                                  c.RawPartType = comp.RawPartType
+                                  c.RawPartType = comp.RawPartType,
+                                  c.project_id = comp.project_id
                     ON MATCH SET c.Model = comp.Model,
                                  c.Value = comp.Value,
                                  c.PartType = comp.PartType,
-                                 c.RawPartType = comp.RawPartType
+                                 c.RawPartType = comp.RawPartType,
+                                 c.project_id = comp.project_id
                 """, components=batch_data)
                 processed += len(batch)
                 print(f"  ... 已处理 {processed}/{total}")
@@ -157,11 +161,13 @@ class HardwareTopologyDB:
         // 1. 匹配已经存在的器件节点
         MATCH (c:Component {RefDes: trip.Component_RefDes})
 
-        // 2. 创建或匹配引脚节点 (拼装全局唯一 ID)，写入 Type
+        // 2. 创建或匹配引脚节点 (拼装全局唯一 ID)，写入 Type 和 project_id
         MERGE (p:Pin {Id: trip.Component_RefDes + '_' + trip.Pin_Number})
         ON CREATE SET p.Number = trip.Pin_Number,
-                      p.Type = trip._pin_type
-        ON MATCH SET p.Type = trip._pin_type
+                      p.Type = trip._pin_type,
+                      p.project_id = $project_id
+        ON MATCH SET p.Type = trip._pin_type,
+                     p.project_id = COALESCE(p.project_id, $project_id)
 
         // 3. 建立: 器件 -> 拥有 -> 引脚 的关系
         MERGE (c)-[:HAS_PIN]->(p)
@@ -169,9 +175,11 @@ class HardwareTopologyDB:
         // 4. 创建或匹配网络节点（带属性推断）
         MERGE (n:Net {Name: trip.Net_Name})
         ON CREATE SET n.VoltageLevel = trip._inferred_voltage,
-                      n.NetType = trip._inferred_type
+                      n.NetType = trip._inferred_type,
+                      n.project_id = $project_id
         ON MATCH SET n.VoltageLevel = COALESCE(n.VoltageLevel, trip._inferred_voltage),
-                     n.NetType = COALESCE(n.NetType, trip._inferred_type)
+                     n.NetType = COALESCE(n.NetType, trip._inferred_type),
+                     n.project_id = COALESCE(n.project_id, $project_id)
 
         // 5. 建立: 引脚 -> 连接到 -> 网络 的电气拓扑关系
         MERGE (p)-[:CONNECTS_TO]->(n)
@@ -180,7 +188,7 @@ class HardwareTopologyDB:
         """
 
         with self.driver.session() as session:
-            result = session.run(query, triplets=enriched_triplets)
+            result = session.run(query, triplets=enriched_triplets, project_id=self.project_id)
             record = result.single()
             print(f"Successfully processed {record['processed_pins']} pin connections.")
 
@@ -207,10 +215,17 @@ class HardwareTopologyDB:
 
 
 if __name__ == "__main__":
+    import argparse
     # 从环境变量读取数据库配置
     NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
     NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
     NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
+
+    parser = argparse.ArgumentParser(description="Load hardware topology to Neo4j")
+    parser.add_argument("--project-id", "-p", default="default", help="Project ID for data isolation")
+    parser.add_argument("--project-name", help="Alias for --project-id (deprecated)")
+    args = parser.parse_args()
+    project_id = args.project_name or args.project_id
 
     if not NEO4J_PASSWORD:
         print("Error: NEO4J_PASSWORD not set. Please configure it in .env file.")
@@ -249,8 +264,8 @@ if __name__ == "__main__":
     else:
         print("[Warning] graph_components.json not found, Component nodes won't be updated")
 
-    print("Connecting to Neo4j and initializing topology injection...")
-    db = HardwareTopologyDB(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
+    print(f"Connecting to Neo4j and initializing topology injection (project_id={project_id})...")
+    db = HardwareTopologyDB(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, project_id=project_id)
 
     try:
         db.create_topology_indexes()

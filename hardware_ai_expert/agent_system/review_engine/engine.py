@@ -130,7 +130,7 @@ class ReviewRuleEngine:
         project_id: str = "default",
     ):
         self.driver = neo4j_driver
-        self.context = RuleContext(neo4j_driver=neo4j_driver)
+        self.context = RuleContext(neo4j_driver=neo4j_driver, project_id=project_id)
         self.config_manager = RuleConfigManager()
         self.whitelist = WhitelistManager(neo4j_driver)
         self.auto_reload = auto_reload

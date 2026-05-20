@@ -1738,6 +1738,25 @@ with st.sidebar:
             st.session_state.theme = new_theme
             st.rerun()
 
+    # Project selector
+    st.markdown("---")
+    try:
+        from agent_system.graph_tools import list_projects, set_current_project
+        projects = list_projects()
+        if not projects:
+            projects = ["default"]
+        current_project = st.selectbox(
+            "项目",
+            options=projects,
+            index=projects.index("default") if "default" in projects else 0,
+            key="_project_selector",
+            help="选择当前项目，用于多网表数据隔离",
+        )
+        set_current_project(current_project)
+        st.session_state.current_project = current_project
+    except Exception:
+        pass  # Neo4j may not be available
+
     st.markdown("---")
     render_quick_actions()
 

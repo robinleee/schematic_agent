@@ -20,6 +20,7 @@ from agent_system.schemas import Violation
 class RuleContext:
     """规则执行上下文"""
     neo4j_driver: Any
+    project_id: str = "default"
     # 可选扩展
     # graph_tools: Any = None
     # knowledge_router: Any = None

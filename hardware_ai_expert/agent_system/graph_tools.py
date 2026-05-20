@@ -109,6 +109,29 @@ def list_projects() -> list[str]:
         return []
 
 
+# 默认 project_id，可通过 set_current_project() 切换
+_current_project_id = "default"
+
+
+def set_current_project(project_id: str):
+    """设置当前 project_id，用于多项目数据隔离"""
+    global _current_project_id
+    _current_project_id = project_id
+
+
+def get_current_project() -> str:
+    """获取当前 project_id"""
+    return _current_project_id
+
+
+def list_projects() -> list[str]:
+    """列出 Neo4j 中所有 Project 节点"""
+    try:
+        records = _run_cypher("MATCH (p:Project) RETURN p.id AS id ORDER BY p.id")
+        return [r["id"] for r in records] if records else []
+    except Exception:
+        return []
+
 # ============================================================
 # Tool 1: 查找器件的所有连接网络
 # ============================================================
@@ -529,7 +552,7 @@ def get_power_tree(root_refdes: str = None, voltage: str = None) -> str:
                    count(DISTINCT load) AS load_count
             ORDER BY voltage DESC, power_net
             """
-            params = {"root_refdes": root_refdes}
+            params = {"root_refdes": root_refdes, "project_id": pid}
             records = _run_cypher(query, params)
 
             if not records:
@@ -537,8 +560,8 @@ def get_power_tree(root_refdes: str = None, voltage: str = None) -> str:
 
             # 获取根器件信息
             root_info = _run_cypher(
-                "MATCH (c:Component {RefDes: $refdes}) RETURN c.PartType AS pt, c.Model AS model",
-                {"refdes": root_refdes}
+                "MATCH (c:Component {RefDes: $refdes}) WHERE c.project_id = $project_id OR c.project_id IS NULL RETURN c.PartType AS pt, c.Model AS model",
+                {"refdes": root_refdes, "project_id": pid}
             )
             root_pt = root_info[0]["pt"] if root_info else "Unknown"
             root_model = root_info[0]["model"] if root_info else "Unknown"
@@ -576,13 +599,13 @@ def get_power_tree(root_refdes: str = None, voltage: str = None) -> str:
             # 模式 2: 按电压等级查询
             query = """
             MATCH (c:Component)-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
-            WHERE n.VoltageLevel = $voltage
+            WHERE n.VoltageLevel = $voltage AND (c.project_id = $project_id OR c.project_id IS NULL)
             RETURN n.Name AS net_name,
                    collect(DISTINCT {refdes: c.RefDes, part_type: c.PartType}) AS devices,
                    count(DISTINCT c) AS device_count
             ORDER BY net_name
             """
-            records = _run_cypher(query, {"voltage": voltage})
+            records = _run_cypher(query, {"voltage": voltage, "project_id": pid})
 
             if not records:
                 return f"未找到电压 {voltage} 的电源网络"
@@ -603,9 +626,10 @@ def get_power_tree(root_refdes: str = None, voltage: str = None) -> str:
             # 模式 3: 返回所有电源树概览
             query = """
             MATCH (c:Component)-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
-            WHERE c.PartType IN ['PMIC', 'LDO', 'BUCK']
+            WHERE (c.PartType IN ['PMIC', 'LDO', 'BUCK']
                OR n.Name CONTAINS 'VCC'
-               OR n.Name CONTAINS 'VDD'
+               OR n.Name CONTAINS 'VDD')
+               AND (c.project_id = $project_id OR c.project_id IS NULL)
             RETURN c.PartType AS source_type,
                    c.RefDes AS source_refdes,
                    c.Model AS source_model,
@@ -1189,8 +1213,8 @@ def trace_differential_pair(start_pin_id: str) -> str:
             neg_pin_info = [(r['pin_name'], r['pin_number']) for r in neg_pins if r['refdes'] == ref]
             # 获取器件类型
             comp_records = _run_cypher(
-                "MATCH (c:Component {refdes: $refdes}) RETURN c.part_type AS part_type",
-                {"refdes": ref}
+                "MATCH (c:Component {RefDes: $refdes}) WHERE c.project_id = $project_id OR c.project_id IS NULL RETURN c.PartType AS part_type",
+                {"refdes": ref, "project_id": pid}
             )
             part_type = comp_records[0]['part_type'] if comp_records else 'Unknown'
             shared_components.append({
