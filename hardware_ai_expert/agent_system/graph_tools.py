@@ -454,7 +454,7 @@ def get_graph_summary() -> str:
     """
     try:
         pid = get_current_project()
-        total_nodes = _run_cypher("MATCH (n) RETURN count(n) AS cnt")[0]["cnt"]
+        total_nodes = _run_cypher("MATCH (n) WHERE n.project_id = $project_id OR n.project_id IS NULL RETURN count(n) AS cnt", {"project_id": pid})[0]["cnt"]
         comp_count = _run_cypher("MATCH (c:Component) WHERE c.project_id = $project_id OR c.project_id IS NULL RETURN count(c) AS cnt", {"project_id": pid})[0]["cnt"]
         net_count = _run_cypher("MATCH (n:Net) WHERE n.project_id = $project_id OR n.project_id IS NULL RETURN count(n) AS cnt", {"project_id": pid})[0]["cnt"]
         pin_count = _run_cypher("MATCH (p:Pin) WHERE p.project_id = $project_id OR p.project_id IS NULL RETURN count(p) AS cnt", {"project_id": pid})[0]["cnt"]

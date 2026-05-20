@@ -1324,11 +1324,26 @@ def render_system_status():
     neo4j_online = False
     neo4j_data = {}
     try:
-        from agent_system.graph_tools import _run_cypher
-        neo4j_data["nodes"] = _run_cypher("MATCH (n) RETURN count(n) AS cnt")[0]["cnt"]
-        neo4j_data["rels"] = _run_cypher("MATCH ()-[r]->() RETURN count(r) AS cnt")[0]["cnt"]
-        neo4j_data["components"] = _run_cypher("MATCH (c:Component) RETURN count(c) AS cnt")[0]["cnt"]
-        neo4j_data["nets"] = _run_cypher("MATCH (n:Net) RETURN count(n) AS cnt")[0]["cnt"]
+        from agent_system.graph_tools import _run_cypher, get_current_project
+        pid = get_current_project()
+        # 按 project_id 过滤的查询辅助函数
+        def _pid_where(label=None):
+            """生成 project_id WHERE 子句"""
+            if pid and pid != "default":
+                prefix = f"({label}:" if label else "("
+                return f" WHERE n.project_id = '{pid}'"
+            return ""
+        
+        if pid and pid != "default":
+            neo4j_data["nodes"] = _run_cypher(f"MATCH (n) WHERE n.project_id = $pid RETURN count(n) AS cnt", {"pid": pid})[0]["cnt"]
+            neo4j_data["rels"] = _run_cypher(f"MATCH (n)-[r]->(m) WHERE n.project_id = $pid RETURN count(r) AS cnt", {"pid": pid})[0]["cnt"]
+            neo4j_data["components"] = _run_cypher(f"MATCH (c:Component) WHERE c.project_id = $pid RETURN count(c) AS cnt", {"pid": pid})[0]["cnt"]
+            neo4j_data["nets"] = _run_cypher(f"MATCH (n:Net) WHERE n.project_id = $pid RETURN count(n) AS cnt", {"pid": pid})[0]["cnt"]
+        else:
+            neo4j_data["nodes"] = _run_cypher("MATCH (n) RETURN count(n) AS cnt")[0]["cnt"]
+            neo4j_data["rels"] = _run_cypher("MATCH ()-[r]->() RETURN count(r) AS cnt")[0]["cnt"]
+            neo4j_data["components"] = _run_cypher("MATCH (c:Component) RETURN count(c) AS cnt")[0]["cnt"]
+            neo4j_data["nets"] = _run_cypher("MATCH (n:Net) RETURN count(n) AS cnt")[0]["cnt"]
         neo4j_online = True
     except Exception:
         pass
@@ -1417,9 +1432,15 @@ def render_system_status():
 
         # Component type distribution chart
         try:
-            comp_dist = _run_cypher(
-                "MATCH (c:Component) RETURN c.partType AS pt, count(c) AS cnt ORDER BY cnt DESC LIMIT 10"
-            )
+            if pid and pid != "default":
+                comp_dist = _run_cypher(
+                    "MATCH (c:Component) WHERE c.project_id = $pid RETURN c.partType AS pt, count(c) AS cnt ORDER BY cnt DESC LIMIT 10",
+                    {"pid": pid}
+                )
+            else:
+                comp_dist = _run_cypher(
+                    "MATCH (c:Component) RETURN c.partType AS pt, count(c) AS cnt ORDER BY cnt DESC LIMIT 10"
+                )
             if comp_dist:
                 import pandas as pd
                 df = pd.DataFrame([
