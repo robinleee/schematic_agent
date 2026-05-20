@@ -236,6 +236,37 @@ class MPNDecoder:
             return self._decode_ic_mpn(mpn)
         if mpn.startswith(("USB_TYPEC", "USBC", "USBPCA")):
             return self._decode_ic_mpn(mpn)
+        # 更多 IC 前缀
+        if mpn.startswith(("DP83", "DP8", "DPX")):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("TI_"):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("INDIE_"):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("INFINEON_"):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("NXP_"):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("ONSEMI_"):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("BOSCH_"):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("MARCRONIX_"):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("MAXIM_"):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("MICROCHIP_"):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("MPS_"):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("DDR5_"):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("DUAL_I2C"):
+            return self._decode_ic_mpn(mpn)
+        if mpn.startswith("74"):
+            return self._decode_ic_mpn(mpn)  # 74 series logic
+        if mpn.startswith(("TTL", "NC7")):
+            return self._decode_ic_mpn(mpn)
 
         # 12. FUSE / XFMR / CONNECTOR / MECHANICAL 通用前缀
         if mpn.startswith(("FUSE", "MF-", "MFNS")):

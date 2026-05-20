@@ -1705,6 +1705,11 @@ _etl_page_path = os.path.join(os.path.dirname(__file__), "pages", "etl_import.py
 if os.path.exists(_etl_page_path):
     pages["etl_import"] = st.Page("pages/etl_import.py", title="ETL 导入", icon="🔧")
 
+# 添加图谱可视化页面（如果存在）
+_graph_viz_page_path = os.path.join(os.path.dirname(__file__), "pages", "graph_viz.py")
+if os.path.exists(_graph_viz_page_path):
+    pages["graph_viz"] = st.Page("pages/graph_viz.py", title="图谱可视化", icon="🔗")
+
 # 添加 HITL 审批面板页面（如果存在）
 _hitl_page_path = os.path.join(os.path.dirname(__file__), "pages", "hitl_review.py")
 if os.path.exists(_hitl_page_path):

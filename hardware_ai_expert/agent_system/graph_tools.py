@@ -49,6 +49,13 @@ def _get_driver():
     return GraphDatabase.driver(uri, auth=(user, password))
 
 
+def _is_write_cypher(query: str) -> bool:
+    """判断 Cypher 是否包含写入操作"""
+    # 去掉注释后检测
+    cleaned = re.sub(r'//.*', '', query)
+    return bool(_WRITE_KEYWORDS.search(cleaned))
+
+
 def _run_cypher(query: str, params: dict = None, timeout: int = None) -> list[dict]:
     """执行 Cypher 并返回结果
 
@@ -67,12 +74,8 @@ def _run_cypher(query: str, params: dict = None, timeout: int = None) -> list[di
     timeout = timeout or CYPHER_TIMEOUT_SECONDS
     with driver.session() as session:
         result = session.run(query, params or {})
-        # Neo4j Python driver 4.x+ 支持 consume() 触发超时
-        summary = result.consume()
-        # 重新执行获取数据（consume 消耗了结果）
-    with driver.session() as session:
-        result = session.run(query, params or {})
-        return [dict(record) for record in result]
+        records = [dict(record) for record in result]
+        return records
 
 
 # ============================================================
@@ -238,7 +241,7 @@ def get_power_domain(voltage_level: str = None, detail: bool = False) -> str:
                 WHERE n.VoltageLevel = $voltage_level
                 RETURN n.Name AS net_name,
                        n.VoltageLevel AS voltage,
-                       collect({refdes: c.RefDes, pin: p.Number, part_type: c.PartType}) AS devices
+                       collect({refdes: c.RefDes, pin: p.Number, part_type: c.PartType})[0..50] AS devices
                 ORDER BY n.Name
                 """
             else:
@@ -317,6 +320,7 @@ def get_i2c_devices() -> str:
            c.PartType AS part_type,
            p.Number AS pin_number
     ORDER BY n.Name, c.RefDes
+    LIMIT 200
     """
     try:
         records = _run_cypher(query)
