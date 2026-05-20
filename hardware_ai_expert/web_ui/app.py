@@ -47,7 +47,7 @@ st.set_page_config(
 # ============================================================
 
 if "theme" not in st.session_state:
-    st.session_state.theme = "dark"
+    st.session_state.theme = "light"
 
 # ============================================================
 # CSS 样式 — Global Theme System
