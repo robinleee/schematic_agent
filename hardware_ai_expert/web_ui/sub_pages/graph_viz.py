@@ -23,7 +23,7 @@ MAX_NEIGHBORS = 50
 
 def _safe_id(name: str) -> str:
     """Convert a name to a safe DOT identifier."""
-    return name.replace(" ", "_").replace("-", "_").replace(".", "_").replace("/", "_")
+    return name.replace(" ", "_").replace("-", "_").replace(".", "_").replace("/", "_").replace("+", "_PLUS_")
 
 
 def _build_component_relation_dot(refdes: str, depth: int) -> str:
@@ -195,14 +195,20 @@ def _build_power_tree_dot(voltage: str = None) -> str:
         RETURN c.RefDes AS refdes, c.PartType AS part_type, c.Model AS model
         ORDER BY c.PartType, c.RefDes
         """
+        # Limit sources to avoid generating enormous DOT
+        MAX_SOURCES = 15
         sources = _run_cypher(source_query)
 
         if not sources:
             return None
 
+        total_sources = len(sources)
+        sources = sources[:MAX_SOURCES]
+
         # Add a virtual root for the tree
+        root_label = f"电源树" + (f" (前{MAX_SOURCES}/{total_sources}个)" if total_sources > MAX_SOURCES else "")
         dot_nodes.append(
-            f'    power_root [label="电源树", shape=doubleoctagon, '
+            f'    power_root [label="{root_label}", shape=doubleoctagon, '
             f'style=filled, fillcolor="#4A148C", fontcolor=white, fontsize=14];'
         )
 
@@ -251,6 +257,9 @@ def _build_power_tree_dot(voltage: str = None) -> str:
             # Filter by voltage if specified
             if voltage:
                 output_nets = [n for n in output_nets if n.get("voltage") == voltage]
+
+            # Limit nets per source to keep graph manageable
+            output_nets = output_nets[:8]
 
             for net_info in output_nets:
                 net_name = net_info["net_name"]
@@ -390,7 +399,9 @@ def render_graph_viz():
             help="从起始组件开始，扩展几层邻居关系",
         )
 
-    dot_str = None
+    # Use session_state to persist DOT across reruns (button click triggers rerun)
+    if "_graph_viz_dot" not in st.session_state:
+        st.session_state._graph_viz_dot = None
 
     if viz_type == "组件关系图":
         # Component relation graph
@@ -406,7 +417,6 @@ def render_graph_viz():
             else:
                 with st.spinner("正在查询图谱并生成可视化..."):
                     try:
-                        # Verify component exists
                         check = _run_cypher(
                             "MATCH (c:Component {RefDes: $refdes}) RETURN c.RefDes AS r",
                             {"refdes": refdes.strip()},
@@ -414,13 +424,12 @@ def render_graph_viz():
                         if not check:
                             st.error(f"未找到组件: {refdes.strip()}")
                         else:
-                            dot_str = _build_component_relation_dot(refdes.strip(), depth)
+                            st.session_state._graph_viz_dot = ("component", _build_component_relation_dot(refdes.strip(), depth))
                     except Exception as e:
                         st.error(f"查询失败: {e}")
 
     else:
         # Power tree
-        # Get available voltage levels
         try:
             voltages = _run_cypher("""
                 MATCH (n:Net) WHERE n.VoltageLevel IS NOT NULL
@@ -440,16 +449,19 @@ def render_graph_viz():
         if st.button("⚡ 生成电源树", type="primary"):
             with st.spinner("正在查询电源树并生成可视化..."):
                 voltage_filter = None if selected_voltage == "全部" else selected_voltage
-                dot_str = _build_power_tree_dot(voltage_filter)
-                if dot_str is None:
+                dot_result = _build_power_tree_dot(voltage_filter)
+                if dot_result is None:
                     st.warning("未找到电源器件或电源网络数据")
+                else:
+                    st.session_state._graph_viz_dot = ("power", dot_result)
 
-    # Render graph
-    if dot_str:
+    # Render graph from session state
+    if st.session_state._graph_viz_dot is not None:
+        saved_type, dot_str = st.session_state._graph_viz_dot
         st.markdown("### 可视化结果")
 
         # Legend
-        if viz_type == "组件关系图":
+        if saved_type == "component":
             st.markdown("""
             <div style='display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;'>
                 <span style='display:inline-flex;align-items:center;gap:4px;'>
@@ -496,12 +508,30 @@ def render_graph_viz():
             </div>
             """, unsafe_allow_html=True)
 
+        # For large DOT (>10KB), use server-side PNG rendering
+        # viz.js frontend can choke on large graphs
         try:
-            st.graphviz_chart(dot_str, use_container_width=True)
+            if len(dot_str) > 10000:
+                import graphviz as gv
+                import tempfile
+                src = gv.Source(dot_str)
+                tmp_dir = tempfile.mkdtemp()
+                out_path = src.render(format='png', directory=tmp_dir)
+                st.image(out_path, use_container_width=True)
+                # Cleanup
+                try:
+                    import os
+                    os.remove(out_path)
+                    for f in os.listdir(tmp_dir):
+                        os.remove(os.path.join(tmp_dir, f))
+                    os.rmdir(tmp_dir)
+                except Exception:
+                    pass
+            else:
+                st.graphviz_chart(dot_str, use_container_width=True)
         except Exception as e:
             st.error(f"图表渲染失败: {e}")
             with st.expander("查看 DOT 源码"):
                 st.code(dot_str, language="dot")
 
 
-render_graph_viz()

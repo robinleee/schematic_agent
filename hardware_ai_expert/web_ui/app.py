@@ -1716,25 +1716,25 @@ pages = {
     "status": st.Page(render_system_status, title="系统状态", icon="📊"),
 }
 
-# 添加知识库管理页面（如果存在）
-_kb_page_path = os.path.join(os.path.dirname(__file__), "pages", "knowledge_base.py")
-if os.path.exists(_kb_page_path):
-    pages["knowledge_base"] = st.Page("pages/knowledge_base.py", title="知识库管理", icon="📚")
+# 函数式注册子页面（显式指定 url_path 避免冲突）
+try:
+    from sub_pages.knowledge_base import main as render_knowledge_base
+    pages["knowledge_base"] = st.Page(render_knowledge_base, title="知识库管理", icon="📚", url_path="knowledge_base")
+except Exception as _e:
+    pass
 
-# 添加 ETL 导入页面（如果存在）
-_etl_page_path = os.path.join(os.path.dirname(__file__), "pages", "etl_import.py")
-if os.path.exists(_etl_page_path):
-    pages["etl_import"] = st.Page("pages/etl_import.py", title="ETL 导入", icon="🔧")
+try:
+    from sub_pages.etl_import import main as render_etl_import
+    pages["etl_import"] = st.Page(render_etl_import, title="ETL 导入", icon="🔧", url_path="etl_import")
+except Exception as _e:
+    pass
 
-# 添加图谱可视化页面（如果存在）
-_graph_viz_page_path = os.path.join(os.path.dirname(__file__), "pages", "graph_viz.py")
-if os.path.exists(_graph_viz_page_path):
-    pages["graph_viz"] = st.Page("pages/graph_viz.py", title="图谱可视化", icon="🔗")
+try:
+    from sub_pages.graph_viz import render_graph_viz
+    pages["graph_viz"] = st.Page(render_graph_viz, title="图谱可视化", icon="🔗", url_path="graph_viz")
+except Exception as _e:
+    pass
 
-# 添加 HITL 审批面板页面（如果存在）
-_hitl_page_path = os.path.join(os.path.dirname(__file__), "pages", "hitl_review.py")
-if os.path.exists(_hitl_page_path):
-    pages["hitl_review"] = st.Page("pages/hitl_review.py", title="HITL 审批面板", icon="✅")
 
 # 设置导航
 pg = st.navigation(list(pages.values()), position="sidebar")

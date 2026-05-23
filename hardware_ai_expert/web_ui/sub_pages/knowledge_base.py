@@ -763,5 +763,3 @@ def main():
         render_datasheet_upload()
 
 
-if __name__ == "__main__":
-    main()

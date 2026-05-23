@@ -112,12 +112,7 @@ def _get_whitelist_manager() -> WhitelistManager:
 # 页面主体
 # ============================================================
 
-st.set_page_config(
-    page_title="HITL 审批面板",
-    page_icon="✅",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
+# set_page_config removed — in st.navigation mode, only main app sets page config
 
 # 主题 CSS（与主 app.py 暗色主题一致）
 st.markdown("""
