@@ -1063,6 +1063,59 @@ def render_review_report():
     col3.metric("🟠 WARNING", warn_count)
     col4.metric("🔵 INFO", info_count)
 
+    # ============================================================
+    # 规则摘要表格 — 一眼看清每条规则
+    # ============================================================
+    RULE_DESCRIPTIONS = {
+        "I2C_STD_PULLUP": "I2C 总线缺少上拉电阻",
+        "OPENDRAIN_PULLUP": "开漏输出缺少上拉电阻",
+        "POWER_3V3_DECAP": "3.3V 电源去耦电容不足",
+        "POWER_1V8_DECAP": "1.8V 电源去耦电容不足",
+        "POWER_5V0_DECAP": "5.0V 电源去耦电容不足",
+        "EXTERNAL_IO_ESD": "外部接口缺少 ESD 保护",
+        "NC_FLOATING_CHECK": "未连接引脚浮空",
+        "AMR_RESISTOR_POWER": "电阻功率降额超标",
+        "AMR_CAP_VOLTAGE": "电容耐压降额超标",
+        "USB_ESD_PROTECTION": "USB 接口缺少 ESD 保护",
+        "ETHERNET_ESD_PROTECTION": "以太网接口缺少 ESD 保护",
+    }
+
+    rule_summary = {}
+    for v in violations:
+        rid = v.get("rule_id", "Unknown")
+        if rid not in rule_summary:
+            rule_summary[rid] = {"total": 0, "ERROR": 0, "WARNING": 0, "INFO": 0, "name": v.get("rule_name", rid)}
+        rule_summary[rid]["total"] += 1
+        sev = v.get("severity", "INFO")
+        rule_summary[rid][sev] = rule_summary[rid].get(sev, 0) + 1
+
+    st.markdown("#### 📊 规则违规摘要")
+    summary_rows = []
+    for rid, info in sorted(rule_summary.items(), key=lambda x: -x[1]["total"]):
+        desc = RULE_DESCRIPTIONS.get(rid, "")
+        summary_rows.append({
+            "规则": rid,
+            "说明": desc or info["name"],
+            "总计": info["total"],
+            "🔴": info.get("ERROR", 0),
+            "🟠": info.get("WARNING", 0),
+            "🔵": info.get("INFO", 0),
+        })
+    if summary_rows:
+        import pandas as pd
+        summary_df = pd.DataFrame(summary_rows)
+        st.dataframe(
+            summary_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "总计": st.column_config.ProgressColumn(min_value=0, max_value=max(r["总计"] for r in summary_rows)),
+                "🔴": st.column_config.NumberColumn(format="%d"),
+                "🟠": st.column_config.NumberColumn(format="%d"),
+                "🔵": st.column_config.NumberColumn(format="%d"),
+            },
+        )
+
     st.divider()
 
     if not violations:
@@ -1191,14 +1244,31 @@ def render_review_report():
     # 导出按钮
     # ============================================================
     st.divider()
-    if st.button("📥 导出报告为 Markdown"):
-        report_md = _generate_markdown_report(result)
-        st.download_button(
-            label="下载报告",
-            data=report_md,
-            file_name=f"review_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
-            mime="text/markdown",
-        )
+    exp_col1, exp_col2 = st.columns(2)
+    with exp_col1:
+        if st.button("📥 导出报告为 Markdown"):
+            report_md = _generate_markdown_report(result)
+            st.download_button(
+                label="下载报告",
+                data=report_md,
+                file_name=f"review_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                mime="text/markdown",
+            )
+    with exp_col2:
+        if st.button("☁️ 上传报告到 BOS"):
+            report_md = _generate_markdown_report(result)
+            try:
+                from agent_system.bos_upload import upload_to_bos
+                url = upload_to_bos(
+                    content=report_md,
+                    file_name=f"review_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                )
+                st.success(f"已上传到 BOS")
+                st.code(url, language=None)
+            except ImportError:
+                st.warning("BOS 上传功能未配置，仅支持本地下载")
+            except Exception as e:
+                st.error(f"上传失败: {e}")
 
 # ============================================================
 # 页面 3: HITL 审批
@@ -1233,6 +1303,33 @@ def render_hitl():
         if not pending:
             st.info("没有待审批项")
         else:
+            # 批量操作栏
+            batch_col1, batch_col2, batch_col3 = st.columns([2, 2, 3])
+            with batch_col1:
+                if st.button("✅ 全部批准（仅 WARNING/INFO）", use_container_width=True, disabled=not any(pr.severity != "ERROR" for pr in pending)):
+                    batch_approved = 0
+                    for pr in pending:
+                        if pr.severity != "ERROR":
+                            manager.approve(pr.review_id, reviewer="engineer", comment="批量审批-确认")
+                            batch_approved += 1
+                    if batch_approved > 0:
+                        st.success(f"已批量批准 {batch_approved} 条 WARNING/INFO 项")
+                        st.rerun()
+            with batch_col2:
+                if st.button("❌ 全部拒绝（仅 INFO）", use_container_width=True, disabled=not any(pr.severity == "INFO" for pr in pending)):
+                    batch_rejected = 0
+                    for pr in pending:
+                        if pr.severity == "INFO":
+                            manager.reject(pr.review_id, reviewer="engineer", comment="批量拒绝-误报")
+                            batch_rejected += 1
+                    if batch_rejected > 0:
+                        st.warning(f"已批量拒绝 {batch_rejected} 条 INFO 项")
+                        st.rerun()
+            with batch_col3:
+                st.caption(f"共 {len(pending)} 条待审批")
+
+            st.divider()
+
             for pr in pending:
                 sev_class = {"ERROR": "severity-ERROR", "WARNING": "severity-WARNING", "INFO": "severity-INFO"}.get(pr.severity, "")
                 with st.container():
