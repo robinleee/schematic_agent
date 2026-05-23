@@ -325,53 +325,69 @@ class MPNDecoder:
             mpn=mpn,
         )
 
-        # 尺寸码 (2 digits after GRM)
-        m = re.match(r"^GRM(\d{2})(\d)", mpn)
-        if m:
-            size_code = m.group(1)
-            pkg = PACKAGE_CODES.get(size_code, {})
-            result.package = pkg.get("imperial", f"size_{size_code}")
+        # Murata MLCC 格式: GRM + size(2) + thickness(1) + temp(2) + voltage(1~2) + cap(3~4) + tol(1) + pkg
+        # 例: GRM155R71C104KA88D
+        #     GRM 15 5 R7 1C 104 K A88D
+        # 例: GRM188R71C104KA01D
+        #     GRM 18 8 R7 1C 104 K A01D
+        m = re.match(r"^GRM(\d{2})([A-Z0-9])(.+)$", mpn)
+        if not m:
+            result.confidence = 0.1
+            return result
 
-        # 温度特性
+        size_code = m.group(1)
+        # thickness_code = m.group(2)  # 不常用，跳过
+        body = m.group(3)  # temp + voltage + cap + tol + pkg
+
+        pkg = PACKAGE_CODES.get(size_code, {})
+        result.package = pkg.get("imperial", f"size_{size_code}")
+
+        # 温度特性 (2 chars)
         temp_map = {
             "R7": "X7R", "5C": "C0G", "1C": "X7S", "R6": "X5R",
             "2E": "X7T", "3U": "Y5V", "6S": "X6S", "7U": "X7R",
             "B7": "X7R", "7R": "X7R", "F5": "X5R",
         }
-        # 在 MPN 中找温度特性码
-        for code, temp in temp_map.items():
-            if code in mpn[6:10] if len(mpn) > 10 else "":
-                result.temp_characteristic = temp
-                tc_info = TEMP_CHARACTERISTICS.get(temp, {})
-                result.temp_class = tc_info.get("class")
-                break
+        temp_code = body[:2]
+        if temp_code in temp_map:
+            result.temp_characteristic = temp_map[temp_code]
+            tc_info = TEMP_CHARACTERISTICS.get(result.temp_characteristic, {})
+            result.temp_class = tc_info.get("class")
+            remaining = body[2:]
+        else:
+            remaining = body
 
-        # 电压码（温度特性之后 1-2 字符）
-        # 典型格式: GRM155R71C... → R7=温度, 1C=16V
+        # 电压码 (1~2 chars)，在温度码之后、容值码之前
         voltage_map_murata = {
             "0G": "4V", "0J": "6.3V", "1A": "10V", "1C": "16V",
-            "1E": "25V", "1H": "50V", "2A": "100V",
+            "1E": "25V", "1H": "50V", "2A": "100V", "0K": "16V",
+            "2C": "160V",
         }
-        for code, volt in voltage_map_murata.items():
-            if code in mpn[6:12]:
-                result.voltage_rating = volt
-                result.voltage_rating_v = _parse_voltage(volt)
-                break
+        # 先尝试 2 字符电压码
+        if len(remaining) >= 2 and remaining[:2] in voltage_map_murata:
+            result.voltage_rating = voltage_map_murata[remaining[:2]]
+            result.voltage_rating_v = _parse_voltage(result.voltage_rating)
+            remaining = remaining[2:]
+        elif len(remaining) >= 1 and remaining[:1] in {"C": "16V", "E": "25V", "J": "6.3V", "A": "10V", "H": "50V"}:
+            # 单字母 fallback
+            v_map_single = {"C": "16V", "E": "25V", "J": "6.3V", "A": "10V", "H": "50V"}
+            result.voltage_rating = v_map_single[remaining[:1]]
+            result.voltage_rating_v = _parse_voltage(result.voltage_rating)
+            remaining = remaining[1:]
 
-        # 容值码（3-4 位数字）
-        cap_match = re.search(r"(?<![A-Z])(\d{3,4})(?=[A-Z])", mpn)
+        # 容值码 (3~4 位数字)
+        cap_match = re.match(r"(\d{3,4})", remaining)
         if cap_match:
             cap_str = decode_capacitance_code(cap_match.group(1))
             if cap_str:
                 result.capacitance = cap_str
                 result.capacitance_pf = _cap_str_to_pf(cap_str)
+            remaining = remaining[cap_match.end():]
 
-        # 精度码
-        tol_map = {"K": "±10%", "M": "±20%", "J": "±5%", "B": "±0.1pF", "C": "±0.25pF", "D": "±0.5pF", "F": "±1%", "G": "±2%"}
-        # 找容值码后面紧跟的字母
-        if cap_match:
-            after = mpn[cap_match.end():cap_match.end()+1]
-            result.tolerance = tol_map.get(after)
+            # 精度码（容值后第 1 个字母）
+            tol_map = {"K": "±10%", "M": "±20%", "J": "±5%", "B": "±0.1pF", "C": "±0.25pF", "D": "±0.5pF", "F": "±1%", "G": "±2%"}
+            if remaining and remaining[0] in tol_map:
+                result.tolerance = tol_map[remaining[0]]
 
         result.confidence = 0.7 if result.capacitance else 0.3
         if result.voltage_rating:
@@ -397,34 +413,46 @@ class MPNDecoder:
             mpn=mpn,
         )
 
-        # 尺寸
+        # Samsung MLCC 格式: CL + size(2) + thickness(1) + cap(3) + tol(1) + voltage(1) + ...
+        # 例: CL05B104KO5NNNC
+        #     CL 05 B 104 K O 5NNNC
+        # 例: CL05B103KB5NNNC
+        #     CL 05 B 103 K B 5NNNC
         size_map = {"03": "0201", "05": "0402", "10": "0603", "21": "0805", "31": "1206", "42": "1210"}
         if len(mpn) >= 4:
             result.package = size_map.get(mpn[2:4])
 
-        # 容值
-        cap_match = re.search(r"(?<![A-Z])(\d{3})(?=[A-Z])", mpn)
-        if cap_match:
-            cap_str = decode_capacitance_code(cap_match.group(1))
-            if cap_str:
-                result.capacitance = cap_str
-                result.capacitance_pf = _cap_str_to_pf(cap_str)
+        # 定位容值码: 在 size(2) + thickness(1) 之后，即位置 5 开始
+        if len(mpn) >= 8:
+            # 从位置 5 开始找 3 位数字
+            cap_match = re.match(r"(\d{3})", mpn[5:])
+            if cap_match:
+                cap_str = decode_capacitance_code(cap_match.group(1))
+                if cap_str:
+                    result.capacitance = cap_str
+                    result.capacitance_pf = _cap_str_to_pf(cap_str)
 
-        # 精度
-        if cap_match and cap_match.end() < len(mpn):
-            tol_map = {"K": "±10%", "M": "±20%", "J": "±5%", "B": "±0.1pF"}
-            result.tolerance = tol_map.get(mpn[cap_match.end()])
+                # 精度码: 容值后第 1 个字符
+                tol_pos = 5 + cap_match.end()
+                if tol_pos < len(mpn):
+                    tol_map = {"K": "±10%", "M": "±20%", "J": "±5%", "B": "±0.1pF"}
+                    result.tolerance = tol_map.get(mpn[tol_pos])
 
-        # 电压
-        v_map = {"3": "2.5V", "5": "6.3V", "6": "10V", "7": "16V", "8": "25V", "9": "50V", "A": "100V", "O": "16V", "E": "25V"}
-        # 电压码在精度码之后
-        if cap_match and cap_match.end() + 1 < len(mpn):
-            v_char = mpn[cap_match.end() + 1]
-            result.voltage_rating = v_map.get(v_char)
-            if result.voltage_rating:
-                result.voltage_rating_v = _parse_voltage(result.voltage_rating)
+                # 电压码: 精度码后第 1 个字符
+                v_pos = tol_pos + 1
+                if v_pos < len(mpn):
+                    v_map = {
+                        "3": "2.5V", "5": "6.3V", "6": "10V", "7": "16V",
+                        "8": "25V", "9": "50V", "A": "100V", "O": "16V",
+                        "E": "25V", "B": "4V", "D": "2V", "V": "35V",
+                    }
+                    result.voltage_rating = v_map.get(mpn[v_pos])
+                    if result.voltage_rating:
+                        result.voltage_rating_v = _parse_voltage(result.voltage_rating)
 
-        result.confidence = 0.7 if result.capacitance else 0.3
+        result.confidence = 0.8 if result.capacitance and result.voltage_rating else (0.7 if result.capacitance else 0.3)
+        if result.temp_characteristic:
+            result.confidence = min(1.0, result.confidence + 0.1)
         return result
 
     # --------------------------------------------------------
@@ -443,35 +471,110 @@ class MPNDecoder:
             mpn=mpn,
         )
 
-        # 尺寸 (metric)
-        metric_map = {"1005": "0402", "1608": "0603", "2012": "0805", "3216": "1206", "3225": "1210"}
-        if len(mpn) >= 5:
-            result.package = metric_map.get(mpn[1:5])
+        # TDK MLCC 格式 (两种常见):
+        # 标准: C + metric_size(4) + temp(2~3) + voltage(1~2) + cap(3~4) + tol(1) + pkg
+        #   例: C1005X5R1C104K050BC → C 1005 X5R 1C 104 K 050BC
+        # 简化: C + imperial_size(4) + dielectric(1) + cap(3) + tol(1) + voltage(1~2) + pkg
+        #   例: C0402C104K5RACTU → C 0402 C 104 K 5R ACTU
+        #       或: C 0402 C104K 5R ACTU (C=capacitor designation)
 
-        # 温度特性
+        # 尺寸 (metric 或 imperial)
+        metric_map = {"1005": "0402", "1608": "0603", "2012": "0805", "3216": "1206", "3225": "1210"}
+        imperial_map = {"0402": "0402", "0603": "0603", "0805": "0805", "1206": "1206"}
+        if len(mpn) >= 5:
+            size4 = mpn[1:5]
+            if size4 in metric_map:
+                result.package = metric_map[size4]
+                remaining = mpn[5:]
+            elif size4 in imperial_map:
+                result.package = imperial_map[size4]
+                remaining = mpn[5:]
+            else:
+                remaining = mpn[1:]
+        else:
+            remaining = mpn[1:]
+
+        # 温度特性 (X5R, X7R, C0G, X7S, X6S, Y5V, X7T)
+        temp_found = False
         for temp in ["C0G", "X7R", "X5R", "X7S", "X6S", "Y5V", "X7T"]:
-            if temp in mpn:
+            if remaining.startswith(temp):
                 result.temp_characteristic = temp
                 tc_info = TEMP_CHARACTERISTICS.get(temp, {})
                 result.temp_class = tc_info.get("class")
+                remaining = remaining[len(temp):]
+                temp_found = True
                 break
 
-        # 电压
-        for code, volt in VOLTAGE_CODES_MURATA.items():
-            if code in mpn:
-                result.voltage_rating = volt
-                result.voltage_rating_v = _parse_voltage(volt)
-                break
+        # 如果没有标准温度码，可能是简化格式（如 C0402C104K5RACTU 中 C 是介质码）
+        # 跳过单个字母的介质码
+        if not temp_found and remaining and remaining[0].isalpha():
+            # 介质码映射: C=X7R, B=X7R, R=X7R, F=C0G 等
+            dielectric_map = {"C": "X7R", "B": "X7R", "R": "X7R", "F": "C0G", "A": "C0G"}
+            if remaining[0] in dielectric_map:
+                result.temp_characteristic = dielectric_map[remaining[0]]
+                tc_info = TEMP_CHARACTERISTICS.get(result.temp_characteristic, {})
+                result.temp_class = tc_info.get("class")
+                remaining = remaining[1:]
 
-        # 容值
-        cap_match = re.search(r"(?<![A-Z])(\d{3,4})(?=[A-Z0-9])", mpn)
+        # 电压码 (1~2 chars)
+        voltage_map_tdk = {
+            "0G": "4V", "0J": "6.3V", "1A": "10V", "1C": "16V",
+            "1E": "25V", "1H": "50V", "2A": "100V", "2C": "160V",
+        }
+        if len(remaining) >= 2 and remaining[:2] in voltage_map_tdk:
+            result.voltage_rating = voltage_map_tdk[remaining[:2]]
+            result.voltage_rating_v = _parse_voltage(result.voltage_rating)
+            remaining = remaining[2:]
+        elif remaining and remaining[0].isdigit():
+            # 简化电压码: 5=6.3V, 6=10V, 7=16V, 8=25V, 9=50V
+            # 但也可能是容值的开头，需判断
+            v_map_digit = {"5": "6.3V", "6": "10V", "7": "16V", "8": "25V", "9": "50V"}
+            # 只有当下一个字符是字母（如 5R）时才是电压码
+            if len(remaining) >= 2 and remaining[1].isalpha() and remaining[0] in v_map_digit:
+                result.voltage_rating = v_map_digit[remaining[0]]
+                result.voltage_rating_v = _parse_voltage(result.voltage_rating)
+                remaining = remaining[1:]
+                # 跳过电压码后跟的字母（如 5R 中的 R）
+                while remaining and remaining[0].isalpha():
+                    remaining = remaining[1:]
+
+        # 容值码 (3~4 位数字)
+        cap_match = re.match(r"(\d{3,4})", remaining)
         if cap_match:
             cap_str = decode_capacitance_code(cap_match.group(1))
             if cap_str:
                 result.capacitance = cap_str
                 result.capacitance_pf = _cap_str_to_pf(cap_str)
+            remaining = remaining[cap_match.end():]
 
-        result.confidence = 0.7 if result.capacitance else 0.3
+            # 精度码
+            tol_map = {"K": "±10%", "M": "±20%", "J": "±5%", "B": "±0.1pF", "C": "±0.25pF"}
+            if remaining and remaining[0] in tol_map:
+                result.tolerance = tol_map[remaining[0]]
+                remaining = remaining[1:]
+
+        # 电压码后置解析 (TDK 简化格式: 容值+精度后跟电压码)
+        # 例: C0402C104K5RACTU → 5R 在 K 之后
+        if not result.voltage_rating and remaining:
+            # 尝试匹配: 数字+字母 组合的电压码 (如 5R=5V, 1C=16V, 1E=25V)
+            v_match = re.match(r"(\d[A-Z]|[0-9]{2}[A-Z]?)", remaining)
+            if v_match:
+                v_code = v_match.group(1)
+                if v_code in voltage_map_tdk:
+                    result.voltage_rating = voltage_map_tdk[v_code]
+                    result.voltage_rating_v = _parse_voltage(result.voltage_rating)
+                else:
+                    # 单数字电压码: 5→6.3V, 6→10V, 7→16V, 8→25V, 9→50V
+                    v_digit_map = {"5": "6.3V", "6": "10V", "7": "16V", "8": "25V", "9": "50V", "1": "10V", "2": "100V"}
+                    first_char = v_code[0]
+                    if first_char in v_digit_map:
+                        result.voltage_rating = v_digit_map[first_char]
+                        result.voltage_rating_v = _parse_voltage(result.voltage_rating)
+                        result.notes = f"Voltage inferred from code '{v_code}' - verify with datasheet"
+
+        result.confidence = 0.8 if result.capacitance and result.voltage_rating else (0.7 if result.capacitance else 0.3)
+        if result.temp_characteristic:
+            result.confidence = min(1.0, result.confidence + 0.1)
         return result
 
     # --------------------------------------------------------

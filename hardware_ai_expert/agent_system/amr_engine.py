@@ -462,6 +462,35 @@ class VoltageLevelExtractor:
 # 器件参数解析
 # ============================================================
 
+def _parse_capacitance_to_pf(value_str: str) -> Optional[float]:
+    """解析电容值字符串 → pF。支持 0.1uF, 100nF, 10pF, 22 UF 等格式"""
+    if not value_str:
+        return None
+    value_str = str(value_str).strip().upper()
+    # 去掉 DNP 前缀
+    if 'DNP' in value_str:
+        value_str = value_str.replace('DNP', '').replace('DNI', '').strip('_ ')
+    if not value_str:
+        return None
+    try:
+        m = re.match(r'([\d.]+)\s*(PF|NF|UF|MF|F|P|N|U|M)?', value_str)
+        if not m:
+            return None
+        num = float(m.group(1))
+        unit = (m.group(2) or 'UF').replace('F', '')  # 去掉 F 后缀
+        if unit in ('P', ''):
+            return num  # pF
+        elif unit == 'N':
+            return num * 1000
+        elif unit == 'U':
+            return num * 1_000_000
+        elif unit == 'M':
+            return num * 1_000_000_000
+        return None
+    except (ValueError, TypeError):
+        return None
+
+
 def parse_resistance(value_str: str) -> Optional[float]:
     """解析电阻值 → 欧姆"""
     if not value_str:
@@ -537,11 +566,63 @@ class AMRDataSource:
     """
     AMR 数据源接口
 
-    支持三种数据源（优先级从高到低）：
+    支持四种数据源（优先级从高到低）：
+    0. 封装+容值经验表：根据封装尺寸和容值推断耐压（最可靠，覆盖最广）
     1. FileBasedAMRSource: 从 amr_data.yaml 读取工程师审批后的参数
     2. KnowledgeRouter (ChromaDB): 从语义索引的 datasheet 知识库查询
     3. GraphRAGBridge (Neo4j): 从图关联的 VectorChunk 查询
     """
+
+    # 封装+容值 → 典型耐压经验表 (MLCC)
+    # 基于主流厂商规格书：0402 1uF=6.3V, 0402 0.1uF=16V, 0603 10uF=10V 等
+    _PACKAGE_VOLTAGE_TABLE = {
+        # (package, cap_pf_range) → voltage_V
+        # 0201
+        ('0201', 0, 10): 25.0,       # <10pF → 25V
+        ('0201', 10, 1000): 16.0,    # 10pF-1nF → 16V
+        ('0201', 1000, 100000): 10.0, # 1nF-100nF → 10V
+        ('0201', 100000, 1000001): 6.3, # 100nF-1uF → 6.3V
+        # 0402
+        ('0402', 0, 10): 50.0,
+        ('0402', 10, 1000): 25.0,
+        ('0402', 1000, 10000): 16.0,     # 1nF-10nF → 16V
+        ('0402', 10000, 100000): 16.0,   # 10nF-100nF → 16V
+        ('0402', 100000, 1000000): 10.0, # 100nF-1uF → 10V (X7R)
+        ('0402', 1000000, 2200000): 6.3, # 1uF-2.2uF → 6.3V
+        ('0402', 2200000, 4700000): 6.3, # 2.2uF-4.7uF → 6.3V (X5R)
+        ('0402', 4700000, 10000001): 4.0, # 4.7uF-10uF → 4V (X5R)
+        # 0603
+        ('0603', 0, 1000): 50.0,
+        ('0603', 1000, 10000): 25.0,
+        ('0603', 10000, 100000): 16.0,
+        ('0603', 100000, 1000000): 16.0,
+        ('0603', 1000000, 10000000): 10.0,  # 1uF-10uF → 10V
+        ('0603', 10000000, 50000000): 6.3,  # 10uF-50uF → 6.3V
+        # 0805
+        ('0805', 0, 1000): 50.0,
+        ('0805', 1000, 100000): 25.0,
+        ('0805', 100000, 1000000): 16.0,
+        ('0805', 1000000, 10000000): 10.0,
+        ('0805', 10000000, 100000000): 6.3, # 10uF-100uF → 6.3V
+        # 1206
+        ('1206', 0, 1000): 50.0,
+        ('1206', 1000, 100000): 25.0,
+        ('1206', 100000, 1000000): 16.0,
+        ('1206', 1000000, 10000000): 10.0,
+        ('1206', 10000000, 100000001): 10.0, # 10uF-100uF → 10V
+        # 1210
+        ('1210', 0, 100000): 25.0,
+        ('1210', 100000, 1000000): 16.0,
+        ('1210', 1000000, 10000000): 10.0,
+        ('1210', 10000000, 100000001): 10.0,
+        # 钽电容/电解电容封装 (C7343=D, SMC3018=E, C4141, SMC2626, SMC4141)
+        # 这些封装大容值大，电压通常 6.3-25V，按容值粗分
+        ('7343', 0, 100000001): 10.0,   # D case 钽电容
+        ('3018', 0, 100000001): 10.0,   # E case
+        ('4141', 0, 100000001): 10.0,   # 大封装
+        ('2626', 0, 100000001): 10.0,   # SMC2626
+        ('3333', 0, 100000001): 10.0,   # C3333
+    }
 
     def __init__(self):
         self._file_source = None
@@ -567,19 +648,24 @@ class AMRDataSource:
 
     def get_capacitor_voltage_rating(self, refdes: str, model: str, value: str) -> Optional[float]:
         """获取电容耐压值 (V)。优先从审批后的 Datasheet 数据读取"""
-        # 1. 尝试 FileBasedAMRSource
+        # 1. 尝试 FileBasedAMRSource (amr_data.yaml 精确匹配)
         if self._file_source:
             result = self._file_source.get_capacitor_voltage_rating(refdes, model, value)
             if result is not None:
                 return result
 
-        # 2. 尝试 KnowledgeRouter (ChromaDB semantic search)
+        # 2. 封装+容值经验表 fallback
+        result = self._infer_voltage_from_package_value(model, value)
+        if result is not None:
+            return result
+
+        # 3. 尝试 KnowledgeRouter (ChromaDB semantic search)
         if self._router:
             result = self._query_kb_voltage_rating(model)
             if result is not None:
                 return result
 
-        # 3. 尝试 GraphRAGBridge (Neo4j VectorChunk)
+        # 4. 尝试 GraphRAGBridge (Neo4j VectorChunk)
         if self._bridge:
             result = self._query_graph_rag_voltage(model)
             if result is not None:
@@ -645,6 +731,39 @@ class AMRDataSource:
                     return voltage
         except Exception as e:
             logging.debug(f"GraphRAG voltage query failed for {model}: {e}")
+        return None
+
+    @staticmethod
+    def _infer_voltage_from_package_value(model: str, value: str) -> Optional[float]:
+        """根据封装尺寸和容值推断电容耐压 (MLCC 经验表)"""
+        # 提取封装
+        package = None
+        pkg_patterns = [
+            (r'C(0201|0402|0603|0805|1206|1210|1808|1812|7343|4141|3333)', 1),
+            (r'SMC(0402|0603|0805|1206|1210|3018|2626|4141)', 1),
+            (r'SMX(0402[AC]?|0603|0805)', 1),
+            (r'SM(0402|0603|0805|1206)', 1),
+            (r'_(0201|0402|0603|0805|1206|1210)_', 1),
+        ]
+        for pattern, grp in pkg_patterns:
+            m = re.search(pattern, model, re.IGNORECASE)
+            if m:
+                package = m.group(grp)
+                break
+
+        if not package:
+            return None
+
+        # 解析容值到 pF
+        cap_pf = _parse_capacitance_to_pf(value)
+        if cap_pf is None or cap_pf <= 0:
+            return None
+
+        # 查表
+        for (pkg, lo, hi), voltage in AMRDataSource._PACKAGE_VOLTAGE_TABLE.items():
+            if pkg == package and lo <= cap_pf < hi:
+                return voltage
+
         return None
 
     @staticmethod
@@ -956,7 +1075,7 @@ class AMREngine:
             elif "缺少 AMR" in result.detail:
                 skipped_cap += 1
 
-        print(f"  检查: {checked_cap}, 跳过(缺AMR数据): {skipped_cap}")
+        print(f"  检查: {checked_cap}, 通过: {checked_cap - sum(1 for v in self.violations if v.rule_id == 'amr_capacitor_voltage_derating') - skipped_cap}, 违规: {sum(1 for v in self.violations if v.rule_id == 'amr_capacitor_voltage_derating')}, 跳过(缺AMR数据): {skipped_cap}")
 
         print(f"\n{'='*60}")
         print(f" AMR 检查完成: {len(self.violations)} 个违规")

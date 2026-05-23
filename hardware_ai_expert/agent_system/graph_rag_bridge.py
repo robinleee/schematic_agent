@@ -182,6 +182,7 @@ class GraphRAGBridge:
         策略：
         1. refdes 优先：从 Component 出发 → [:DESCRIBES] → VectorChunk → 向量过滤
         2. mpn 次之：向量检索所有 VectorChunk → 图谱增强
+        3. Fallback: ChromaDB hardware_knowledge 向量检索
         """
         results = []
 
@@ -190,6 +191,10 @@ class GraphRAGBridge:
 
         if not results and mpn:
             results = self._vector_search_with_graph(mpn, query, n_results)
+
+        # Fallback: ChromaDB hardware_knowledge
+        if not results:
+            results = self._chromadb_fallback(mpn, query, n_results)
 
         return results
 
@@ -280,6 +285,49 @@ class GraphRAGBridge:
 
         except Exception as e:
             logger.error(f"Vector search with graph failed: {e}")
+            return []
+
+    def _chromadb_fallback(self, mpn: str, query: str, n: int) -> list[GraphRAGResult]:
+        """Fallback: ChromaDB hardware_knowledge 向量检索"""
+        try:
+            import chromadb
+            from agent_system.knowledge_router import _get_chroma_client
+
+            client = _get_chroma_client()
+            coll = client.get_collection("hardware_knowledge")
+
+            # Enhance query with MPN for cross-language matching
+            enhanced_query = f"{mpn} {query}" if mpn else query
+            query_emb = self.embed(enhanced_query)
+
+            where_filter = {"mpn": {"$eq": mpn}} if mpn else None
+
+            results = coll.query(
+                query_embeddings=[query_emb],
+                n_results=n,
+                where=where_filter,
+                include=["documents", "metadatas", "distances"]
+            )
+
+            if not results or not results.get("documents") or not results["documents"][0]:
+                return []
+
+            graph_results = []
+            for doc, meta, dist in zip(results["documents"][0], results["metadatas"][0], results["distances"][0]):
+                confidence = max(0.0, 1.0 - dist)
+                if confidence >= 0.2:
+                    graph_results.append(GraphRAGResult(
+                        content=doc,
+                        source=meta.get("source", "chromadb"),
+                        chunk_type=meta.get("type", "datasheet"),
+                        confidence=confidence,
+                        graph_path=f"ChromaDB({mpn})" if mpn else "ChromaDB"
+                    ))
+
+            return graph_results
+
+        except Exception as e:
+            logger.error(f"ChromaDB fallback failed: {e}")
             return []
 
     # --------------------------------------------------------

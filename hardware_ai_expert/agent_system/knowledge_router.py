@@ -150,7 +150,9 @@ class LocalRAGRetriever:
 
     def search(self, mpn: str, query: str, n: int = 5) -> list[RetrievalResult]:
         """搜索本地向量库"""
-        query_emb = embed(query)
+        # Enhance query: prepend MPN to improve cross-language matching
+        enhanced_query = f"{mpn} {query}" if mpn else query
+        query_emb = embed(enhanced_query)
 
         # 构建 where 过滤：mpn + project_id
         where_filter = {}
@@ -237,7 +239,10 @@ class ChromaDBTier2Retriever:
             return None
 
         try:
-            query_emb = embed(query)
+            # Enhance query: prepend MPN to improve cross-language matching
+            # all-MiniLM-L6-v2 is English-only; Chinese queries get low scores against English docs
+            enhanced_query = f"{mpn} {query}" if mpn else query
+            query_emb = embed(enhanced_query)
             where_filter = {}
             if mpn:
                 where_filter["mpn"] = {"$eq": mpn}

@@ -817,104 +817,264 @@ def analyze_power_sequence(refdes: str) -> str:
     追踪该器件的输入电源来源和输出电源负载，
     推断上电/下电顺序依赖关系。
 
+    支持 LDO/BUCK/PMIC/DCDC 以及负载器件（FLASH/CPU 等），
+    自动区分输入/输出/控制网络。
+
     Args:
-        refdes: 电源器件位号，如 "U40000"
+        refdes: 器件位号，如 "U40000"
 
     Returns:
         电源时序分析报告
     """
     try:
+        pid = get_current_project()
         # 1. 获取器件信息
         info_query = """
         MATCH (c:Component {RefDes: $refdes})
+        WHERE c.project_id = $project_id OR c.project_id IS NULL
         RETURN c.RefDes AS refdes, c.PartType AS pt, c.Model AS model, c.Value AS value
         """
-        info = _run_cypher(info_query, {"refdes": refdes})
+        info = _run_cypher(info_query, {"refdes": refdes, "project_id": pid})
         if not info:
             return f"未找到器件 {refdes}"
 
         dev = info[0]
-        lines = [f"电源时序分析: {refdes} [{dev['pt']}] {dev['model'] or dev['value'] or ''}\n"]
+        is_power_ic = dev['pt'] in ('LDO', 'BUCK', 'PMIC', 'DCDC')
+        dev_label = f"{refdes} [{dev['pt']}] {dev['model'] or dev['value'] or ''}"
+        lines = [f"电源时序分析: {dev_label}\n"]
 
-        # 2. 查找输入电源网络 (VIN/VCC)
-        input_query = """
+        # 2. 获取该器件所有引脚和网络连接
+        all_nets_query = """
         MATCH (c:Component {RefDes: $refdes})-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
-        WHERE p.Type = 'POWER' AND (n.Name CONTAINS 'VIN' OR n.Name CONTAINS 'VCC' OR n.Name CONTAINS 'VDD')
-        RETURN n.Name AS net, n.VoltageLevel AS voltage
+        WHERE (c.project_id = $project_id OR c.project_id IS NULL)
+        RETURN n.Name AS net, n.VoltageLevel AS voltage, n.NetType AS net_type,
+               p.Name AS pin_name, p.Number AS pin_number, p.Type AS pin_type
+        ORDER BY n.Name
         """
-        input_nets = _run_cypher(input_query, {"refdes": refdes})
+        all_nets = _run_cypher(all_nets_query, {"refdes": refdes, "project_id": pid})
 
-        # 3. 查找输出电源网络
-        # 策略：所有有 VoltageLevel 的非输入非地非控制网络
-        output_query = """
-        MATCH (c:Component {RefDes: $refdes})-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
-        WHERE n.VoltageLevel IS NOT NULL
-              AND NOT (n.Name CONTAINS 'VIN' OR n.Name STARTS WITH 'VCC' OR n.Name STARTS WITH 'VDD' OR n.Name = 'VIN')
-              AND NOT (n.Name CONTAINS 'GND' OR n.Name = 'DGND' OR n.Name = 'NC')
-              AND NOT (n.Name STARTS WITH 'EN' OR n.Name STARTS WITH 'NR' OR n.Name STARTS WITH 'FB')
-        WITH DISTINCT n.Name AS net, n.VoltageLevel AS voltage, count(p) AS pin_count
-        RETURN net, voltage
-        ORDER BY voltage DESC
-        """
-        output_nets = _run_cypher(output_query, {"refdes": refdes})
+        if not all_nets:
+            return f"未找到器件 {refdes} 的网络连接"
 
-        # 4. 查找使能引脚
-        en_query = """
-        MATCH (c:Component {RefDes: $refdes})-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
-        WHERE (n.Name CONTAINS 'EN_' OR n.Name STARTS WITH 'EN' OR n.Name CONTAINS '_EN')
-              AND NOT n.Name = 'NC'
-        RETURN DISTINCT n.Name AS net, p.Number AS pin
-        """
-        en_nets = _run_cypher(en_query, {"refdes": refdes})
+        # 3. 分类网络：输入电源、输出电源、使能控制、反馈、接地、信号
+        input_nets = []
+        output_nets = []
+        enable_nets = []
+        feedback_nets = []
+        gnd_nets = []
+        signal_nets = []
 
-        # 5. 组装时序报告
-        if input_nets:
+        # 输入电源关键词 (VIN, VCC, VDD, PVDD, AVDD, VCCA 等)
+        input_patterns = re.compile(
+            r'^(VIN|VCC|VDD|PVDD|AVDD|VCCA|PVIN|AVIN|VCC_|VDD_|VSYS|VBAT|P12V|P5V|P3V3)',
+            re.IGNORECASE
+        )
+        # 输出电源关键词 (SW, VOUT, VDD_xxx 输出型, LDO 输出)
+        output_patterns = re.compile(
+            r'^(SW_|VOUT|VDD_RAM|VDD_DDR|VDD_MCU|VDD_IO|VDD_MCUIO|VCCA_)',
+            re.IGNORECASE
+        )
+        # 使能关键词
+        en_patterns = re.compile(
+            r'(_EN$|^EN_|_EN_|ENABLE|^EN$)',
+            re.IGNORECASE
+        )
+        # 反馈关键词
+        fb_patterns = re.compile(
+            r'^(FB_|_FB$|VSENSE|VFB|COMP|SS|NR|PGOOD|^PG$)',
+            re.IGNORECASE
+        )
+        # GND 关键词
+        gnd_patterns = re.compile(
+            r'^(GND|DGND|AGND|PGND|SGND|VSS|GNDD)$',
+            re.IGNORECASE
+        )
+
+        seen_nets = set()
+        for n in all_nets:
+            net_name = n['net']
+            if net_name in seen_nets or net_name == 'NC':
+                continue
+            seen_nets.add(net_name)
+
+            v = n['voltage']
+            nt = n['net_type']
+            pt = n['pin_type']
+
+            net_info = {'net': net_name, 'voltage': v, 'pin_name': n['pin_name'], 'pin_number': n['pin_number']}
+
+            if gnd_patterns.search(net_name):
+                gnd_nets.append(net_info)
+            elif en_patterns.search(net_name):
+                enable_nets.append(net_info)
+            elif fb_patterns.search(net_name):
+                feedback_nets.append(net_info)
+            elif is_power_ic:
+                # 电源 IC 分类逻辑
+                if input_patterns.search(net_name):
+                    input_nets.append(net_info)
+                elif output_patterns.search(net_name) or (nt == 'POWER' and not input_patterns.search(net_name)):
+                    output_nets.append(net_info)
+                elif nt == 'POWER' and not input_patterns.search(net_name):
+                    # 有 VoltageLevel 但不是输入的 POWER 网络 → 输出
+                    output_nets.append(net_info)
+                else:
+                    signal_nets.append(net_info)
+            else:
+                # 负载器件：所有 POWER 网络都是输入
+                if nt == 'POWER' or (v is not None and pt == 'POWER'):
+                    input_nets.append(net_info)
+                else:
+                    signal_nets.append(net_info)
+
+        # 4. 补充推断：如果 input/output 为空，用启发式
+        if is_power_ic and not input_nets:
+            # 找最高电压的 POWER 网络作为输入
+            power_nets = [n for n in all_nets if n['net_type'] == 'POWER' and n['net'] not in seen_nets]
+            for n in power_nets:
+                if n['net'] not in seen_nets and n['net'] != 'NC':
+                    input_nets.append({'net': n['net'], 'voltage': n['voltage'], 'pin_name': n.get('pin_name'), 'pin_number': n.get('pin_number')})
+
+        if is_power_ic and not output_nets:
+            # 对于 BUCK: SW 网络是输出
+            # 对于 LDO: 除了 VIN/VCC/EN/FB/GND 之外的 POWER 网络
+            for n in all_nets:
+                net_name = n['net']
+                if net_name in seen_nets or net_name == 'NC':
+                    continue
+                if n['net_type'] == 'POWER' and not input_patterns.search(net_name) and not gnd_patterns.search(net_name):
+                    output_nets.append({'net': net_name, 'voltage': n['voltage'], 'pin_name': n.get('pin_name'), 'pin_number': n.get('pin_number')})
+
+        # 5. 追踪每个输入网络的上游电源器件
+        input_details = []
+        for inp in input_nets:
+            upstream_query = """
+            MATCH (src:Component)-[:HAS_PIN]->(sp:Pin)-[:CONNECTS_TO]->(n:Net {Name: $net_name})
+            WHERE src.RefDes <> $refdes AND (src.PartType IN ['LDO','BUCK','PMIC','DCDC'] OR src.PartType = 'CONNECTOR')
+                  AND (src.project_id = $project_id OR src.project_id IS NULL)
+            RETURN src.RefDes AS refdes, src.PartType AS pt, src.Model AS model
+            LIMIT 3
+            """
+            upstream = _run_cypher(upstream_query, {"net_name": inp['net'], "refdes": refdes, "project_id": pid})
+            inp['upstream'] = upstream
+            input_details.append(inp)
+
+        # 6. 追踪每个输出网络的负载
+        output_details = []
+        for out in output_nets:
+            load_query = """
+            MATCH (n:Net {Name: $net_name})<-[:CONNECTS_TO]-(lp:Pin)<-[:HAS_PIN]-(lc:Component)
+            WHERE lc.RefDes <> $refdes AND (lc.project_id = $project_id OR lc.project_id IS NULL)
+            RETURN count(DISTINCT lc) AS cnt,
+                   collect(DISTINCT {rd: lc.RefDes, pt: lc.PartType})[0..8] AS loads
+            """
+            loads = _run_cypher(load_query, {"net_name": out['net'], "refdes": refdes, "project_id": pid})
+            out['load_count'] = loads[0]['cnt'] if loads else 0
+            out['loads'] = loads[0]['loads'] if loads else []
+            # 找下级电源器件
+            out['child_power_ics'] = [l for l in (out['loads'] or []) if l['pt'] in ('LDO', 'BUCK', 'PMIC', 'DCDC')]
+            output_details.append(out)
+
+        # 7. 追踪使能信号的驱动源
+        for en in enable_nets:
+            en_src_query = """
+            MATCH (src:Component)-[:HAS_PIN]->(sp:Pin)-[:CONNECTS_TO]->(n:Net {Name: $net_name})
+            WHERE src.RefDes <> $refdes AND (src.project_id = $project_id OR src.project_id IS NULL)
+            RETURN src.RefDes AS refdes, src.PartType AS pt
+            LIMIT 3
+            """
+            en_src = _run_cypher(en_src_query, {"net_name": en['net'], "refdes": refdes, "project_id": pid})
+            en['driven_by'] = en_src
+
+        # ── 组装报告 ──
+
+        # 输入电源
+        if input_details:
             lines.append("📥 输入电源:")
-            for n in input_nets:
-                lines.append(f"  {n['net']} ({n['voltage'] or '?'}V)")
-                # 查找上游电源器件
-                upstream_query = """
-                MATCH (src:Component)-[:HAS_PIN]->(sp:Pin)-[:CONNECTS_TO]->(n:Net {Name: $net_name})
-                WHERE src.PartType IN ['LDO', 'BUCK', 'PMIC', 'DCDC'] AND src.RefDes <> $refdes
-                RETURN src.RefDes AS refdes, src.PartType AS pt
-                LIMIT 3
-                """
-                upstream = _run_cypher(upstream_query, {"net_name": n['net'], "refdes": refdes})
-                for u in upstream:
-                    lines.append(f"    └── 由 {u['refdes']} [{u['pt']}] 供给")
+            for inp in input_details:
+                v_str = f"{inp['voltage']}V" if inp['voltage'] else '?V'
+                lines.append(f"  {inp['net']} ({v_str})")
+                if inp.get('upstream'):
+                    for u in inp['upstream']:
+                        lines.append(f"    └── 由 {u['refdes']} [{u['pt']}] {u['model'] or ''} 供给")
         else:
-            lines.append("📥 输入电源: 未检测到标准 VIN/VCC 网络")
+            lines.append("📥 输入电源: 未检测到")
 
-        if output_nets:
+        # 输出电源
+        if output_details:
             lines.append("\n📤 输出电源:")
-            for n in output_nets:
-                v = n['voltage'] or '?'
-                # 查找负载
-                load_query = """
-                MATCH (n:Net {Name: $net_name})<-[:CONNECTS_TO]-(lp:Pin)<-[:HAS_PIN]-(lc:Component)
-                WHERE lc.RefDes <> $refdes
-                RETURN count(DISTINCT lc) AS cnt,
-                       collect(DISTINCT lc.PartType)[0..3] AS types
-                """
-                loads = _run_cypher(load_query, {"net_name": n['net'], "refdes": refdes})
-                load_info = f"{loads[0]['cnt']}个负载" if loads else "0个负载"
-                lines.append(f"  {n['net']} ({v}V) → {load_info}")
+            for out in output_details:
+                v_str = f"{out['voltage']}V" if out['voltage'] else '?V'
+                load_info = f"{out['load_count']} 个负载" if out.get('load_count') else ''
+                lines.append(f"  {out['net']} ({v_str}) → {load_info}")
+                # 显示主要负载类型
+                if out.get('loads'):
+                    by_type = {}
+                    for ld in out['loads']:
+                        pt = ld['pt'] or 'Unknown'
+                        by_type.setdefault(pt, []).append(ld['rd'])
+                    for pt, refs in sorted(by_type.items(), key=lambda x: -len(x[1]))[:4]:
+                        lines.append(f"    ├── [{pt}]: {', '.join(refs[:3])}{'...' if len(refs)>3 else ''}")
+                # 下级电源器件
+                if out.get('child_power_ics'):
+                    lines.append(f"    └── 下级电源: {', '.join(c['rd'] for c in out['child_power_ics'])}")
+                    lines.append("        (使用 analyze_power_sequence 查看下级时序)")
         else:
-            lines.append("\n📤 输出电源: 未检测到")
+            if is_power_ic:
+                lines.append("\n📤 输出电源: 未检测到")
+            else:
+                lines.append("\n📤 输出电源: (负载器件无电源输出)")
 
-        if en_nets:
+        # 使能控制
+        if enable_nets:
             lines.append("\n🔌 使能控制:")
-            for n in en_nets:
-                lines.append(f"  {n['net']} (Pin {n['pin']})")
+            for en in enable_nets:
+                driven = ""
+                if en.get('driven_by'):
+                    driven = f" ← 由 {', '.join(d['refdes'] for d in en['driven_by'])} 驱动"
+                lines.append(f"  {en['net']} (Pin {en['pin_number']}){driven}")
 
-        # 6. 时序推断
+        # 反馈/PG
+        if feedback_nets:
+            lines.append("\n🔄 反馈/PG:")
+            for fb in feedback_nets:
+                lines.append(f"  {fb['net']} (Pin {fb['pin_number']})")
+
+        # 时序推断
         lines.append("\n⏱️ 上电时序推断:")
-        if input_nets and output_nets:
-            lines.append(f"  1. 先上电: {', '.join(n['net'] for n in input_nets)}")
-            lines.append(f"  2. 使能: {', '.join(n['net'] for n in en_nets) if en_nets else '自动使能'}")
-            lines.append(f"  3. 输出稳定: {', '.join(n['net'] for n in output_nets)}")
+        if input_details and (output_details or not is_power_ic):
+            # 推断时序链
+            seq = []
+            seq.append(f"  ① 输入就绪: {', '.join(n['net'] for n in input_details[:3])}")
+            if enable_nets:
+                seq.append(f"  ② 使能触发: {', '.join(n['net'] for n in enable_nets)}")
+            if output_details:
+                # 按电压从高到低排列输出
+                sorted_out = sorted(output_details, key=lambda x: float(x['voltage'] or 0), reverse=True)
+                seq.append(f"  ③ 输出稳定: {', '.join(n['net'] + '(' + str(n['voltage'] or '?') + 'V)' for n in sorted_out)}")
+                # 下级时序依赖
+                child_seqs = []
+                for out in sorted_out:
+                    for child in out.get('child_power_ics', []):
+                        child_seqs.append(f"{child['rd']}")
+                if child_seqs:
+                    seq.append(f"  ④ 下级电源使能: {', '.join(child_seqs)}")
+            for s in seq:
+                lines.append(s)
         else:
             lines.append("  信息不足，无法推断")
+            if not input_details:
+                lines.append("  提示: 未检测到输入电源网络，可能需要检查器件引脚/网络标注")
+
+        # 依赖链摘要
+        if input_details and output_details:
+            lines.append("\n🔗 依赖链摘要:")
+            for inp in input_details:
+                for u in inp.get('upstream', []):
+                    lines.append(f"  {u['refdes']} → {inp['net']} → {refdes}")
+            for out in output_details:
+                for child in out.get('child_power_ics', []):
+                    lines.append(f"  {refdes} → {out['net']} → {child['rd']}")
 
         return "\n".join(lines)
 
@@ -927,45 +1087,71 @@ def trace_signal_path(start_pin: str, max_depth: int = 5) -> str:
     """
     从指定引脚出发，沿网络拓扑 BFS 追踪信号链路路径。
 
-    追踪方式：引脚 → 所在网络 → 其他引脚 → 所属组件 → 继续展开。
-    使用 BFS 遍历，避免环路，最多展开 max_depth 层。
+    智能过滤去耦电容/测试点等被动器件，优先追踪主动器件（IC/SOC/PMIC），
+    标注信号类型（I2C/SPI/UART 等）和器件 PartType。
 
     Args:
         start_pin: 起始引脚标识，格式为 "组件位号.引脚号"（如 "U40000.3"）
                    或引脚名称（如 "U40000_VOUT"），支持模糊匹配
-        max_depth: 最大追踪深度，默认 5
+        max_depth: 最大追踪深度（主动器件层数），默认 5
 
     Returns:
         信号链路路径报告（文本格式）
     """
     try:
+        # ── 信号类型识别 ──
+        def _detect_signal_type(net_name: str) -> str:
+            """根据网络名推断信号类型"""
+            nn = net_name.upper()
+            if 'SDA' in nn or 'SCL' in nn or 'I2C' in nn or 'SMB' in nn:
+                return 'I2C'
+            if 'MOSI' in nn or 'MISO' in nn or 'SCK' in nn or 'CS_' in nn or 'SPI' in nn:
+                return 'SPI'
+            if '_TX' in nn or '_RX' in nn or 'UART' in nn:
+                return 'UART'
+            if 'RST' in nn or 'RESET' in nn or '_EN' in nn:
+                return 'CTRL'
+            if 'CLK' in nn or 'SCK' in nn:
+                return 'CLK'
+            if 'PWM' in nn:
+                return 'PWM'
+            if 'INT' in nn or 'IRQ' in nn:
+                return 'INT'
+            if 'GND' in nn or 'VSS' in nn:
+                return 'GND'
+            if 'VCC' in nn or 'VDD' in nn or 'VIN' in nn or 'P3V3' in nn or 'P1V8' in nn:
+                return 'POWER'
+            return ''
+
+        # ── 被动器件类型（BFS 中穿透，不占 depth） ──
+        PASSIVE_TYPES = {'CAPACITOR', 'RESISTOR', 'TESTPOINT', 'PASSIVE', 'INDUCTOR', 'MECHANICAL', 'CRYSTAL', 'DIODE', 'LED'}
+        # ── 主动器件类型（追踪终点，占 depth） ──
+        ACTIVE_TYPES = {'IC', 'SOC', 'PMIC', 'LDO', 'BUCK', 'DCDC', 'DRAM', 'CONNECTOR', 'MOSFET', 'FLASH', 'FPGA', 'CPU', 'GPU', 'MCU'}
+
         # 1. 解析起始引脚
-        # 支持 "RefDes.PinNumber" 或 "RefDes_PinName" 格式
         if '.' in start_pin:
             refdes, pin_num = start_pin.split('.', 1)
             pin_query = """
             MATCH (c:Component {RefDes: $refdes})-[:HAS_PIN]->(p:Pin)
             WHERE p.Number = $pin_num OR p.Name = $pin_num
-            RETURN c.RefDes AS refdes, p.Number AS pin_num, p.Name AS pin_name, id(p) AS pid
+            RETURN c.RefDes AS refdes, c.PartType AS pt, p.Number AS pin_num, p.Name AS pin_name, id(p) AS pid
             LIMIT 1
             """
             start_records = _run_cypher(pin_query, {"refdes": refdes, "pin_num": pin_num})
         elif '_' in start_pin:
-            # 尝试 RefDes_PinName 格式
             parts = start_pin.split('_', 1)
             pin_query = """
             MATCH (c:Component)-[:HAS_PIN]->(p:Pin)
             WHERE c.RefDes = $refdes AND p.Name = $pin_name
-            RETURN c.RefDes AS refdes, p.Number AS pin_num, p.Name AS pin_name, id(p) AS pid
+            RETURN c.RefDes AS refdes, c.PartType AS pt, p.Number AS pin_num, p.Name AS pin_name, id(p) AS pid
             LIMIT 1
             """
             start_records = _run_cypher(pin_query, {"refdes": parts[0], "pin_name": parts[1]})
         else:
-            # 模糊搜索引脚名
             pin_query = """
             MATCH (c:Component)-[:HAS_PIN]->(p:Pin)
             WHERE p.Name CONTAINS $start_pin OR c.RefDes = $start_pin
-            RETURN c.RefDes AS refdes, p.Number AS pin_num, p.Name AS pin_name, id(p) AS pid
+            RETURN c.RefDes AS refdes, c.PartType AS pt, p.Number AS pin_num, p.Name AS pin_name, id(p) AS pid
             LIMIT 1
             """
             start_records = _run_cypher(pin_query, {"start_pin": start_pin})
@@ -974,20 +1160,20 @@ def trace_signal_path(start_pin: str, max_depth: int = 5) -> str:
             return f"未找到起始引脚: {start_pin}"
 
         start = start_records[0]
-        lines = [f"信号链路追踪: {start['refdes']}.{start['pin_num']} ({start['pin_name'] or '?'})"]
+        lines = [f"信号链路追踪: {start['refdes']}.{start['pin_num']} ({start['pin_name'] or '?'}) [{start['pt'] or '?'}]"]
         lines.append(f"最大深度: {max_depth}\n")
 
-        # 2. BFS 遍历
-        # 队列元素: (pin_id, depth, path_list)
-        # path: ["Component:U1", "Pin:3", "Net:VCC_3V3", "Pin:5", "Component:U2", ...]
+        # 2. BFS 遍历（穿透被动器件）
         visited_pins = set()
         visited_nets = set()
+        # 队列: (pin_id, depth, path_list)
+        # path: ["Component:U1[IC]", "Pin:3(VOUT)", "Net:VCC_3V3[POWER]", "Pin:5(VIN)", "Component:U2[LDO]", ...]
         all_paths = []
+        active_endpoints = []  # 记录主动器件端点
 
-        # 获取起始引脚的内部 ID
         start_pid = start['pid']
         visited_pins.add(start_pid)
-        queue = [(start_pid, 0, [f"Component:{start['refdes']}", f"Pin:{start['pin_num']}({start['pin_name'] or '?'})"])]
+        queue = [(start_pid, 0, [f"Component:{start['refdes']}[{start['pt'] or '?'}]", f"Pin:{start['pin_num']}({start['pin_name'] or '?'})"])]
 
         while queue:
             current_pid, depth, path = queue.pop(0)
@@ -1016,13 +1202,19 @@ def trace_signal_path(start_pin: str, max_depth: int = 5) -> str:
                     continue
                 visited_nets.add(net_id)
 
-                new_path = path + [f"Net:{net_name}"]
+                # 跳过 GND 网络（追踪信号时无意义）
+                sig_type = _detect_signal_type(net_name)
+                if sig_type == 'GND':
+                    continue
 
-                # 从网络找其他引脚
+                sig_label = f'[{sig_type}]' if sig_type else ''
+                new_path = path + [f"Net:{net_name}{sig_label}"]
+
+                # 从网络找其他引脚，带上 PartType
                 peer_query = """
                 MATCH (n:Net {Name: $net_name})<-[:CONNECTS_TO]-(p:Pin)<-[:HAS_PIN]-(c:Component)
                 WHERE id(p) <> $pid
-                RETURN c.RefDes AS refdes, p.Number AS pin_num, p.Name AS pin_name, id(p) AS peer_pid
+                RETURN c.RefDes AS refdes, c.PartType AS pt, p.Number AS pin_num, p.Name AS pin_name, id(p) AS peer_pid
                 ORDER BY c.RefDes
                 """
                 peers = _run_cypher(peer_query, {"net_name": net_name, "pid": current_pid})
@@ -1036,19 +1228,81 @@ def trace_signal_path(start_pin: str, max_depth: int = 5) -> str:
                     if peer_pid in visited_pins:
                         continue
                     visited_pins.add(peer_pid)
-                    extended = True
-                    peer_path = new_path + [f"Pin:{peer['pin_num']}({peer['pin_name'] or '?'})", f"Component:{peer['refdes']}"]
-                    queue.append((peer_pid, depth + 1, peer_path))
+
+                    pt = peer['pt'] or 'UNKNOWN'
+                    peer_label = f"{peer['refdes']}[{pt}]"
+                    pin_label = f"Pin:{peer['pin_num']}({peer['pin_name'] or '?'})"
+
+                    if pt in PASSIVE_TYPES:
+                        # 穿透被动器件，depth 不增加
+                        peer_path = new_path + [pin_label, f"Component:{peer_label}(穿透)"]
+                        queue.append((peer_pid, depth, peer_path))
+                    else:
+                        # 主动器件，depth +1
+                        extended = True
+                        peer_path = new_path + [pin_label, f"Component:{peer_label}"]
+                        queue.append((peer_pid, depth + 1, peer_path))
+                        active_endpoints.append((peer['refdes'], pt, net_name, sig_type))
 
             if not extended:
                 all_paths.append(path)
 
-        # 3. 格式化输出
-        if not all_paths:
-            lines.append("未追踪到任何信号路径")
-        else:
-            for i, path in enumerate(all_paths, 1):
-                lines.append(f"路径 {i}: {' → '.join(path)}")
+        # 3. 优先展示到达主动器件的路径，被动器件路径折叠
+        active_paths = []
+        passive_only_paths = []
+        start_label = f"Component:{start['refdes']}[{start['pt'] or '?'}]"
+        for path in all_paths:
+            # 找路径中所有 Component 节点（排除起始器件和穿透标记）
+            target_comps = []
+            for p in path:
+                if p.startswith('Component:') and p != start_label:
+                    target_comps.append(p)
+            # 路径中有非穿透的主动器件
+            has_active = any(
+                any(f'[{t}]' in comp for t in ACTIVE_TYPES)
+                for comp in target_comps
+                if '(穿透)' not in comp
+            )
+            if has_active:
+                active_paths.append(path)
+            else:
+                passive_only_paths.append(path)
+
+        # 4. 格式化输出
+        if active_paths:
+            lines.append(f"📡 主动器件链路 ({len(active_paths)} 条):")
+            for i, path in enumerate(active_paths[:15], 1):
+                lines.append(f"  路径 {i}: {' → '.join(path)}")
+            if len(active_paths) > 15:
+                lines.append(f"  ... 共 {len(active_paths)} 条路径")
+
+        if passive_only_paths:
+            # 折叠展示被动器件路径
+            lines.append(f"\n🔧 被动器件连接 ({len(passive_only_paths)} 条，仅到电容/电阻/测试点):")
+            # 按网络名分组
+            net_groups = {}
+            for path in passive_only_paths:
+                nets_in_path = [p for p in path if p.startswith('Net:')]
+                comp_in_path = [p for p in path if p.startswith('Component:') and '穿透' not in p]
+                key = nets_in_path[0] if nets_in_path else 'unknown'
+                net_groups.setdefault(key, []).extend(comp_in_path)
+            for net_label, comps in sorted(net_groups.items())[:8]:
+                unique_comps = list(dict.fromkeys(comps))[:5]
+                lines.append(f"  {net_label} → {', '.join(unique_comps)}")
+            if len(net_groups) > 8:
+                lines.append(f"  ... 共 {len(net_groups)} 个网络")
+
+        # 5. 主动器件端点摘要
+        if active_endpoints:
+            lines.append(f"\n🎯 信号端点摘要:")
+            # 去重
+            seen = set()
+            for rd, pt, net, sig in active_endpoints:
+                key = f"{rd}.{net}"
+                if key not in seen:
+                    seen.add(key)
+                    sig_str = f" [{sig}]" if sig else ""
+                    lines.append(f"  {rd}[{pt}] via {net}{sig_str}")
 
         return "\n".join(lines)
 
