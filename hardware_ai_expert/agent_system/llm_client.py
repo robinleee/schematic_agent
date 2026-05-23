@@ -196,26 +196,10 @@ class LLMClient:
         Returns:
             解析后的 dict，失败返回 None
         """
-        # gemma4:26b 等 thinking 模型需要至少 512 token 来完成推理+输出
-        effective_max_tokens = max(max_tokens, 512)
-        """
-        调用 LLM 并解析为 JSON
+        # gemma4:26b 等 thinking 模型需要足够的 token 完成推理+输出
+        # thinking 通常消耗 500-800 token，JSON 输出约 200 token
+        effective_max_tokens = max(max_tokens, 2048)
 
-        自动处理：
-        - Markdown 代码块包裹
-        - 截断 JSON 补全
-        - 重试机制
-
-        Args:
-            prompt: 用户输入
-            system_prompt: 系统提示（可选）
-            temperature: 采样温度
-            max_tokens: 最大生成 token 数
-            schema: JSON Schema（部分 provider 支持）
-
-        Returns:
-            解析后的 dict，失败返回 None
-        """
         # 在 prompt 中强制 JSON 输出
         enhanced_prompt = prompt
         if "json" not in prompt.lower():

@@ -324,7 +324,7 @@ class ReActAgent:
     # --------------------------------------------------------
 
     def _format_history(self, trace: list[ReActTraceStep]) -> str:
-        """格式化 ReAct 历史（带截断）"""
+        """格式化 ReAct 历史（带截断 + 已调用工具摘要）"""
         if not trace:
             return "（无历史记录）"
 
@@ -348,6 +348,16 @@ class ReActAgent:
             if len(s.observation) > OBSERVATION_TRUNCATE:
                 obs += " ... [截断]"
             lines.append(f"  Observation: {obs}")
+
+        # 已调用工具摘要（防止 LLM 重复调用）
+        tool_calls = {}
+        for s in trace:
+            key = f"{s.action}({json.dumps(s.action_input, ensure_ascii=False)})"
+            tool_calls.setdefault(s.action, []).append(key)
+        lines.append("")
+        lines.append("[已调用工具 — 不要重复相同调用]")
+        for tool, calls in tool_calls.items():
+            lines.append(f"  {tool}: {len(calls)}次 — {', '.join(calls[:3])}")
 
         return "\n".join(lines)
 
@@ -426,18 +436,14 @@ class ReActAgent:
 
     @staticmethod
     def _fallback_parse(text: str) -> Optional[dict]:
-        """宽松解析非结构化文本"""
+        """宽松解析非结构化文本 — 复用 LLMClient._extract_json"""
         if not text:
             return None
-        text = text.strip()
 
-        # 找 JSON 块
-        json_match = re.search(r'\{.*"action".*\}', text, re.DOTALL)
-        if json_match:
-            try:
-                return json.loads(json_match.group(0))
-            except json.JSONDecodeError:
-                pass
+        # 复用 LLMClient._extract_json（括号平衡+thinking清洗+截断修复）
+        parsed = LLMClient._extract_json(text)
+        if parsed and "action" in parsed:
+            return parsed
 
         # 关键词匹配
         lower = text.lower()
