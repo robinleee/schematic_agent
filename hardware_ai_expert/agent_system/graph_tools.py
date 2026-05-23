@@ -31,6 +31,7 @@ READ_ONLY_MODE = os.getenv("NEO4J_READ_ONLY", "false").lower() in ("true", "1", 
 
 # Cypher 查询超时（秒）
 CYPHER_TIMEOUT_SECONDS = int(os.getenv("CYPHER_TIMEOUT_SECONDS", "30"))
+CYPHER_ROW_LIMIT = int(os.getenv("CYPHER_ROW_LIMIT", "500"))
 
 # 写入类 Cypher 关键字（用于只读模式拦截）
 _WRITE_KEYWORDS = re.compile(
@@ -79,7 +80,14 @@ def _run_cypher(query: str, params: dict = None, timeout: int = None, project_id
     driver = _get_driver()
     timeout = timeout or CYPHER_TIMEOUT_SECONDS
     with driver.session() as session:
-        result = session.run(query, params)
+        # 大网络安全保护：若无 LIMIT 且查询含 Net，自动加 LIMIT
+        safe_query = query
+        if 'LIMIT' not in query.upper() and 'COUNT(' not in query.upper() and 'AGG' not in query.upper():
+            # 检查是否是返回大量行的查询（含 MATCH...RETURN 无聚合）
+            if 'RETURN' in query.upper() and not any(agg in query.upper() for agg in ['SUM(', 'AVG(', 'MIN(', 'MAX(', 'COLLECT(']):
+                safe_query = query.rstrip().rstrip(';') + f'\nLIMIT {CYPHER_ROW_LIMIT}'
+
+        result = session.run(safe_query, params)
         records = [dict(record) for record in result]
         return records
 
