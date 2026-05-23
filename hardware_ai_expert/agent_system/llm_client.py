@@ -288,41 +288,73 @@ class LLMClient:
 
         text = text.strip()
 
-        # 1. 尝试提取 ```json ... ``` 代码块
-        md_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+        # 0. 预清洗：去掉 thinking 残留（<think>...</think>）
+        text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
+        # 去掉 gemma 的 <start_of_turn> 等标签
+        text = re.sub(r'<\|[^|]+\|>', '', text).strip()
+
+        # 1. 尝试提取 ```json ... ``` 代码块（支持嵌套大括号）
+        md_match = re.search(r'```(?:json)?\s*(\{.*\})\s*```', text, re.DOTALL)
         if md_match:
             try:
                 return json.loads(md_match.group(1))
             except json.JSONDecodeError:
                 pass
 
-        # 2. 尝试提取 ``` ... ``` 中的内容（任意代码块）
-        md_match = re.search(r'```\s*(\{.*?\})\s*```', text, re.DOTALL)
-        if md_match:
+        # 2. 括号平衡提取最外层 JSON 对象
+        start = text.find('{')
+        if start >= 0:
+            depth = 0
+            in_string = False
+            escape = False
+            for i in range(start, len(text)):
+                ch = text[i]
+                if escape:
+                    escape = False
+                    continue
+                if ch == '\\':
+                    if in_string:
+                        escape = True
+                    continue
+                if ch == '"' and not escape:
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if ch == '{':
+                    depth += 1
+                elif ch == '}':
+                    depth -= 1
+                    if depth == 0:
+                        candidate = text[start:i + 1]
+                        try:
+                            return json.loads(candidate)
+                        except json.JSONDecodeError:
+                            # 继续找下一个 {
+                            next_start = text.find('{', i + 1)
+                            if next_start > 0:
+                                start = next_start
+                                depth = 0
+                                i = next_start - 1  # for 循环会 +1
+                            continue
+                        break
+
+        # 3. 截断 JSON 修复（补全括号）
+        start = text.find('{')
+        if start >= 0:
+            candidate = text[start:]
             try:
-                return json.loads(md_match.group(1))
+                # 补全缺失的引号和括号
+                open_braces = candidate.count('{') - candidate.count('}')
+                open_brackets = candidate.count('[') - candidate.count(']')
+                if open_braces > 0 or open_brackets > 0:
+                    fixed = candidate + ']' * max(0, open_brackets) + '}' * max(0, open_braces)
+                    # 如果末尾在值中间，先补引号
+                    if fixed.rstrip().endswith(':'):
+                        fixed += '""'
+                    return json.loads(fixed)
             except json.JSONDecodeError:
                 pass
-
-        # 3. 尝试找裸 JSON（最外层大括号）
-        try:
-            # 找到第一个 { 和最后一个 }
-            start = text.find('{')
-            end = text.rfind('}')
-            if start >= 0 and end > start:
-                return json.loads(text[start:end + 1])
-        except json.JSONDecodeError:
-            pass
-
-        # 4. 尝试修复截断的 JSON（补全括号）
-        try:
-            fixed = text + '"}' * 10
-            start = fixed.find('{')
-            end = fixed.rfind('}')
-            if start >= 0 and end > start:
-                return json.loads(fixed[start:end + 1])
-        except Exception:
-            pass
 
         return None
 

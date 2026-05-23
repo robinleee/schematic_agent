@@ -1045,13 +1045,14 @@ class AMREngine:
         capacitors = self._get_capacitors_with_voltage()
         checked_cap = 0
         skipped_cap = 0
+        no_voltage_cap = 0
 
         for c in capacitors:
             refdes = c["refdes"]
             voltage = float(c["voltage"]) if c["voltage"] is not None else 0.0
 
             if voltage <= 0:
-                skipped_cap += 1
+                no_voltage_cap += 1
                 continue
 
             result = self.cap_checker.check_component(
@@ -1075,7 +1076,10 @@ class AMREngine:
             elif "缺少 AMR" in result.detail:
                 skipped_cap += 1
 
-        print(f"  检查: {checked_cap}, 通过: {checked_cap - sum(1 for v in self.violations if v.rule_id == 'amr_capacitor_voltage_derating') - skipped_cap}, 违规: {sum(1 for v in self.violations if v.rule_id == 'amr_capacitor_voltage_derating')}, 跳过(缺AMR数据): {skipped_cap}")
+        cap_passed = checked_cap - sum(1 for v in self.violations if v.rule_id == 'amr_capacitor_voltage_derating') - skipped_cap
+        print(f"  总电容: {len(capacitors)}, 无电压标注: {no_voltage_cap}, 已检查: {checked_cap}")
+        print(f"  ├─ 通过: {cap_passed}, 违规: {sum(1 for v in self.violations if v.rule_id == 'amr_capacitor_voltage_derating')}, 缺AMR数据: {skipped_cap}")
+        print(f"  └─ AMR覆盖率: {(checked_cap - skipped_cap) / checked_cap * 100:.1f}%" if checked_cap > 0 else None)
 
         print(f"\n{'='*60}")
         print(f" AMR 检查完成: {len(self.violations)} 个违规")
