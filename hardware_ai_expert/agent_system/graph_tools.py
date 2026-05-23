@@ -284,26 +284,70 @@ def get_power_domain(voltage_level: str = None, detail: bool = False) -> str:
     try:
         pid = get_current_project()
         if voltage_level:
-            if detail:
-                query = """
+            # 模糊匹配：提取数字部分（"1.1V" → 1.1, "3V3" → 3.3）
+            import re as _re
+            num_str = _re.sub(r'[^0-9.]', '', voltage_level)
+            # 处理 3V3 格式
+            if 'V' in voltage_level.upper() and num_str.count('.') == 0:
+                parts = voltage_level.upper().split('V')
+                if len(parts) == 2 and parts[0] and parts[1]:
+                    try:
+                        num_val = float(parts[0] + '.' + parts[1])
+                    except ValueError:
+                        num_val = float(num_str) if num_str else None
+                else:
+                    num_val = float(num_str) if num_str else None
+            else:
+                num_val = float(num_str) if num_str else None
+
+            # 先精确匹配，再模糊匹配
+            use_fuzzy = False
+            if num_val is not None:
+                # 用 Cypher 数值比较
+                query_detail = """
                 MATCH (c:Component)-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
-                WHERE n.VoltageLevel = $voltage_level AND (c.project_id = $project_id OR c.project_id IS NULL)
+                WHERE (n.VoltageLevel = $voltage_str OR toFloat(n.VoltageLevel) = $voltage_num
+                       OR abs(toFloat(n.VoltageLevel) - $voltage_num) < 0.05)
+                AND (c.project_id = $project_id OR c.project_id IS NULL)
                 RETURN n.Name AS net_name,
                        n.VoltageLevel AS voltage,
                        collect({refdes: c.RefDes, pin: p.Number, part_type: c.PartType})[0..50] AS devices
                 ORDER BY n.Name
                 """
-            else:
-                query = """
+                query_agg = """
                 MATCH (c:Component)-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
-                WHERE n.VoltageLevel = $voltage_level AND (c.project_id = $project_id OR c.project_id IS NULL)
+                WHERE (n.VoltageLevel = $voltage_str OR toFloat(n.VoltageLevel) = $voltage_num
+                       OR abs(toFloat(n.VoltageLevel) - $voltage_num) < 0.05)
+                AND (c.project_id = $project_id OR c.project_id IS NULL)
                 RETURN n.Name AS net_name,
                        n.VoltageLevel AS voltage,
                        count(DISTINCT c) AS component_count,
                        collect(DISTINCT c.PartType) AS part_types
                 ORDER BY n.Name
                 """
-            params = {"voltage_level": voltage_level, "project_id": pid}
+                params = {"voltage_str": voltage_level, "voltage_num": num_val, "project_id": pid}
+            else:
+                # 原始精确匹配 fallback
+                if detail:
+                    query_detail = """
+                    MATCH (c:Component)-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
+                    WHERE n.VoltageLevel = $voltage_level AND (c.project_id = $project_id OR c.project_id IS NULL)
+                    RETURN n.Name AS net_name,
+                           n.VoltageLevel AS voltage,
+                           collect({refdes: c.RefDes, pin: p.Number, part_type: c.PartType})[0..50] AS devices
+                    ORDER BY n.Name
+                    """
+                else:
+                    query_agg = """
+                    MATCH (c:Component)-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
+                    WHERE n.VoltageLevel = $voltage_level AND (c.project_id = $project_id OR c.project_id IS NULL)
+                    RETURN n.Name AS net_name,
+                           n.VoltageLevel AS voltage,
+                           count(DISTINCT c) AS component_count,
+                           collect(DISTINCT c.PartType) AS part_types
+                    ORDER BY n.Name
+                    """
+                params = {"voltage_level": voltage_level, "project_id": pid}
         else:
             query = """
             MATCH (c:Component)-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
@@ -315,6 +359,10 @@ def get_power_domain(voltage_level: str = None, detail: bool = False) -> str:
             ORDER BY n.VoltageLevel
             """
             params = {"project_id": pid}
+
+        # 选择正确的 query
+        if voltage_level:
+            query = query_detail if detail else query_agg
 
         records = _run_cypher(query, params)
         if not records:
@@ -517,6 +565,7 @@ def get_power_tree(root_refdes: str = None, voltage: str = None) -> str:
         get_power_tree(voltage="3V3")
     """
     try:
+        pid = get_current_project()
         if root_refdes:
             # 模式 1: 从指定电源器件出发
             query = """
@@ -877,9 +926,9 @@ def analyze_power_sequence(refdes: str) -> str:
             r'^(VIN|VCC|VDD|PVDD|AVDD|VCCA|PVIN|AVIN|VCC_|VDD_|VSYS|VBAT|P12V|P5V|P3V3)',
             re.IGNORECASE
         )
-        # 输出电源关键词 (SW, VOUT, VDD_xxx 输出型, LDO 输出)
+        # 输出电源关键词 (SW, VOUT, VDD_xxx 输出型, LDO 输出, BUCK_SW)
         output_patterns = re.compile(
-            r'^(SW_|VOUT|VDD_RAM|VDD_DDR|VDD_MCU|VDD_IO|VDD_MCUIO|VCCA_)',
+            r'^(SW_|VOUT|VDD_RAM|VDD_DDR|VDD_MCU|VDD_IO|VDD_MCUIO|VCCA_|VDD_PMIC_BUCK)',
             re.IGNORECASE
         )
         # 使能关键词
@@ -918,10 +967,12 @@ def analyze_power_sequence(refdes: str) -> str:
             elif fb_patterns.search(net_name):
                 feedback_nets.append(net_info)
             elif is_power_ic:
-                # 电源 IC 分类逻辑
-                if input_patterns.search(net_name):
+                # 电源 IC 分类逻辑 — output 优先匹配（避免 VDD_PMIC_BUCK_SW 被 VDD_ 误匹配为输入）
+                if output_patterns.search(net_name):
+                    output_nets.append(net_info)
+                elif input_patterns.search(net_name):
                     input_nets.append(net_info)
-                elif output_patterns.search(net_name) or (nt == 'POWER' and not input_patterns.search(net_name)):
+                elif nt == 'POWER' and not input_patterns.search(net_name):
                     output_nets.append(net_info)
                 elif nt == 'POWER' and not input_patterns.search(net_name):
                     # 有 VoltageLevel 但不是输入的 POWER 网络 → 输出
