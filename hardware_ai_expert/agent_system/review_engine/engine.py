@@ -30,6 +30,10 @@ import agent_system.review_engine.templates.pullup  # noqa: F401
 import agent_system.review_engine.templates.esd    # noqa: F401
 import agent_system.review_engine.templates.pinmux  # noqa: F401
 import agent_system.review_engine.templates.amr    # noqa: F401
+import agent_system.review_engine.templates.diff_pair  # noqa: F401
+import agent_system.review_engine.templates.power_integrity  # noqa: F401
+import agent_system.review_engine.templates.voltage_compat  # noqa: F401
+import agent_system.review_engine.templates.connectivity  # noqa: F401
 
 
 # ============================================

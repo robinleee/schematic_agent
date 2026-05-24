@@ -213,3 +213,128 @@ rules:
       check_od_pullup: false
       check_power_gnd: false
       check_nc: true
+
+  # ============================================
+  # P3: 差分对信号完整性检查
+  # ============================================
+
+  - id: DIFF_PAIR_MATCHING
+    template_id: diff_pair_check
+    name: "差分对 P/N 匹配检查"
+    description: "检查差分信号 P/N 网络是否配对完整"
+    severity: ERROR
+    enabled: true
+    params:
+      check_type: matching
+      signal_standards: ["PCIe", "MIPI", "USB3", "LVDS", "HDMI"]
+    tags: ["diff_pair", "matching", "signal_integrity"]
+
+  - id: DIFF_PAIR_TERMINATION
+    template_id: diff_pair_check
+    name: "差分对端接检查"
+    description: "检查高速差分对的 AC coupling 和端接配置"
+    severity: WARNING
+    enabled: true
+    params:
+      check_type: termination
+      signal_standards: ["PCIe", "USB3"]
+      require_ac_coupling: ["PCIe", "USB3"]
+    tags: ["diff_pair", "termination", "signal_integrity"]
+
+  - id: DIFF_PAIR_CMC
+    template_id: diff_pair_check
+    name: "差分对共模电感检查"
+    description: "检查 USB/ETH 差分对是否配置了共模电感"
+    severity: INFO
+    enabled: true
+    params:
+      check_type: cmc
+      require_cmc: ["USB2", "USB3", "Ethernet"]
+    tags: ["diff_pair", "cmc", "signal_integrity"]
+
+  # ============================================
+  # P3: 电源完整性检查
+  # ============================================
+
+  - id: POWER_NET_ORPHAN
+    template_id: power_integrity_check
+    name: "电源网络孤岛检查"
+    description: "检查有电压标注但无负载器件的电源网络"
+    severity: WARNING
+    enabled: true
+    params:
+      check_type: orphan_power_net
+    tags: ["power", "integrity", "orphan"]
+
+  - id: REGULATOR_OUTPUT_DECAP
+    template_id: power_integrity_check
+    name: "稳压器输出去耦检查"
+    description: "检查 PMIC/LDO/DC-DC 输出端是否有足够的去耦电容"
+    severity: ERROR
+    enabled: true
+    params:
+      check_type: regulator_output_decap
+      min_output_caps: 2
+    tags: ["power", "integrity", "decap", "regulator"]
+
+  - id: POWER_DOMAIN_ISOLATION
+    template_id: power_integrity_check
+    name: "电源域隔离检查"
+    description: "检查不同电压域之间是否有违规直连"
+    severity: INFO
+    enabled: true
+    params:
+      check_type: domain_isolation
+    tags: ["power", "integrity", "isolation"]
+
+  # ============================================
+  # P3: 电压兼容性检查
+  # ============================================
+
+  - id: VOLTAGE_COMPATIBILITY
+    template_id: voltage_compatibility_check
+    name: "器件电压兼容性检查"
+    description: "检查器件引脚电压与网络电压是否兼容"
+    severity: ERROR
+    enabled: true
+    params:
+      check_type: all
+      max_overvoltage_ratio: 1.1
+    tags: ["voltage", "compatibility"]
+
+  # ============================================
+  # P3: 连通性检查
+  # ============================================
+
+  - id: FLOATING_PIN_CHECK
+    template_id: connectivity_check
+    name: "悬空引脚检查"
+    description: "检查非 NC 功能引脚是否未连接网络"
+    severity: WARNING
+    enabled: true
+    params:
+      check_type: floating_pin
+      exclude_nc: true
+      exclude_part_types: ["TESTPOINT", "MECHANICAL"]
+    tags: ["connectivity", "floating", "pin"]
+
+  - id: SINGLE_END_NET
+    template_id: connectivity_check
+    name: "单端网络检查"
+    description: "检查仅连接一个器件引脚的信号网络"
+    severity: INFO
+    enabled: true
+    params:
+      check_type: single_end_net
+    tags: ["connectivity", "single_end", "net"]
+
+  - id: BUS_INTEGRITY
+    template_id: connectivity_check
+    name: "总线完整性检查"
+    description: "检查 I2C/SPI 总线是否有足够的器件连接"
+    severity: INFO
+    enabled: true
+    params:
+      check_type: bus_integrity
+      min_bus_devices: 2
+    tags: ["connectivity", "bus", "i2c"]

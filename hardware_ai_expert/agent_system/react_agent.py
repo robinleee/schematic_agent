@@ -39,6 +39,10 @@ from agent_system.graph_tools import (
     find_common_cause,
     analyze_power_sequence,
     trace_signal_path,
+    trace_differential_pair,
+    discover_diff_pairs,
+    get_common_cause_graph,
+    common_cause_risk_score,
     get_graph_tools as _get_all_graph_tools,
 )
 from agent_system.knowledge_router import KnowledgeRouter
@@ -80,6 +84,10 @@ GRAPH_TOOLS = {
     "find_common_cause": find_common_cause,
     "analyze_power_sequence": analyze_power_sequence,
     "trace_signal_path": trace_signal_path,
+    "trace_differential_pair": trace_differential_pair,
+    "discover_diff_pairs": discover_diff_pairs,
+    "get_common_cause_graph": get_common_cause_graph,
+    "common_cause_risk_score": common_cause_risk_score,
 }
 
 

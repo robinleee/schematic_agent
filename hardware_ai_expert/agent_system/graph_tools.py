@@ -1556,6 +1556,370 @@ def trace_differential_pair(start_pin_id: str) -> str:
 # 工具集导出
 # ============================================================
 
+@tool
+def discover_diff_pairs(signal_type: str = "") -> str:
+    """
+    自动发现原理图中的所有差分对。
+
+    扫描所有 _P/_N 或 CLKP/CLKN 等命名的网络，自动配对并推断信号标准。
+    统计配对完整性和信号类型分布。
+
+    Args:
+        signal_type: 过滤信号类型（PCIe/MIPI/USB/LVDS/ALL），默认 ALL
+
+    Returns:
+        差分对列表 + 信号完整性摘要
+    """
+    try:
+        pid = get_current_project()
+
+        # 差分对后缀模式
+        P_SUFFIXES = [r'_P$', r'CLKP$', r'DP$', r'TXP$', r'RXP$', r'_POS$', r'\+$']
+
+        # 信号标准推断
+        SIGNAL_STD = [
+            (r'(?i)PCIE', 'PCIe'),
+            (r'(?i)(CSI|DSI|MIPI|DPHY|CPHY)', 'MIPI'),
+            (r'(?i)(USB[_]?3|SSRX|SSTX|USB_SS)', 'USB3'),
+            (r'(?i)USB', 'USB2'),
+            (r'(?i)LVDS', 'LVDS'),
+            (r'(?i)(ETH|ETHERNET|RGMII|SERDES|SGMII)', 'Ethernet'),
+            (r'(?i)(HDMI|TMDS)', 'HDMI'),
+            (r'(?i)SATA', 'SATA'),
+            (r'(?i)(89581MT|100MT|GT1)', '89581MT_SerDes'),  # Marvell
+            (r'(?i)(XFI|XF0)', '10GBASE-KR'),
+            (r'(?i)(CML|CLK)', 'Clock'),
+            (r'(?i)(ADC|DAC)', 'ADC/DAC'),
+        ]
+
+        def infer_std(name):
+            for pat, std in SIGNAL_STD:
+                if re.search(pat, name):
+                    return std
+            return 'Unknown'
+
+        # 查找所有 P 端网络
+        cypher = """
+        MATCH (n:Net)
+        WHERE n.Name =~ '.*(_P|CLKP|TXP|RXP|DP|_POS)$'
+        RETURN n.Name AS net_name
+        """
+
+        with _get_driver().session() as session:
+            p_nets = [r['net_name'] for r in session.run(cypher)]
+
+        # 配对
+        pairs = []
+        unmatched = []
+        std_counts = {}
+
+        for p_name in p_nets:
+            complement = None
+            base_name = p_name
+
+            # 尝试找 N 端
+            for suffix, comp in [('_P', '_N'), ('_POS', '_NEG'), ('CLKP', 'CLKN'),
+                                  ('DP', 'DN'), ('TXP', 'TXN'), ('RXP', 'RXN')]:
+                if p_name.endswith(suffix):
+                    complement = p_name[:-len(suffix)] + comp
+                    base_name = p_name[:-len(suffix)]
+                    break
+
+            if not complement:
+                unmatched.append(p_name)
+                continue
+
+            # 验证 N 端存在
+            n_exists = False
+            with _get_driver().session() as session:
+                rec = session.run(
+                    "MATCH (n:Net {Name: $name}) RETURN n.Name",
+                    {"name": complement}
+                ).single()
+                n_exists = rec is not None
+
+            std = infer_std(p_name)
+            std_counts[std] = std_counts.get(std, 0) + 1
+
+            # 信号类型过滤
+            if signal_type and signal_type.upper() != 'ALL' and std != signal_type:
+                continue
+
+            pairs.append({
+                'base': base_name,
+                'p_net': p_name,
+                'n_net': complement,
+                'n_exists': n_exists,
+                'signal_std': std,
+                'status': '✅ Complete' if n_exists else '❌ N端缺失',
+            })
+
+        # 格式化输出
+        lines = [f"🔌 差分对发现: 共 {len(p_nets)} 个 P 端网络, {len(pairs)} 个配对, {len(unmatched)} 个未配对"]
+        lines.append("")
+
+        # 信号标准分布
+        lines.append("信号标准分布:")
+        for std, cnt in sorted(std_counts.items(), key=lambda x: -x[1]):
+            lines.append(f"  {std}: {cnt} 对")
+        lines.append("")
+
+        # 配对结果
+        matched = [p for p in pairs if p['n_exists']]
+        incomplete = [p for p in pairs if not p['n_exists']]
+
+        if matched:
+            lines.append(f"✅ 完整配对 ({len(matched)} 对):")
+            for p in matched[:20]:
+                lines.append(f"  {p['signal_std']:10s} | {p['p_net']} ↔ {p['n_net']}")
+            if len(matched) > 20:
+                lines.append(f"  ... 还有 {len(matched) - 20} 对")
+
+        if incomplete:
+            lines.append("")
+            lines.append(f"❌ 不完整配对 ({len(incomplete)} 对):")
+            for p in incomplete[:10]:
+                lines.append(f"  {p['signal_std']:10s} | {p['p_net']} → {p['n_net']} (缺失)")
+
+        if unmatched:
+            lines.append("")
+            lines.append(f"⚠️ 未识别差分模式的网络 ({len(unmatched)} 个):")
+            for n in unmatched[:10]:
+                lines.append(f"  {n}")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        return f"差分对发现出错: {str(e)}"
+
+
+@tool
+def get_common_cause_graph(refdes_list: str) -> str:
+    """
+    获取共因失效图谱数据。
+
+    查询指定器件的电源树上游路径，找出所有共享上游节点，
+    返回结构化 JSON 供前端渲染共因失效路径图。
+
+    Args:
+        refdes_list: 逗号分隔的器件位号列表（如 "U1,U2,U3"）
+
+    Returns:
+        共因失效图谱的 JSON 数据，包含 nodes/edges/shared_paths
+    """
+    try:
+        refdes_items = [r.strip() for r in refdes_list.split(",") if r.strip()]
+        if not refdes_items:
+            return "请提供至少一个器件位号"
+
+        pid = get_current_project()
+
+        # 查询每个器件的电源上游路径
+        cypher = """
+        MATCH path = (c:Component {RefDes: $refdes})-[:POWERED_BY*1..5]->(upstream:Component)
+        WHERE c.project_id = $project_id OR c.project_id IS NULL
+        WITH c, nodes(path) AS ns, relationships(path) AS rs
+        UNWIND range(0, size(ns)-1) AS i
+        WITH c, ns[i] AS node, CASE WHEN i < size(rs) THEN rs[i] ELSE null END AS rel
+        RETURN DISTINCT c.RefDes AS source_refdes,
+               node.RefDes AS upstream_refdes,
+               node.PartType AS upstream_type,
+               node.Model AS upstream_model
+        """
+
+        all_upstream = {}  # refdes -> set of upstream refdes
+        node_info = {}     # refdes -> {type, model}
+
+        for refdes in refdes_items:
+            with _get_driver().session() as session:
+                records = session.run(cypher, {"refdes": refdes, "project_id": pid})
+                upstream_set = set()
+                for r in records:
+                    upstream_ref = r["upstream_refdes"]
+                    if upstream_ref:
+                        upstream_set.add(upstream_ref)
+                        node_info[upstream_ref] = {
+                            "type": r["upstream_type"],
+                            "model": r["upstream_model"],
+                        }
+                all_upstream[refdes] = upstream_set
+
+            # 记录源器件信息
+            cypher_self = """
+            MATCH (c:Component {RefDes: $refdes})
+            WHERE c.project_id = $project_id OR c.project_id IS NULL
+            RETURN c.PartType AS pt, c.Model AS model
+            """
+            with _get_driver().session() as session:
+                rec = session.run(cypher_self, {"refdes": refdes, "project_id": pid}).single()
+                if rec:
+                    node_info[refdes] = {"type": rec["pt"], "model": rec["model"]}
+
+        # 找共享上游
+        all_upstreams_flat = []
+        for s in all_upstream.values():
+            all_upstreams_flat.extend(s)
+
+        from collections import Counter
+        upstream_counter = Counter(all_upstreams_flat)
+        shared_upstream = {k: v for k, v in upstream_counter.items() if v >= 2}
+
+        # 构建图谱 JSON
+        import json
+
+        nodes = []
+        edges = []
+
+        # 添加源器件节点
+        for refdes in refdes_items:
+            info = node_info.get(refdes, {})
+            nodes.append({
+                "id": refdes,
+                "type": info.get("type", "Unknown"),
+                "model": info.get("model", ""),
+                "level": 0,
+                "is_shared": False,
+            })
+
+        # 添加上游节点和边
+        for refdes, upstreams in all_upstream.items():
+            for up_ref in upstreams:
+                if up_ref not in [n["id"] for n in nodes]:
+                    info = node_info.get(up_ref, {})
+                    is_shared = up_ref in shared_upstream
+                    nodes.append({
+                        "id": up_ref,
+                        "type": info.get("type", "Unknown"),
+                        "model": info.get("model", ""),
+                        "level": 1,
+                        "is_shared": is_shared,
+                    })
+                edges.append({
+                    "source": refdes,
+                    "target": up_ref,
+                    "label": "POWERED_BY",
+                })
+
+        # 共享路径信息
+        shared_paths = []
+        for shared_ref, count in shared_upstream.items():
+            affected = [r for r in refdes_items if shared_ref in all_upstream.get(r, set())]
+            shared_paths.append({
+                "source": shared_ref,
+                "affected": affected,
+                "dependent_count": count,
+            })
+
+        result = {
+            "nodes": nodes,
+            "edges": edges,
+            "shared_paths": shared_upstream,
+            "total_shared": len(shared_upstream),
+        }
+
+        return json.dumps(result, ensure_ascii=False, indent=2)
+
+    except Exception as e:
+        return f"共因失效图谱查询出错: {str(e)}"
+
+
+@tool
+def common_cause_risk_score(refdes_list: str) -> str:
+    """
+    计算共因失效风险评分。
+
+    分析指定器件的电源树共享上游，评估单点故障风险。
+
+    Args:
+        refdes_list: 逗号分隔的器件位号列表
+
+    Returns:
+        风险评分和详细分析报告
+    """
+    try:
+        refdes_items = [r.strip() for r in refdes_list.split(",") if r.strip()]
+        if not refdes_items:
+            return "请提供至少一个器件位号"
+
+        pid = get_current_project()
+
+        # 查询每个器件的上游
+        cypher = """
+        MATCH (c:Component {RefDes: $refdes})-[:POWERED_BY*1..5]->(upstream:Component)
+        WHERE c.project_id = $project_id OR c.project_id IS NULL
+        RETURN collect(DISTINCT upstream.RefDes) AS upstream_refs
+        """
+
+        all_upstream = {}
+        for refdes in refdes_items:
+            with _get_driver().session() as session:
+                rec = session.run(cypher, {"refdes": refdes, "project_id": pid}).single()
+                all_upstream[refdes] = set(rec["upstream_refs"]) if rec and rec["upstream_refs"] else set()
+
+        # 计算指标
+        total_upstreams = set()
+        for s in all_upstream.values():
+            total_upstreams.update(s)
+
+        from collections import Counter
+        upstream_counter = Counter()
+        for s in all_upstream.values():
+            for u in s:
+                upstream_counter[u] += 1
+
+        shared = {k: v for k, v in upstream_counter.items() if v >= 2}
+
+        # 单点依赖度
+        if total_upstreams:
+            single_point_ratio = len(shared) / len(total_upstreams)
+        else:
+            single_point_ratio = 0.0
+
+        # 影响半径（最大的共享上游影响的器件数）
+        max_impact = max(upstream_counter.values()) if upstream_counter else 0
+
+        # 风险等级
+        if single_point_ratio > 0.5 or max_impact >= 5:
+            risk = "🔴 高风险"
+        elif single_point_ratio > 0.2 or max_impact >= 3:
+            risk = "🟡 中风险"
+        else:
+            risk = "🟢 低风险"
+
+        # 格式化报告
+        lines = [f"⚡ 共因失效风险评估"]
+        lines.append(f"")
+        lines.append(f"分析器件: {', '.join(refdes_items)}")
+        lines.append(f"风险等级: {risk}")
+        lines.append(f"")
+        lines.append(f"📊 指标:")
+        lines.append(f"  单点依赖度: {single_point_ratio:.1%} ({len(shared)}/{len(total_upstreams)} 上游节点被共享)")
+        lines.append(f"  最大影响半径: {max_impact} 个器件依赖同一上游")
+        lines.append(f"")
+
+        if shared:
+            lines.append(f"🔴 共享上游节点:")
+            for ref, cnt in sorted(shared.items(), key=lambda x: -x[1]):
+                affected = [r for r in refdes_items if ref in all_upstream.get(r, set())]
+                lines.append(f"  {ref}: 影响 {cnt} 个器件 ({', '.join(affected)})")
+        else:
+            lines.append(f"✅ 未发现共享上游节点")
+
+        lines.append(f"")
+        lines.append(f"💡 建议:")
+        if single_point_ratio > 0.3:
+            lines.append(f"  - 增加冗余电源路径，减少单点故障风险")
+        if max_impact >= 4:
+            lines.append(f"  - 考虑为高影响上游器件增加备份或监控")
+        if not shared:
+            lines.append(f"  - 电源架构设计良好，无共因失效风险")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        return f"风险评分出错: {str(e)}"
+
+
 def get_graph_tools() -> list:
     """获取所有 Graph Tools"""
     return [
@@ -1568,6 +1932,9 @@ def get_graph_tools() -> list:
         find_common_cause,
         analyze_power_sequence,
         trace_differential_pair,
+        discover_diff_pairs,
+        get_common_cause_graph,
+        common_cause_risk_score,
         get_graph_summary,
     ]
 

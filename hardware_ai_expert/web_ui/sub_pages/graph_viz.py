@@ -21,6 +21,63 @@ from agent_system.graph_tools import _run_cypher
 MAX_NEIGHBORS = 50
 
 
+def _build_common_cause_dot(graph_data: dict) -> str:
+    """Build DOT string for common cause failure visualization."""
+    dot_nodes = []
+    dot_edges = []
+
+    nodes = graph_data.get("nodes", [])
+    edges = graph_data.get("edges", [])
+
+    # Add nodes
+    for node in nodes:
+        nid = _safe_id(node["id"])
+        label = node["id"]
+        if node.get("model"):
+            label = f"{node['id']}\n{node['model']}"
+        is_shared = node.get("is_shared", False)
+
+        if is_shared:
+            # Shared upstream: red/orange
+            dot_nodes.append(
+                f'    {nid} [label="{label}", shape=box, '
+                f'style="filled,bold", fillcolor="#E65100", fontcolor=white, '
+                f'fontsize=11, penwidth=2];'
+            )
+        elif node.get("level", 0) == 0:
+            # Source component: blue
+            dot_nodes.append(
+                f'    {nid} [label="{label}", shape=box, '
+                f'style=filled, fillcolor="#1565C0", fontcolor=white, '
+                f'fontsize=10];'
+            )
+        else:
+            # Upstream component: dark
+            dot_nodes.append(
+                f'    {nid} [label="{label}", shape=box, '
+                f'style=filled, fillcolor="#37474F", fontcolor=white, '
+                f'fontsize=9];'
+            )
+
+    # Add edges
+    for edge in edges:
+        src_id = _safe_id(edge["source"])
+        tgt_id = _safe_id(edge["target"])
+        label = edge.get("label", "")
+        dot_edges.append(f'    {src_id} -- {tgt_id} [label="{label}", fontsize=8];')
+
+    dot = "graph G {\n"
+    dot += "    rankdir=TB;\n"
+    dot += "    bgcolor=transparent;\n"
+    dot += "    node [fontname=\"Arial\"];\n"
+    dot += "    edge [color=\"#555555\"];\n"
+    dot += "\n".join(dot_nodes) + "\n"
+    dot += "\n".join(dot_edges) + "\n"
+    dot += "}"
+
+    return dot
+
+
 def _safe_id(name: str) -> str:
     """Convert a name to a safe DOT identifier."""
     return name.replace(" ", "_").replace("-", "_").replace(".", "_").replace("/", "_").replace("+", "_PLUS_")
@@ -364,7 +421,7 @@ def render_graph_viz():
     st.markdown("<div class='header-line'></div>", unsafe_allow_html=True)
     st.markdown(
         "<span style='color:var(--text-secondary);font-size:0.9rem;'>"
-        "Neo4j 图谱关系可视化 · 组件连接 · 电源树"
+        "Neo4j 图谱关系可视化 · 组件连接 · 电源树 · 共因失效"
         "</span>",
         unsafe_allow_html=True,
     )
@@ -428,8 +485,7 @@ def render_graph_viz():
                     except Exception as e:
                         st.error(f"查询失败: {e}")
 
-    else:
-        # Power tree
+    elif viz_type == "电源树":
         try:
             voltages = _run_cypher("""
                 MATCH (n:Net) WHERE n.VoltageLevel IS NOT NULL
@@ -454,6 +510,42 @@ def render_graph_viz():
                     st.warning("未找到电源器件或电源网络数据")
                 else:
                     st.session_state._graph_viz_dot = ("power", dot_result)
+
+    elif viz_type == "共因失效分析":
+        # Common cause failure analysis
+        refdes_list = st.text_input(
+            "分析器件列表（逗号分隔）",
+            value="U60140,U60000",
+            help="输入多个器件位号，分析它们的电源共同上游",
+        )
+
+        if st.button("⚡ 共因失效分析", type="primary"):
+            if not refdes_list.strip():
+                st.warning("请输入器件位号")
+            else:
+                with st.spinner("正在分析共因失效风险..."):
+                    try:
+                        from agent_system.graph_tools import common_cause_risk_score, get_common_cause_graph
+
+                        # 风险评分
+                        score_result = common_cause_risk_score.invoke({"refdes_list": refdes_list.strip()})
+                        st.markdown("### 风险评估")
+                        st.text(score_result)
+
+                        # 图谱数据
+                        graph_json = get_common_cause_graph.invoke({"refdes_list": refdes_list.strip()})
+                        import json
+                        graph_data = json.loads(graph_json)
+
+                        if graph_data.get("nodes"):
+                            dot_str = _build_common_cause_dot(graph_data)
+                            if dot_str:
+                                st.session_state._graph_viz_dot = ("common_cause", dot_str)
+                        else:
+                            st.info("未发现电源上游共享关系")
+
+                    except Exception as e:
+                        st.error(f"分析失败: {e}")
 
     # Render graph from session state
     if st.session_state._graph_viz_dot is not None:
