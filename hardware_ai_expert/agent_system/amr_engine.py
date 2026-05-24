@@ -182,6 +182,45 @@ class VoltageLevelExtractor:
         (rf'{_WB}VTT{_WB_END}', 'vtt_ddr'),
         # VPP_DDR (DDR programming voltage, typically 2.5V)
         (rf'{_WB}VPP{_WB_END}', 'vpp_ddr'),
+
+        # Group 8: Extended patterns for unannotated POWER nets
+        # VDD_DIE, VDD_xxx_DIE (ISP core, typically 1.0V)
+        (rf'{_WB}VDD_DIE{_WB_END}', 'vdd_die'),
+        # VDDIM_xxx (MMC/SDIO voltage, typically 1.8V)
+        (rf'{_WB}VDDIM_{_VNUM}{_WB_END}', 'vddim'),
+        # VCAP_xxx (MCU/SoC decoupling)
+        (rf'{_WB}VCAP_(?:MCU_)?VDDS(\d+){_WB_END}', 'vcap_vdds'),
+        # PVCCIN_xxx, PVCCINF_xxx (CPU VCCIN, typically 1.8V)
+        (rf'{_WB}PVCCIN(?:F|FAON)?(?:_CPU)?{_WB_END}', 'pvccin'),
+        # PVCCD_HV_xxx (CPU core, typically 1.0V)
+        (rf'{_WB}PVCCD\d?_HV(?:_CPU)?({_VNUM})?{_WB_END}', 'pvccd_hv'),
+        # PVCCFA_EHV_xxx (CPU F-box)
+        (rf'{_WB}PVCCFA_EHV(?:_FIVRA)?(?:_CPU)?({_VNUM})?{_WB_END}', 'pvccfa_ehv'),
+        # AD2428_VOUTx (A2B, typically 3.3V)
+        (rf'{_WB}AD2428_VOUT(\d+){_WB_END}', 'ad2428_vout'),
+        # VDD_SRG (serial regulator, typically variable)
+        (rf'{_WB}VDD_SRG_(?:IN|OUT)({_VNUM_STRICT})?{_WB_END}', 'vdd_srg'),
+        # MP_VOUT/VIN (Monolithic Power, variable voltage with suffix)
+        (rf'{_WB}MP_V(?:OUT|IN)_{_VNUM_STRICT}{_WB_END}', 'mp_vout'),
+        # VCC_xxx_RF (RF domain, typically 3.3V or 5V)
+        (rf'{_WB}VCC_(?:MAIN|SAFETY)_RF(?:_IN)?{_WB_END}', 'vcc_rf'),
+        # ISP_x_IO_VDDx (ISP IO voltage, typically 1.8V for VDD0/VDD1, 3.3V for VDD2)
+        (rf'{_WB}ISP\d+_IO_VDD(\d+){_WB_END}', 'isp_io_vdd'),
+        # ISP_x_VDD_DIE (ISP core)
+        (rf'{_WB}ISP\d+_VDD_DIE{_WB_END}', 'isp_vdd_die'),
+        # VDDSB_xxx (standby voltage)
+        (rf'{_WB}VDDSB_{_VNUM}{_WB_END}', 'vddsb'),
+        # TC399 VIN (AURIX input, typically 5V or 3.3V)
+        (rf'{_WB}(?:EN_|FT_|FUSE_|GATE_|OLD_|SO_)?VIN_TC399{_WB_END}', 'vin_tc399'),
+        # CAP_VDD_DESx (Deserializer decoupling, typically 1.8V)
+        (rf'{_WB}CAP_VDD_DES\d+{_WB_END}', 'cap_vdd_des'),
+        # MONx_IR_VEXT1V8 (1.8V external voltage monitor)
+        (rf'{_WB}MON\d+_IR_VEXT({_VNUM}){_WB_END}', 'mon_vext'),
+        # VDD_CPU_xxx (CPU VRM output, variable — mark as None for now)
+        # PG_VCCINT0V85_ISP0V8 — extract 0V85 from middle
+        (rf'{_WB}VCCINT({_VNUM}){_WB_END}', 'vccint_mid'),
+        # TC399_VDDM (AURIX VDDM, typically 5V or 3.3V)
+        (rf'{_WB}TC399_VDDM{_WB_END}', 'tc399_vddm'),
     ]
 
     # Fixed voltage values for named rails without explicit voltage numbers
@@ -197,6 +236,41 @@ class VoltageLevelExtractor:
     # Additional GND variants
     GND_NAMES = {'GND', 'DGND', 'AGND', 'PGND', 'SGND', 'VSS', 'VSSA', 'VSSD', 'VSSIO',
                  'EPAD', 'SHIELD', 'CHASSIS_GND', 'EARTH'}
+
+    # Extended: more KNOWN_VOLTAGES for rails without explicit voltage numbers
+    KNOWN_VOLTAGES_EXTENDED = {
+        # ISP subsystem (Image Signal Processor) — typically 0.8V/1.0V core, 1.8V/3.3V IO
+        'VDD_DIE': 1.0,       # ISP core (VDD_DIE)
+        'VDDIM_MMC': 1.8,    # MMC interface voltage
+        'VDDP3_MN397': 3.3,  # 3.3V rail with P suffix
+        # MCU/SoC internal caps
+        'VCAP_VDDS0': 1.2,
+        'VCAP_VDDS2': 1.2,
+        'VCAP_VDDS5': 3.3,
+        'VCAP_MCU_VDDS0': 1.2,
+        'VCAP_MCU_VDDS1': 1.2,
+        'VCAP_MCU_VDDS2': 1.2,
+        # CPU VRM rails
+        'PVCCIN_CPU0': 1.8,       # CPU VCCIN typical
+        'PVCCINF_CPU0': 1.8,      # CPU VCCIN FIVRA
+        'PVCCINFAON_CPU0': 1.0,   # Always-on domain
+        'PVCCD0_HV_CPU0': 1.0,    # CPU core
+        'PVCCD1_HV_CPU0': 1.0,
+        'PVCCFA_EHV_CPU0': 1.0,   # CPU F-box
+        'PVCCFA_EHV_FIVRA_CPU0': 1.0,
+        # INA226 voltage monitor (sense inputs, not power rails — skip)
+        # AD2428 (A2B transceiver)
+        'AD2428_VOUT1': 3.3,
+        'AD2428_VOUT2': 3.3,
+        # LM5143 DCDC
+        'VCC_LM5143': 5.0,
+        # TC399 (Infineon AURIX)
+        'VDDSB_TC399': 5.0,     # Standby
+        # MAX96712 GMSL
+        'MAX96712_CAP_VDD': 1.8,
+        # BMC
+        'BMC_BATVDD': 3.3,      # Battery backup
+    }
 
     @classmethod
     def extract(cls, net_name: str) -> Optional[float]:
@@ -214,12 +288,44 @@ class VoltageLevelExtractor:
         if net_upper in cls.KNOWN_VOLTAGES:
             return cls.KNOWN_VOLTAGES[net_upper]
 
+        # Check extended known voltages (exact match)
+        if net_upper in cls.KNOWN_VOLTAGES_EXTENDED:
+            return cls.KNOWN_VOLTAGES_EXTENDED[net_upper]
+
+        # Partial match for extended patterns (e.g., ISP0_VDD_DIE matches VDD_DIE)
+        for key, voltage in cls.KNOWN_VOLTAGES_EXTENDED.items():
+            if key in net_upper and len(key) >= 5:  # min 5 chars to avoid false matches
+                return voltage
+
         for pattern, ptype in cls.PATTERNS:
             match = re.search(pattern, net_upper)
             if match:
                 # Handle patterns without capturing groups (named rails)
                 if ptype in ('vddq_ddr', 'vtt_ddr', 'vpp_ddr'):
                     return cls.KNOWN_VOLTAGES.get(ptype.rsplit('_', 1)[0].upper())
+
+                # Extended pattern types with no voltage in name
+                if ptype in ('vdd_die', 'isp_vdd_die', 'pvccin', 'vcc_rf', 'vin_tc399', 'cap_vdd_des', 'tc399_vddm', 'vddsb'):
+                    # Map to known voltages
+                    voltage_map = {
+                        'vdd_die': 1.0,
+                        'isp_vdd_die': 1.0,
+                        'pvccin': 1.8,
+                        'vcc_rf': 3.3,
+                        'vin_tc399': 5.0,
+                        'cap_vdd_des': 1.8,
+                        'tc399_vddm': 3.3,
+                        'vddsb': 5.0,
+                    }
+                    return voltage_map.get(ptype)
+
+                # ISP IO VDD: VDD0/VDD1 = 1.8V, VDD2 = 3.3V
+                if ptype == 'isp_io_vdd':
+                    try:
+                        idx = int(match.group(1))
+                        return 3.3 if idx >= 2 else 1.8
+                    except (ValueError, IndexError):
+                        return 1.8
 
                 try:
                     volt_str = match.group(1)
