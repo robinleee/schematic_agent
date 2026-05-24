@@ -324,6 +324,19 @@ class KnowledgeRouter:
         self.tier1 = LocalRAGRetriever(project_id=project_id)
         self.tier2 = ChromaDBTier2Retriever(project_id=project_id)  # ChromaDB hardware_knowledge
         self.tier3 = PublicMPNRetriever()
+        self._graphrag = None  # 延迟加载 GraphRAG Pipeline (Tier0)
+
+    @property
+    def graphrag(self):
+        """GraphRAG Pipeline (Tier0) — 延迟初始化"""
+        if self._graphrag is None:
+            try:
+                from agent_system.graph_rag.pipeline import GraphRAGPipeline
+                self._graphrag = GraphRAGPipeline()
+                logger.info("GraphRAG Pipeline (Tier0) 已初始化")
+            except Exception as e:
+                logger.warning(f"GraphRAG 初始化失败: {e}")
+        return self._graphrag
 
     def search(self, mpn: str, query: str, max_results: int = 5) -> RetrievalResult:
         """
@@ -337,6 +350,25 @@ class KnowledgeRouter:
         Returns:
             最优检索结果
         """
+        # Tier 0: GraphRAG (True GraphRAG Pipeline)
+        if self.graphrag:
+            try:
+                gr_results = self.graphrag.query(query, mode="auto", top_k=max_results)
+                if gr_results:
+                    best_gr = max(gr_results, key=lambda r: r.score)
+                    if best_gr.score >= 0.3:
+                        logger.info(f"Tier0 GraphRAG hit: {query[:30]}... score={best_gr.score:.2f}")
+                        return RetrievalResult(
+                            status="success",
+                            tier="Tier0",
+                            mpn=mpn,
+                            content=best_gr.text,
+                            confidence=best_gr.score,
+                            source=f"GraphRAG({best_gr.retrieval_type})",
+                        )
+            except Exception as e:
+                logger.debug(f"Tier0 GraphRAG 查询失败: {e}")
+
         # Tier 1: 本地向量库
         tier1_results = self.tier1.search(mpn, query, n=max_results)
         if tier1_results:
