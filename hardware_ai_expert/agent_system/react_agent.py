@@ -522,6 +522,68 @@ class ReActAgent:
         else:
             return "query"
 
+    @staticmethod
+    def _detect_composite_intent(user_input: str) -> list[tuple[str, str]]:
+        """检测复合意图，拆分为子任务列表。
+
+        Returns:
+            list of (sub_task_text, task_type) tuples. 空列表表示单一意图。
+        """
+        # 分隔符拆分
+        separators = ["并", "并且", "同时", "然后", "以及", "另外", "还有", "，", ",", "和"]
+        
+        # 用关键词拆分：找到不同类型的意图段
+        review_kw = ["审查", "检查", "review"]
+        diagnosis_kw = ["故障", "诊断", "掉电", "无输出", "无电压", "失效", "不工作", "异常", "发热"]
+        query_kw = ["查询", "是什么", "多少", "查找", "查找", "查看", "query", "介绍"]
+
+        # 找到意图关键词在原文中的位置
+        import re
+        segments = []  # (position, sub_text, task_type)
+
+        all_kw = [(kw, "review") for kw in review_kw] + \
+                 [(kw, "diagnosis") for kw in diagnosis_kw] + \
+                 [(kw, "query") for kw in query_kw]
+
+        for kw, ktype in all_kw:
+            for m in re.finditer(re.escape(kw), user_input, re.IGNORECASE):
+                # 向前找到分隔符或开头
+                start = 0
+                for sep in separators:
+                    idx = user_input.rfind(sep, 0, m.start())
+                    if idx >= 0:
+                        start = max(start, idx + len(sep))
+                # 向后找到分隔符或结尾
+                end = len(user_input)
+                for sep in separators:
+                    idx = user_input.find(sep, m.end())
+                    if idx >= 0:
+                        end = min(end, idx)
+                sub = user_input[start:end].strip()
+                if sub and len(sub) >= 2:
+                    segments.append((m.start(), sub, ktype))
+
+        if len(segments) <= 1:
+            return []  # 单一意图
+
+        # 去重（按位置排序，合并重叠段）
+        segments.sort(key=lambda x: x[0])
+        merged = [segments[0]]
+        for pos, sub, ktype in segments[1:]:
+            prev_pos, prev_sub, prev_type = merged[-1]
+            # 如果重叠，合并
+            if pos < prev_pos + len(prev_sub):
+                new_sub = user_input[prev_pos:pos + len(sub)].strip()
+                # 优先级: diagnosis > review > query
+                priority = {"diagnosis": 3, "review": 2, "query": 1}
+                new_type = prev_type if priority.get(prev_type, 0) >= priority.get(ktype, 0) else ktype
+                merged[-1] = (prev_pos, new_sub, new_type)
+            else:
+                merged.append((pos, sub, ktype))
+
+        result = [(sub, ktype) for _, sub, ktype in merged if sub]
+        return result if len(result) >= 2 else []
+
     # --------------------------------------------------------
     # Main ReAct Loop
     # --------------------------------------------------------
@@ -538,8 +600,55 @@ class ReActAgent:
             dict: {status, report, execution_trace, tool_call_count, ...}
         """
         if not task_type:
+            # 检测复合意图
+            sub_tasks = self._detect_composite_intent(user_input)
+            if sub_tasks:
+                return self._run_composite(user_input, sub_tasks)
             task_type = self._detect_task_type(user_input)
 
+        return self._run_single(user_input, task_type)
+
+    @staticmethod
+    def _summarize_trace(trace: list[ReActTraceStep]) -> str:
+        if not trace:
+            return "无执行记录"
+        lines = ["### 执行摘要"]
+        for t in trace:
+            lines.append(f"- Step {t.step_id}: {t.action} → {t.observation[:100]}...")
+        return "\n".join(lines)
+
+    def _run_composite(self, user_input: str, sub_tasks: list[tuple[str, str]]) -> dict:
+        """执行复合意图：按序运行子任务并合并报告"""
+        logger.info(f"检测到复合意图，拆分为 {len(sub_tasks)} 个子任务")
+
+        all_reports = []
+        all_traces = []
+        total_tool_calls = 0
+        all_success = True
+
+        for i, (sub_text, sub_type) in enumerate(sub_tasks, 1):
+            logger.info(f"子任务 {i}/{len(sub_tasks)}: [{sub_type}] {sub_text}")
+
+            result = self._run_single(sub_text, sub_type)
+
+            all_reports.append(f"### 子任务 {i}: {sub_text}\n\n{result.get('report', '无结果')}")
+            all_traces.extend(result.get("execution_trace", []))
+            total_tool_calls += result.get("tool_call_count", 0)
+            if result.get("status") != "success":
+                all_success = False
+
+        return {
+            "status": "success" if all_success else "partial",
+            "task_type": "composite",
+            "sub_tasks": [(t, ty) for t, ty in sub_tasks],
+            "report": "\n\n---\n\n".join(all_reports),
+            "execution_trace": all_traces,
+            "tool_call_count": total_tool_calls,
+            "timestamp": datetime.now().isoformat(),
+        }
+
+    def _run_single(self, user_input: str, task_type: str) -> dict:
+        """执行单个 ReAct 循环（内部方法）"""
         system_prompt = self._build_system_prompt(task_type)
         trace: list[ReActTraceStep] = []
         tool_call_count = 0
@@ -559,15 +668,11 @@ class ReActAgent:
                 final_report = decision.final_answer or "## 处理完成\n\nLLM 未输出结论。"
                 break
 
-            # 执行工具
             observation = self._execute_tool(decision.action, decision.action_input)
             tool_call_count += 1
 
-            # 智能收敛检测：如果已经调用 4+ 个工具且最后一步是图谱工具，强制下一轮总结
             graph_tool_count = sum(1 for t in trace if t.action in GRAPH_TOOLS)
             if graph_tool_count >= 4 and decision.action in GRAPH_TOOLS:
-                logger.info(f"Smart convergence: {graph_tool_count} graph tools called, forcing final")
-                # 不强制，但设置 flag 让下一轮 force_final
                 force_final_next = True
             else:
                 force_final_next = False
@@ -580,7 +685,6 @@ class ReActAgent:
                 observation=observation,
             ))
 
-            # 防死循环
             recent_same = sum(
                 1 for t in trace[-SAME_TOOL_REPEAT_LIMIT:]
                 if t.action == decision.action and t.action_input == decision.action_input
@@ -612,9 +716,6 @@ class ReActAgent:
             "tool_call_count": tool_call_count,
             "timestamp": datetime.now().isoformat(),
         }
-
-    @staticmethod
-    def _summarize_trace(trace: list[ReActTraceStep]) -> str:
         if not trace:
             return "无执行记录"
         lines = ["### 执行摘要"]
