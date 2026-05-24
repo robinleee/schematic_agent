@@ -152,7 +152,7 @@ class LocalRAGRetriever:
         """搜索本地向量库"""
         # Enhance query: prepend MPN to improve cross-language matching
         enhanced_query = f"{mpn} {query}" if mpn else query
-        query_emb = embed(enhanced_query)
+        query_emb = embed(enhanced_query, keep_loaded=False)
 
         # 构建 where 过滤：mpn + project_id
         where_filter = {}
@@ -242,7 +242,7 @@ class ChromaDBTier2Retriever:
             # Enhance query: prepend MPN to improve cross-language matching
             # all-MiniLM-L6-v2 is English-only; Chinese queries get low scores against English docs
             enhanced_query = f"{mpn} {query}" if mpn else query
-            query_emb = embed(enhanced_query)
+            query_emb = embed(enhanced_query, keep_loaded=False)
             where_filter = {}
             if mpn:
                 where_filter["mpn"] = {"$eq": mpn}

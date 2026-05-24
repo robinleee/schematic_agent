@@ -507,7 +507,10 @@ class ReActAgent:
         """轻量关键词分类（无需 LLM）"""
         s = user_input.lower()
         review_kw = ["审查", "检查", "review", "合规", "违规", "去耦", "上拉", "esd", "降额"]
-        diagnosis_kw = ["故障", "失效", "error", "黑屏", "死机", "诊断", "掉电", "不工作", "无法启动", "boot失败"]
+        diagnosis_kw = ["故障", "失效", "error", "黑屏", "死机", "诊断", "掉电", "不工作",
+                        "无法启动", "boot失败", "无输出", "无电压", "发热", "烧毁", "异常",
+                        "重启", "挂死", "卡死", "不亮", "不启动", "短路", "开路", "漏电",
+                        "过流", "过压", "欠压", "时序", "不稳定", "抖动"]
 
         review_score = sum(1 for kw in review_kw if kw in s)
         diagnosis_score = sum(1 for kw in diagnosis_kw if kw in s)

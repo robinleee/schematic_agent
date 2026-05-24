@@ -91,9 +91,9 @@ class GraphRAGBridge:
     # Embedding 生成
     # --------------------------------------------------------
 
-    def embed(self, text: str) -> list[float]:
+    def embed(self, text: str, keep_loaded: bool = True) -> list[float]:
         """Generate semantic embedding using unified sentence-transformers model."""
-        return embed(text)
+        return embed(text, keep_loaded=keep_loaded)
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for multiple texts (more efficient than individual calls)."""
@@ -201,7 +201,7 @@ class GraphRAGBridge:
     def _query_from_component(self, refdes: str, query: str, n: int) -> list[GraphRAGResult]:
         """从 Component 节点出发，沿 [:DESCRIBES] 做向量过滤检索"""
         try:
-            query_emb = self.embed(query)
+            query_emb = self.embed(query, keep_loaded=False)
             driver = self._get_driver()
 
             with driver.session() as session:
@@ -239,7 +239,7 @@ class GraphRAGBridge:
     def _vector_search_with_graph(self, mpn: str, query: str, n: int) -> list[GraphRAGResult]:
         """向量检索 + 图谱关联增强（Python 层计算相似度）"""
         try:
-            query_emb = self.embed(query)
+            query_emb = self.embed(query, keep_loaded=False)
             driver = self._get_driver()
 
             with driver.session() as session:
@@ -298,7 +298,7 @@ class GraphRAGBridge:
 
             # Enhance query with MPN for cross-language matching
             enhanced_query = f"{mpn} {query}" if mpn else query
-            query_emb = self.embed(enhanced_query)
+            query_emb = self.embed(enhanced_query, keep_loaded=False)
 
             where_filter = {"mpn": {"$eq": mpn}} if mpn else None
 

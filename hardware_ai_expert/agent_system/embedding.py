@@ -44,17 +44,46 @@ def get_model():
     return _model
 
 
-def embed(text: str) -> list[float]:
-    """Generate a 384-dim semantic embedding for the given text."""
+def unload_model():
+    """Release the embedding model from memory (free ~400MB GPU/CPU RAM).
+    Called after batch operations to avoid OOM when Ollama is also running."""
+    global _model
+    if _model is not None:
+        with _lock:
+            if _model is not None:
+                logger.info("Unloading embedding model to free memory")
+                del _model
+                _model = None
+                # Force garbage collection
+                import gc
+                gc.collect()
+
+
+def embed(text: str, keep_loaded: bool = True) -> list[float]:
+    """Generate a 384-dim semantic embedding for the given text.
+    
+    Args:
+        keep_loaded: If False, unload model after encoding (saves ~400MB RAM).
+    """
     model = get_model()
     vector = model.encode([text], normalize_embeddings=True)
-    return vector[0].tolist()
+    result = vector[0].tolist()
+    if not keep_loaded:
+        unload_model()
+    return result
 
 
-def embed_batch(texts: list[str]) -> list[list[float]]:
-    """Generate embeddings for multiple texts in one call (more efficient)."""
+def embed_batch(texts: list[str], keep_loaded: bool = True) -> list[list[float]]:
+    """Generate embeddings for multiple texts in one call (more efficient).
+    
+    Args:
+        keep_loaded: If False, unload model after encoding (saves ~400MB RAM).
+    """
     if not texts:
         return []
     model = get_model()
     vectors = model.encode(texts, normalize_embeddings=True)
-    return [v.tolist() for v in vectors]
+    result = [v.tolist() for v in vectors]
+    if not keep_loaded:
+        unload_model()
+    return result
