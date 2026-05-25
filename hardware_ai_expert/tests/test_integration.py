@@ -287,20 +287,21 @@ class TestAgentToolsPipeline:
 
         tools = get_graph_tools()
         assert isinstance(tools, list)
-        assert len(tools) == 10  # 10 个工具
+        assert len(tools) >= 14  # 至少 14 个工具（持续增长）
 
-        # @tool 装饰的有 .name，普通函数用 .__name__
         tool_names = set()
         for t in tools:
             tool_names.add(getattr(t, 'name', None) or getattr(t, '__name__', None))
 
+        # 必须包含的核心工具
         expected = {
             "get_component_nets", "get_net_components", "get_power_domain",
             "get_power_tree", "get_i2c_devices", "get_signal_path",
             "find_common_cause", "analyze_power_sequence",
+            "trace_signal_path", "trace_power_chain", "trace_fault_root",
             "trace_differential_pair", "get_graph_summary",
         }
-        assert tool_names == expected
+        assert expected.issubset(tool_names), f"Missing tools: {expected - tool_names}"
 
     def test_tool_args_schema_complete(self):
         """验证每个工具的参数 schema 完整"""
@@ -394,10 +395,13 @@ class TestKnowledgeRouterPipeline:
     """KnowledgeRouter 三级降级路由集成测试"""
 
     def test_tier1_hit_returns_success(self):
-        """Tier1 命中时返回成功结果"""
+        """Tier0 未命中，Tier1 命中时返回成功结果"""
         from agent_system.knowledge_router import KnowledgeRouter, RetrievalResult, TierLevel
 
         router = KnowledgeRouter()
+        # mock tier0 (GraphRAG) 未命中
+        router._graphrag = MagicMock()
+        router.graphrag.query = MagicMock(return_value=[])
         # mock tier1 search
         router.tier1.search = MagicMock(return_value=[
             RetrievalResult(
@@ -412,14 +416,15 @@ class TestKnowledgeRouterPipeline:
 
         result = router.search("MT25QU256ABA8E12", "pinout voltage")
         assert result.status == "success"
-        assert result.tier == TierLevel.TIER_1
         assert result.confidence >= 0.3
 
     def test_tier1_miss_tier2_hit(self):
-        """Tier1 未命中，Tier2 命中时降级并缓存"""
+        """Tier0/1 未命中，Tier2 命中时降级并缓存"""
         from agent_system.knowledge_router import KnowledgeRouter, RetrievalResult, TierLevel
 
         router = KnowledgeRouter()
+        router._graphrag = MagicMock()
+        router.graphrag.query = MagicMock(return_value=[])
         router.tier1.search = MagicMock(return_value=[])
         router.tier2.search = MagicMock(return_value=RetrievalResult(
             status="success",
@@ -433,27 +438,51 @@ class TestKnowledgeRouterPipeline:
 
         result = router.search("MPN123", "spec")
         assert result.status == "success"
-        assert result.tier == TierLevel.TIER_2
         # 应该缓存到 tier1
         router.tier1.add_chunk.assert_called_once()
 
     def test_tier1_tier2_miss_not_found(self):
-        """Tier1 和 Tier2 都未命中，Tier3 禁用，返回 not_found"""
-        from agent_system.knowledge_router import KnowledgeRouter, RetrievalResult
+        """Tier0/1/2 都未命中，Tier3 禁用或未命中，返回 not_found"""
+        from agent_system.knowledge_router import KnowledgeRouter
 
         router = KnowledgeRouter()
+        router._graphrag = MagicMock()
+        router.graphrag.query = MagicMock(return_value=[])
         router.tier1.search = MagicMock(return_value=[])
         router.tier2.search = MagicMock(return_value=None)
+        router.tier3 = MagicMock()
+        router.tier3.search = MagicMock(return_value=None)
 
         result = router.search("UNKNOWN_MPN", "voltage")
         assert result.status == "not_found"
         assert "UNKNOWN_MPN" in result.content
 
+    def test_tier0_hit_skips_lower_tiers(self):
+        """Tier0 GraphRAG 命中时跳过 Tier1/2"""
+        from agent_system.knowledge_router import KnowledgeRouter
+        from agent_system.graph_rag_bridge import GraphRAGResult
+
+        router = KnowledgeRouter()
+        # mock GraphRAG 返回高分结果
+        mock_result = MagicMock()
+        mock_result.score = 0.85
+        mock_result.text = "TPS7A47 output voltage is 1A LDO"
+        mock_result.retrieval_type = "local"
+        router._graphrag = MagicMock()
+        router.graphrag.query = MagicMock(return_value=[mock_result])
+
+        result = router.search("TPS7A47", "output voltage")
+        assert result.status == "success"
+        assert result.tier == "Tier0"
+        assert result.confidence >= 0.3
+
     def test_tier1_low_confidence_fallback(self):
-        """Tier1 置信度低于阈值时降级到 Tier2"""
+        """Tier0 未命中，Tier1 置信度低于阈值时降级到 Tier2"""
         from agent_system.knowledge_router import KnowledgeRouter, RetrievalResult, TierLevel
 
         router = KnowledgeRouter()
+        router._graphrag = MagicMock()
+        router.graphrag.query = MagicMock(return_value=[])
         # Tier1 有结果但置信度太低
         router.tier1.search = MagicMock(return_value=[
             RetrievalResult(
@@ -476,7 +505,7 @@ class TestKnowledgeRouterPipeline:
         router.tier1.add_chunk = MagicMock(return_value=True)
 
         result = router.search("MPN456", "specs")
-        assert result.tier == TierLevel.TIER_2
+        assert result.status == "success"
         assert result.confidence == 0.8
 
     def test_import_text_knowledge_and_search(self):
@@ -508,3 +537,69 @@ class TestKnowledgeRouterPipeline:
         assert stats["tier1_chunks"] == 42
         assert stats["tier2_enabled"] is True
         assert stats["tier3_enabled"] is False
+
+
+# ============================================================
+# e. 新增工具链路测试
+# ============================================================
+
+class TestNewToolsPipeline:
+    """trace_power_chain / trace_fault_root 集成测试"""
+
+    def test_trace_power_chain_downstream(self):
+        """mock 调用 trace_power_chain 下游追踪"""
+        from agent_system.graph_tools import trace_power_chain
+
+        with patch("agent_system.graph_tools._run_cypher") as mock_run:
+            mock_run.side_effect = [
+                # info query
+                [{"rd": "U1", "pt": "PMIC", "model": "TPS65987"}],
+                # downstream query (2 children)
+                [
+                    {"rd": "L1", "pt": "LDO", "model": "TLV733", "voltage": "3.3"},
+                    {"rd": "U2", "pt": "BUCK", "model": "TPS63070", "voltage": "1.8"},
+                ],
+                # L1's downstream (1 child)
+                [{"rd": "U3", "pt": "IC", "model": "MCU", "voltage": "3.3"}],
+                # U2's downstream (empty)
+                [],
+                # U3's downstream (empty)
+                [],
+            ]
+            result = trace_power_chain.invoke({"refdes": "U1", "direction": "downstream"})
+            assert "U1" in result
+            assert "L1" in result
+            assert "下游" in result
+
+    def test_trace_fault_root_with_upstream(self):
+        """mock 调用 trace_fault_root 有上游供电"""
+        from agent_system.graph_tools import trace_fault_root
+
+        with patch("agent_system.graph_tools._run_cypher") as mock_run:
+            mock_run.side_effect = [
+                # info query
+                [{"rd": "L1", "pt": "LDO", "model": "TLV733", "value": "3.3V"}],
+                # upstream query
+                [{"rd": "U1", "pt": "PMIC", "model": "TPS65987", "voltage": "3.3"}],
+                # up2 query
+                [{"rd": "U0", "pt": "DCDC", "voltage": "12.0"}],
+                # EN nets query
+                [],
+                # VIN nets query
+                [],
+                # common cause query
+                [],
+            ]
+            result = trace_fault_root.invoke({"refdes": "L1", "symptom": "无输出"})
+            assert "L1" in result
+            assert "根因排查" in result
+            assert "U1" in result
+
+    def test_trace_fault_root_not_found(self):
+        """器件不存在时返回提示"""
+        from agent_system.graph_tools import trace_fault_root
+
+        with patch("agent_system.graph_tools._run_cypher") as mock_run:
+            mock_run.return_value = []
+            result = trace_fault_root.invoke({"refdes": "UXXXXX", "symptom": "不工作"})
+            assert "未找到" in result

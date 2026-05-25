@@ -2001,7 +2001,7 @@ def trace_fault_root(refdes: str, symptom: str = "") -> str:
                     visited_up2.add(u2['rd'])
                     lines.append(f"    ← {u2['rd']} [{u2['pt']}] ({u2['voltage'] or '?'}V)")
                     suspects.append((70, "间接供电异常", f"二级上游 {u2['rd']} 异常导致 {u['rd']} 无法工作",
-                                     f"检查 {u2['rd']} → {u['rd']} → {refdes} 链路")))
+                                     f"检查 {u2['rd']} → {u['rd']} → {refdes} 链路"))
         else:
             lines.append("⚡ 上游供电: 未找到 POWERED_BY 关系（可能为顶层电源输入或关系缺失）")
 
