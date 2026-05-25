@@ -75,11 +75,12 @@ class LLMClient:
         self.timeout = timeout
         self.max_retries = max_retries
 
-        # LLM 响应缓存
-        self._cache: Dict[str, LLMResponse] = {}
+        # LLM 响应缓存 (TTL: 1 hour)
+        self._cache: Dict[str, tuple[float, LLMResponse]] = {}  # (timestamp, response)
         self._cache_enabled = enable_cache
         self._cache_hits = 0
         self._cache_misses = 0
+        self._cache_ttl = 3600.0  # seconds
 
         # 初始化对应客户端
         if self.provider == "ollama":
@@ -105,6 +106,16 @@ class LLMClient:
         self._cache.clear()
         self._cache_hits = 0
         self._cache_misses = 0
+
+    def _evict_cache(self) -> None:
+        """Evict oldest 50% of cache entries"""
+        if not self._cache:
+            return
+        sorted_keys = sorted(self._cache.keys(), key=lambda k: self._cache[k][0])
+        evict_count = len(sorted_keys) // 2
+        for k in sorted_keys[:evict_count]:
+            del self._cache[k]
+        logger.debug(f"Cache evicted {evict_count} entries, remaining: {len(self._cache)}")
 
     def cache_stats(self) -> Dict[str, Any]:
         """返回缓存统计信息"""
@@ -148,9 +159,14 @@ class LLMClient:
         if use_cache:
             key = self._cache_key(prompt, system_prompt, temperature, max_tokens)
             if key in self._cache:
-                self._cache_hits += 1
-                logger.debug(f"LLM cache hit (key={key[:12]}...)")
-                return self._cache[key]
+                ts, cached = self._cache[key]
+                import time
+                if time.time() - ts < self._cache_ttl:
+                    self._cache_hits += 1
+                    logger.debug(f"LLM cache hit (key={key[:12]}...)")
+                    return cached
+                else:
+                    del self._cache[key]  # TTL expired
             self._cache_misses += 1
 
         result = self._call_with_retry(
@@ -165,7 +181,11 @@ class LLMClient:
 
         # 写入缓存
         if use_cache:
-            self._cache[key] = result
+            import time
+            self._cache[key] = (time.time(), result)
+            # Evict oldest entries if cache too large
+            if len(self._cache) > 500:
+                self._evict_cache()
             logger.debug(f"LLM cache stored (key={key[:12]}...)")
 
         return result
