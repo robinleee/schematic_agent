@@ -234,6 +234,141 @@ def _build_component_relation_dot(refdes: str, depth: int) -> str:
     return dot
 
 
+def _build_power_chain_dot(refdes: str, direction: str, max_depth: int) -> str:
+    """Build DOT string for power chain visualization."""
+    try:
+        nodes = []
+        edges = []
+        visited = {refdes}
+        queue = [(refdes, 0)]
+
+        while queue:
+            current, depth = queue.pop(0)
+            if depth >= max_depth:
+                continue
+
+            if direction in ("downstream", "both"):
+                downstream_q = """
+                MATCH (src:Component {RefDes: $rd})-[r:POWERED_BY]->(load:Component)
+                RETURN load.RefDes AS rd, load.PartType AS pt, load.Model AS model, r.voltage AS voltage
+                """
+                for r in _run_cypher(downstream_q, {"rd": current}):
+                    if r['rd'] in visited:
+                        continue
+                    visited.add(r['rd'])
+                    pt = r['pt'] or 'IC'
+                    v = r['voltage'] or '?'
+                    nodes.append((r['rd'], pt, r['model'] or '', v))
+                    edges.append((current, r['rd'], v + 'V'))
+                    queue.append((r['rd'], depth + 1))
+
+            if direction in ("upstream", "both"):
+                upstream_q = """
+                MATCH (src:Component)-[r:POWERED_BY]->(load:Component {RefDes: $rd})
+                RETURN src.RefDes AS rd, src.PartType AS pt, src.Model AS model, r.voltage AS voltage
+                """
+                for r in _run_cypher(upstream_q, {"rd": current}):
+                    if r['rd'] in visited:
+                        continue
+                    visited.add(r['rd'])
+                    pt = r['pt'] or 'IC'
+                    v = r['voltage'] or '?'
+                    nodes.append((r['rd'], pt, r['model'] or '', v))
+                    edges.append((r['rd'], current, v + 'V'))
+                    queue.append((r['rd'], depth + 1))
+
+        if not nodes and not edges:
+            return None
+
+        pt_colors = {'PMIC': '#6A1B9A', 'LDO': '#1565C0', 'BUCK': '#E65100',
+                     'DCDC': '#E65100', 'IC': '#37474F', 'LOAD': '#37474F'}
+        lines = ['digraph PowerChain {', '  rankdir=LR;', '  node [shape=box,style=filled,fontname="sans-serif"];']
+
+        # Start node
+        lines.append(f'  {_safe_id(refdes)} [label="{refdes}\\n(起点)",fillcolor="#FFC107",fontcolor="#000"];')
+
+        for rd, pt, model, v in nodes:
+            color = pt_colors.get(pt, '#37474F')
+            model_short = model[:15] if model else ''
+            v_label = f'\\n{v}V' if v != '?' else ''
+            label = f'{rd}\\n{pt}' + (f'\\n{model_short}' if model_short else '') + v_label
+            lines.append(f'  {_safe_id(rd)} [label="{label}",fillcolor="{color}",fontcolor="white"];')
+
+        for src, dst, vlabel in edges:
+            lines.append(f'  {_safe_id(src)} -> {_safe_id(dst)} [label="{vlabel}",color="#e53935",fontcolor="#e53935"];')
+
+        lines.append('}')
+        return '\n'.join(lines)
+    except Exception:
+        return None
+
+
+def _build_fault_root_dot(refdes: str) -> str:
+    """Build DOT string for fault root cause visualization."""
+    try:
+        nodes = [(refdes, 'FAULT', '', '')]
+        edges = []
+        visited = {refdes}
+
+        # Upstream power
+        upstream_q = """
+        MATCH (src:Component)-[r:POWERED_BY]->(c:Component {RefDes: $rd})
+        RETURN src.RefDes AS rd, src.PartType AS pt, src.Model AS model, r.voltage AS voltage
+        """
+        for r in _run_cypher(upstream_q, {"rd": refdes}):
+            if r['rd'] in visited:
+                continue
+            visited.add(r['rd'])
+            nodes.append((r['rd'], r['pt'] or 'IC', r['model'] or '', r['voltage'] or '?'))
+            edges.append((r['rd'], refdes, 'POWERED_BY', 90))
+
+            # 2nd level upstream
+            up2_q = """
+            MATCH (src2:Component)-[r:POWERED_BY]->(src:Component {RefDes: $rd2})
+            RETURN src2.RefDes AS rd, src2.PartType AS pt, r.voltage AS voltage
+            """
+            for u2 in _run_cypher(up2_q, {"rd2": r['rd']}):
+                if u2['rd'] in visited:
+                    continue
+                visited.add(u2['rd'])
+                nodes.append((u2['rd'], u2['pt'] or 'IC', '', u2['voltage'] or '?'))
+                edges.append((u2['rd'], r['rd'], 'POWERED_BY', 70))
+
+        # Enable signal drivers
+        en_q = """
+        MATCH (c:Component {RefDes: $rd})-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
+        WHERE n.Name =~ '(?i).*(_EN|EN_|ENABLE|^EN$)'
+        MATCH (drv:Component)-[:HAS_PIN]->(dp:Pin)-[:CONNECTS_TO]->(n:Net)
+        WHERE drv.RefDes <> $rd
+        RETURN DISTINCT drv.RefDes AS rd, drv.PartType AS pt, n.Name AS net
+        """
+        for r in _run_cypher(en_q, {"rd": refdes}):
+            if r['rd'] in visited:
+                continue
+            visited.add(r['rd'])
+            nodes.append((r['rd'], r['pt'] or 'IC', '', ''))
+            edges.append((r['rd'], refdes, f'EN: {r["net"]}', 85))
+
+        if len(nodes) <= 1:
+            return None
+
+        lines = ['digraph FaultRoot {', '  rankdir=RL;', '  node [shape=box,style=filled,fontname="sans-serif"];']
+        lines.append(f'  {_safe_id(refdes)} [label="{refdes}\\n⚠ 故障点",fillcolor="#e53935",fontcolor="white"];')
+
+        for rd, pt, model, v in nodes[1:]:
+            v_label = f'\\n{v}V' if v and v != '?' else ''
+            label = f'{rd}\\n{pt}' + v_label
+            lines.append(f'  {_safe_id(rd)} [label="{label}",fillcolor="#FF9800",fontcolor="#000"];')
+
+        for src, dst, elabel, _ in edges:
+            lines.append(f'  {_safe_id(src)} -> {_safe_id(dst)} [label="{elabel}",color="#e53935"];')
+
+        lines.append('}')
+        return '\n'.join(lines)
+    except Exception:
+        return None
+
+
 def _build_power_tree_dot(voltage: str = None) -> str:
     """
     Build DOT string for power tree visualization.
@@ -444,7 +579,7 @@ def render_graph_viz():
     with ctrl_col1:
         viz_type = st.selectbox(
             "可视化类型",
-            options=["组件关系图", "电源树"],
+            options=["组件关系图", "电源树", "电源链路", "故障溯源", "共因失效分析"],
             index=0,
         )
     with ctrl_col2:
@@ -510,6 +645,82 @@ def render_graph_viz():
                     st.warning("未找到电源器件或电源网络数据")
                 else:
                     st.session_state._graph_viz_dot = ("power", dot_result)
+
+    elif viz_type == "电源链路":
+        # Power chain tracing
+        chain_refdes = st.text_input(
+            "起始电源器件 RefDes",
+            value="UU45",
+            help="输入电源器件位号，追踪上/下游电源链路",
+        )
+        chain_dir = st.selectbox(
+            "追踪方向",
+            options=["both", "downstream", "upstream"],
+            index=0,
+            format_func=lambda x: {"both": "双向（上游+下游）", "downstream": "下游（负载端）", "upstream": "上游（供电端）"}[x],
+        )
+        chain_depth = st.slider(
+            "追踪深度",
+            min_value=1,
+            max_value=5,
+            value=3,
+        )
+
+        if st.button("⚡ 生成电源链路图", type="primary"):
+            if not chain_refdes.strip():
+                st.warning("请输入器件 RefDes")
+            else:
+                with st.spinner("正在追踪电源链路..."):
+                    try:
+                        from agent_system.graph_tools import trace_power_chain
+                        result = trace_power_chain.invoke({
+                            "refdes": chain_refdes.strip(),
+                            "direction": chain_dir,
+                            "max_depth": chain_depth,
+                        })
+                        # Build DOT from power chain
+                        dot_str = _build_power_chain_dot(chain_refdes.strip(), chain_dir, chain_depth)
+                        if dot_str:
+                            st.session_state._graph_viz_dot = ("power_chain", dot_str)
+                            with st.expander("📋 链路详情"):
+                                st.text(result)
+                        else:
+                            st.info("未找到电源链路数据")
+                    except Exception as e:
+                        st.error(f"链路追踪失败: {e}")
+
+    elif viz_type == "故障溯源":
+        # Fault root cause tracing
+        fault_refdes = st.text_input(
+            "故障器件 RefDes",
+            value="U1",
+            help="输入故障器件位号，分析根因",
+        )
+        fault_symptom = st.text_input(
+            "故障现象（可选）",
+            value="",
+            help="如：无输出、电压异常、不工作",
+        )
+
+        if st.button("🔍 故障溯源分析", type="primary"):
+            if not fault_refdes.strip():
+                st.warning("请输入器件 RefDes")
+            else:
+                with st.spinner("正在分析故障根因..."):
+                    try:
+                        from agent_system.graph_tools import trace_fault_root
+                        result = trace_fault_root.invoke({
+                            "refdes": fault_refdes.strip(),
+                            "symptom": fault_symptom.strip(),
+                        })
+                        # Build DOT from fault analysis
+                        dot_str = _build_fault_root_dot(fault_refdes.strip())
+                        if dot_str:
+                            st.session_state._graph_viz_dot = ("fault", dot_str)
+                        with st.expander("📋 根因分析报告"):
+                            st.text(result)
+                    except Exception as e:
+                        st.error(f"分析失败: {e}")
 
     elif viz_type == "共因失效分析":
         # Common cause failure analysis
