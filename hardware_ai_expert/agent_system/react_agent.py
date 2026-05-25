@@ -38,6 +38,8 @@ from agent_system.graph_tools import (
     get_signal_path,
     find_common_cause,
     analyze_power_sequence,
+    trace_power_chain,
+    trace_fault_root,
     trace_signal_path,
     trace_differential_pair,
     discover_diff_pairs,
@@ -83,6 +85,8 @@ GRAPH_TOOLS = {
     "get_signal_path": get_signal_path,
     "find_common_cause": find_common_cause,
     "analyze_power_sequence": analyze_power_sequence,
+    "trace_power_chain": trace_power_chain,
+    "trace_fault_root": trace_fault_root,
     "trace_signal_path": trace_signal_path,
     "trace_differential_pair": trace_differential_pair,
     "discover_diff_pairs": discover_diff_pairs,
@@ -270,11 +274,13 @@ class ReActAgent:
                 "\n"
                 "### Step 1: Understand the symptom (1 tool call)\n"
                 "- If the symptom involves a specific component, call get_component_nets(refdes=...) to see its connections\n"
-                "- If the symptom involves a power issue, call get_power_tree(refdes=...) or analyze_power_sequence(refdes=...)\n"
+                "- If the symptom involves a power issue, call trace_power_chain(refdes=..., direction='both') to see the full power chain\n"
+                "- For a failed component, call trace_fault_root(refdes=..., symptom='...') to get root cause analysis\n"
                 "- If the symptom involves signal integrity, call trace_signal_path(start_pin=...)\n"
                 "\n"
                 "### Step 2: Expand investigation (1-2 tool calls)\n"
-                "- For power issues: find_common_cause(refdes_list=[...]) to check shared upstream\n"
+                "- For power issues: trace_power_chain(refdes=..., direction='upstream') to trace to root source\n"
+                "- For failed component: trace_fault_root(refdes=...) gives prioritized suspects\n"
                 "- For signal issues: get_signal_path(from=..., to=...) to check connectivity\n"
                 "- For unknown component behavior: search_knowledge(query=...) to check datasheet specs\n"
                 "\n"

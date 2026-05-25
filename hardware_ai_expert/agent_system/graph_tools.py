@@ -1824,6 +1824,287 @@ def get_common_cause_graph(refdes_list: str) -> str:
 
 
 @tool
+def trace_power_chain(refdes: str, direction: str = "downstream", max_depth: int = 5) -> str:
+    """
+    追踪多级电源链路（级联电源树全路径追踪）。
+
+    从指定电源器件出发，沿 POWERED_BY 关系追踪上游（输入源）或下游（负载），
+    构建完整的电源链路拓扑。例如：12V输入 → PMIC → 3.3V → LDO → 1.8V。
+
+    Args:
+        refdes: 起始电源器件位号，如 "U40000"
+        direction: 追踪方向 - "downstream"(下游负载) 或 "upstream"(上游电源源) 或 "both"
+        max_depth: 最大追踪深度，默认 5 级
+
+    Returns:
+        多级电源链路报告（含级联拓扑和电压信息）
+    """
+    try:
+        pid = get_current_project()
+
+        # 验证器件存在
+        info_q = """
+        MATCH (c:Component {RefDes: $refdes})
+        WHERE c.project_id = $project_id OR c.project_id IS NULL
+        RETURN c.RefDes AS rd, c.PartType AS pt, c.Model AS model
+        """
+        info = _run_cypher(info_q, {"refdes": refdes, "project_id": pid})
+        if not info:
+            return f"未找到器件 {refdes}"
+
+        dev = info[0]
+        lines = [f"⚡ 电源链路追踪: {refdes} [{dev['pt']}] {dev['model'] or ''}"]
+        lines.append(f"方向: {direction}, 最大深度: {max_depth}\n")
+
+        def _trace(direction: str) -> list:
+            """沿指定方向追踪电源链"""
+            chain = []
+            visited = {refdes}
+            queue = [(refdes, 0)]  # (refdes, depth)
+
+            while queue:
+                current_rd, depth = queue.pop(0)
+                if depth >= max_depth:
+                    continue
+
+                if direction == "downstream":
+                    # 下游: 找当前器件供电的负载
+                    q = """
+                    MATCH (src:Component {RefDes: $rd})-[r:POWERED_BY]->(load:Component)
+                    WHERE (src.project_id = $project_id OR src.project_id IS NULL)
+                    RETURN load.RefDes AS rd, load.PartType AS pt, load.Model AS model, r.voltage AS voltage
+                    ORDER BY r.voltage DESC
+                    """
+                else:
+                    # 上游: 找给当前器件供电的源
+                    q = """
+                    MATCH (src:Component)-[r:POWERED_BY]->(load:Component {RefDes: $rd})
+                    WHERE (load.project_id = $project_id OR load.project_id IS NULL)
+                    RETURN src.RefDes AS rd, src.PartType AS pt, src.Model AS model, r.voltage AS voltage
+                    ORDER BY r.voltage DESC
+                    """
+
+                results = _run_cypher(q, {"rd": current_rd, "project_id": pid})
+                for r in results:
+                    if r['rd'] in visited:
+                        continue
+                    visited.add(r['rd'])
+                    chain.append({
+                        'from': current_rd,
+                        'to': r['rd'],
+                        'pt': r['pt'],
+                        'model': r['model'] or '',
+                        'voltage': r['voltage'] or '?',
+                        'depth': depth + 1
+                    })
+                    queue.append((r['rd'], depth + 1))
+
+            return chain
+
+        if direction in ("downstream", "both"):
+            downstream = _trace("downstream")
+            if downstream:
+                lines.append("🔽 下游电源链（负载端）:")
+                for link in downstream:
+                    indent = "  " * link['depth']
+                    v_label = f"({link['voltage']}V)" if link['voltage'] != '?' else ""
+                    lines.append(f"{indent}→ {link['to']} [{link['pt']}] {link['model']} {v_label}")
+            else:
+                lines.append("🔽 下游电源链: 无下游负载")
+
+        if direction in ("upstream", "both"):
+            upstream = _trace("upstream")
+            if upstream:
+                lines.append("\n🔼 上游电源链（供电端）:")
+                for link in upstream:
+                    indent = "  " * link['depth']
+                    v_label = f"({link['voltage']}V)" if link['voltage'] != '?' else ""
+                    lines.append(f"{indent}← {link['to']} [{link['pt']}] {link['model']} {v_label}")
+            else:
+                lines.append("\n🔼 上游电源链: 无上游电源")
+
+        # 汇总
+        total_down = len(downstream) if direction in ("downstream", "both") else 0
+        total_up = len(upstream) if direction in ("upstream", "both") else 0
+        lines.append(f"\n📊 链路总计: 上游 {total_up} 级, 下游 {total_down} 级")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        return f"电源链路追踪出错: {str(e)}"
+
+
+@tool
+def trace_fault_root(refdes: str, symptom: str = "") -> str:
+    """
+    从故障器件出发反向溯源可能的根因（故障诊断专用）。
+
+    分析策略：
+    1. 检查输入电源是否正常（上游电源链）
+    2. 检查使能信号是否有效（EN 引脚驱动源）
+    3. 检查控制信号链路（I2C/SPI 等配置信号）
+    4. 检查共因失效（同一电源域/控制源的其它器件）
+
+    Args:
+        refdes: 故障器件位号，如 "U40000"
+        symptom: 故障现象描述（可选），如 "无输出", "电压异常"
+
+    Returns:
+        故障根因分析报告（含排查路径和可疑度排序）
+    """
+    try:
+        pid = get_current_project()
+
+        # 验证器件
+        info_q = """
+        MATCH (c:Component {RefDes: $refdes})
+        WHERE c.project_id = $project_id OR c.project_id IS NULL
+        RETURN c.RefDes AS rd, c.PartType AS pt, c.Model AS model, c.Value AS value
+        """
+        info = _run_cypher(info_q, {"refdes": refdes, "project_id": pid})
+        if not info:
+            return f"未找到器件 {refdes}"
+
+        dev = info[0]
+        lines = [f"🔍 故障根因分析: {refdes} [{dev['pt']}] {dev['model'] or dev['value'] or ''}"]
+        if symptom:
+            lines.append(f"故障现象: {symptom}")
+        lines.append("")
+
+        suspects = []  # (可疑度, 类型, 描述, 详情)
+
+        # ── 1. 上游电源链检查 ──
+        upstream_q = """
+        MATCH (src:Component)-[r:POWERED_BY]->(c:Component {RefDes: $refdes})
+        WHERE (c.project_id = $project_id OR c.project_id IS NULL)
+        RETURN src.RefDes AS rd, src.PartType AS pt, src.Model AS model, r.voltage AS voltage
+        """
+        upstream = _run_cypher(upstream_q, {"refdes": refdes, "project_id": pid})
+        if upstream:
+            lines.append("⚡ 上游供电链路:")
+            for u in upstream:
+                v = u['voltage'] or '?'
+                lines.append(f"  ← {u['rd']} [{u['pt']}] {u['model'] or ''} ({v}V)")
+                suspects.append((90, "供电异常", f"上游电源 {u['rd']} 输出异常",
+                                 f"检查 {u['rd']} 输出电压是否为 {v}V"))
+                # 继续向上追溯（跳过已访问和自引用）
+                up2_q = """
+                MATCH (src2:Component)-[r:POWERED_BY]->(src:Component {RefDes: $rd})
+                WHERE (src.project_id = $project_id OR src.project_id IS NULL)
+                RETURN src2.RefDes AS rd, src2.PartType AS pt, r.voltage AS voltage
+                """
+                up2 = _run_cypher(up2_q, {"rd": u['rd'], "project_id": pid})
+                visited_up2 = {refdes, u['rd']}
+                for u2 in up2:
+                    if u2['rd'] in visited_up2:
+                        continue
+                    visited_up2.add(u2['rd'])
+                    lines.append(f"    ← {u2['rd']} [{u2['pt']}] ({u2['voltage'] or '?'}V)")
+                    suspects.append((70, "间接供电异常", f"二级上游 {u2['rd']} 异常导致 {u['rd']} 无法工作",
+                                     f"检查 {u2['rd']} → {u['rd']} → {refdes} 链路")))
+        else:
+            lines.append("⚡ 上游供电: 未找到 POWERED_BY 关系（可能为顶层电源输入或关系缺失）")
+
+        # ── 2. 使能信号检查 ──
+        en_q = """
+        MATCH (c:Component {RefDes: $refdes})-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
+        WHERE (c.project_id = $project_id OR c.project_id IS NULL)
+          AND n.Name =~ '(?i).*(_EN|EN_|ENABLE|^EN$)'
+        RETURN n.Name AS net, p.Name AS pin_name, p.Number AS pin_num
+        """
+        en_nets = _run_cypher(en_q, {"refdes": refdes, "project_id": pid})
+        if en_nets:
+            lines.append("\n🔌 使能信号:")
+            for en in en_nets:
+                lines.append(f"  {en['net']} (Pin {en['pin_num']})")
+                # 查找 EN 信号的驱动源
+                driver_q = """
+                MATCH (drv:Component)-[:HAS_PIN]->(dp:Pin)-[:CONNECTS_TO]->(n:Net {Name: $net})
+                WHERE (drv.project_id = $project_id OR drv.project_id IS NULL)
+                  AND drv.RefDes <> $refdes
+                RETURN drv.RefDes AS rd, drv.PartType AS pt
+                """
+                drivers = _run_cypher(driver_q, {"net": en['net'], "refdes": refdes, "project_id": pid})
+                for drv in drivers:
+                    lines.append(f"    ← 驱动源: {drv['rd']} [{drv['pt']}]")
+                    suspects.append((85, "使能失效", f"{drv['rd']} 未正确驱动 {en['net']}",
+                                     f"检查 {drv['rd']} 是否已正确输出 EN 信号"))
+        else:
+            lines.append("\n🔌 使能信号: 未检测到（可能无需外部使能）")
+
+        # ── 3. 输入电源网络电压检查 ──
+        vin_q = """
+        MATCH (c:Component {RefDes: $refdes})-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
+        WHERE (c.project_id = $project_id OR c.project_id IS NULL)
+          AND n.Name =~ '(?i)^(VIN|VCC|VDD|PVDD|AVDD|VCCA|PVIN|AVIN|VSYS|VBAT).*$'
+          AND NOT n.Name =~ '(?i)^(GND|DGND|AGND|PGND|VSS).*$'
+        RETURN n.Name AS net, n.NetType AS ntype, p.Name AS pin_name
+        ORDER BY n.Name
+        """
+        vin_nets = _run_cypher(vin_q, {"refdes": refdes, "project_id": pid})
+        if vin_nets:
+            lines.append("\n🔋 输入电源网络:")
+            for vn in vin_nets:
+                nt = vn['ntype'] or '?'
+                lines.append(f"  {vn['net']} (Type: {nt}, Pin: {vn['pin_name']})")
+                if nt == 'POWER':
+                    suspects.append((75, "输入电压异常", f"{vn['net']} 电压不足或波动",
+                                     f"测量 {vn['net']} 实际电压是否在规格范围内"))
+
+        # ── 4. 共因失效检查 ──
+        cc_q = """
+        MATCH (other:Component)-[r:POWERED_BY]->(src:Component)
+        WHERE (other.project_id = $project_id OR other.project_id IS NULL)
+          AND src.RefDes IN [up_rd FOR up IN [
+            MATCH (s:Component)-[r2:POWERED_BY]->(c:Component {RefDes: $refdes})
+            WHERE (c.project_id = $project_id OR c.project_id IS NULL)
+            RETURN s.RefDes
+          ] | up_rd]
+          AND other.RefDes <> $refdes
+        RETURN other.RefDes AS rd, other.PartType AS pt, count(*) AS shared
+        ORDER BY shared DESC
+        LIMIT 5
+        """
+        # Simpler approach: find devices sharing the same upstream
+        cc_q2 = """
+        MATCH (src:Component)-[:POWERED_BY]->(c:Component {RefDes: $refdes})
+        WHERE (c.project_id = $project_id OR c.project_id IS NULL)
+        WITH collect(DISTINCT src.RefDes) AS upstream_rds
+        UNWIND upstream_rds AS urd
+        MATCH (other:Component)-[:POWERED_BY]->(src:Component {RefDes: urd})
+        WHERE (other.project_id = $project_id OR other.project_id IS NULL)
+          AND other.RefDes <> $refdes
+        RETURN DISTINCT other.RefDes AS rd, other.PartType AS pt
+        LIMIT 10
+        """
+        cc_results = _run_cypher(cc_q2, {"refdes": refdes, "project_id": pid})
+        if cc_results:
+            lines.append("\n🔗 同电源域器件（共因失效风险）:")
+            for cc in cc_results:
+                lines.append(f"  {cc['rd']} [{cc['pt']}]")
+            suspects.append((60, "共因失效", f"{len(cc_results)} 个器件共享同一供电源",
+                             f"如这些器件同时异常，检查公共供电源"))
+
+        # ── 可疑度排序 ──
+        lines.append("\n" + "=" * 50)
+        lines.append("🎯 根因排查优先级（按可疑度排序）:")
+        suspects.sort(key=lambda x: x[0], reverse=True)
+        for i, (score, stype, desc, action) in enumerate(suspects, 1):
+            bar = "█" * (score // 10) + "░" * (10 - score // 10)
+            lines.append(f"  {i}. [{bar}] {score}% {stype}")
+            lines.append(f"     {desc}")
+            lines.append(f"     → {action}")
+
+        if not suspects:
+            lines.append("  未发现明显可疑根因，建议手动检查")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        return f"故障根因分析出错: {str(e)}"
+
+
+@tool
 def common_cause_risk_score(refdes_list: str) -> str:
     """
     计算共因失效风险评分。
@@ -1931,6 +2212,9 @@ def get_graph_tools() -> list:
         get_signal_path,
         find_common_cause,
         analyze_power_sequence,
+        trace_power_chain,
+        trace_fault_root,
+        trace_signal_path,
         trace_differential_pair,
         discover_diff_pairs,
         get_common_cause_graph,
