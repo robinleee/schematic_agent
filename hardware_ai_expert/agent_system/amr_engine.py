@@ -860,6 +860,11 @@ class AMRDataSource:
         if not package:
             return None
 
+        # Normalize: strip suffix letters (0402C → 0402, 0402A → 0402)
+        pkg_normalized = re.match(r'(\d{4})', package)
+        if pkg_normalized:
+            package = pkg_normalized.group(1)
+
         # 解析容值到 pF
         cap_pf = _parse_capacitance_to_pf(value)
         if cap_pf is None or cap_pf <= 0:
