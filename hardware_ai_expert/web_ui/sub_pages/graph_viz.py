@@ -143,7 +143,7 @@ def _build_component_relation_dot(refdes: str, depth: int) -> str:
             continue
 
         for net_record in nets:
-            net_name = _safe_label(net_record["net_name"])
+            net_name = net_record["net_name"]
             net_type = net_record.get("net_type", "")
             is_power = net_type == "POWER" or (net_name and any(
                 kw in net_name.upper() for kw in ["VCC", "VDD", "GND", "3V3", "1V8", "5V", "VIN"]
