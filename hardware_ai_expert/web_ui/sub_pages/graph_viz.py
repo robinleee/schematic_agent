@@ -43,6 +43,7 @@ def _build_common_cause_dot(graph_data: dict) -> str:
         label = node["id"]
         if node.get("model"):
             label = f"{node['id']}\n{node['model']}"
+        label = _safe_label(label)
         is_shared = node.get("is_shared", False)
 
         if is_shared:
@@ -72,6 +73,8 @@ def _build_common_cause_dot(graph_data: dict) -> str:
         src_id = _safe_id(edge["source"])
         tgt_id = _safe_id(edge["target"])
         label = edge.get("label", "")
+        if label:
+            label = _safe_label(label)
         dot_edges.append(f'    {src_id} -- {tgt_id} [label="{label}", fontsize=8];')
 
     dot = "graph G {\n"
@@ -89,6 +92,21 @@ def _build_common_cause_dot(graph_data: dict) -> str:
 def _safe_id(name: str) -> str:
     """Convert a name to a safe DOT identifier."""
     return name.replace(" ", "_").replace("-", "_").replace(".", "_").replace("/", "_").replace("+", "_PLUS_")
+
+
+def _safe_label(text: str) -> str:
+    """Escape special characters for DOT label strings."""
+    if not text:
+        return text
+    return (text
+        .replace('&', '&amp;')
+        .replace('<', '&lt;')
+        .replace('>', '&gt;')
+        .replace('"', '&quot;')
+        .replace('?', '&#63;')
+        .replace('{', '&#123;')
+        .replace('}', '&#125;')
+        .replace('|', '&#124;'))
 
 
 def _build_component_relation_dot(refdes: str, depth: int) -> str:
@@ -125,7 +143,7 @@ def _build_component_relation_dot(refdes: str, depth: int) -> str:
             continue
 
         for net_record in nets:
-            net_name = net_record["net_name"]
+            net_name = _safe_label(net_record["net_name"])
             net_type = net_record.get("net_type", "")
             is_power = net_type == "POWER" or (net_name and any(
                 kw in net_name.upper() for kw in ["VCC", "VDD", "GND", "3V3", "1V8", "5V", "VIN"]
@@ -140,15 +158,16 @@ def _build_component_relation_dot(refdes: str, depth: int) -> str:
 
             # Add net node
             net_id = _safe_id(f"net_{net_name}")
+            safe_net = _safe_label(net_name)
             if is_power:
                 dot_nodes.append(
-                    f'    {net_id} [label="{net_name}", shape=circle, '
+                    f'    {net_id} [label="{safe_net}", shape=circle, '
                     f'style=filled, fillcolor="#e53935", fontcolor=white, '
                     f'fontsize=10, width=0.8];'
                 )
             else:
                 dot_nodes.append(
-                    f'    {net_id} [label="{net_name}", shape=circle, '
+                    f'    {net_id} [label="{safe_net}", shape=circle, '
                     f'style=filled, fillcolor="#616161", fontcolor=white, '
                     f'fontsize=9, width=0.6];'
                 )
@@ -172,7 +191,7 @@ def _build_component_relation_dot(refdes: str, depth: int) -> str:
 
             for nb in neighbors:
                 nb_refdes = nb["refdes"]
-                nb_part_type = nb.get("part_type", "")
+                nb_part_type = _safe_label(nb.get("part_type", ""))
 
                 nb_comp_id = _safe_id(f"comp_{nb_refdes}")
 
@@ -180,8 +199,9 @@ def _build_component_relation_dot(refdes: str, depth: int) -> str:
                     visited_components.add(nb_refdes)
                     # Add component node
                     label = f"{nb_refdes}\\n({nb_part_type})" if nb_part_type else nb_refdes
+                    safe_label = _safe_label(label)
                     dot_nodes.append(
-                        f'    {nb_comp_id} [label="{label}", shape=box, '
+                        f'    {nb_comp_id} [label="{safe_label}", shape=box, '
                         f'style=filled, fillcolor="#1565C0", fontcolor=white, '
                         f'fontsize=10];'
                     )
@@ -293,17 +313,17 @@ def _build_power_chain_dot(refdes: str, direction: str, max_depth: int) -> str:
         lines = ['digraph PowerChain {', '  rankdir=LR;', '  node [shape=box,style=filled,fontname="sans-serif"];']
 
         # Start node
-        lines.append(f'  {_safe_id(refdes)} [label="{refdes}\\n(起点)",fillcolor="#FFC107",fontcolor="#000"];')
+        lines.append(f'  {_safe_id(refdes)} [label="{_safe_label(refdes)}\\n(起点)",fillcolor="#FFC107",fontcolor="#000"];')
 
         for rd, pt, model, v in nodes:
             color = pt_colors.get(pt, '#37474F')
             model_short = model[:15] if model else ''
             v_label = f'\\n{v}V' if v != '?' else ''
             label = f'{rd}\\n{pt}' + (f'\\n{model_short}' if model_short else '') + v_label
-            lines.append(f'  {_safe_id(rd)} [label="{label}",fillcolor="{color}",fontcolor="white"];')
+            lines.append(f'  {_safe_id(rd)} [label="{_safe_label(label)}",fillcolor="{color}",fontcolor="white"];')
 
         for src, dst, vlabel in edges:
-            lines.append(f'  {_safe_id(src)} -> {_safe_id(dst)} [label="{vlabel}",color="#e53935",fontcolor="#e53935"];')
+            lines.append(f'  {_safe_id(src)} -> {_safe_id(dst)} [label="{_safe_label(vlabel)}",color="#e53935",fontcolor="#e53935"];')
 
         lines.append('}')
         return '\n'.join(lines)
@@ -361,15 +381,15 @@ def _build_fault_root_dot(refdes: str) -> str:
             return None
 
         lines = ['digraph FaultRoot {', '  rankdir=RL;', '  node [shape=box,style=filled,fontname="sans-serif"];']
-        lines.append(f'  {_safe_id(refdes)} [label="{refdes}\\n⚠ 故障点",fillcolor="#e53935",fontcolor="white"];')
+        lines.append(f'  {_safe_id(refdes)} [label="{_safe_label(refdes)}\\n⚠ 故障点",fillcolor="#e53935",fontcolor="white"];')
 
         for rd, pt, model, v in nodes[1:]:
             v_label = f'\\n{v}V' if v and v != '?' else ''
             label = f'{rd}\\n{pt}' + v_label
-            lines.append(f'  {_safe_id(rd)} [label="{label}",fillcolor="#FF9800",fontcolor="#000"];')
+            lines.append(f'  {_safe_id(rd)} [label="{_safe_label(label)}",fillcolor="#FF9800",fontcolor="#000"];')
 
         for src, dst, elabel, _ in edges:
-            lines.append(f'  {_safe_id(src)} -> {_safe_id(dst)} [label="{elabel}",color="#e53935"];')
+            lines.append(f'  {_safe_id(src)} -> {_safe_id(dst)} [label="{_safe_label(elabel)}",color="#e53935"];')
 
         lines.append('}')
         return '\n'.join(lines)
@@ -423,6 +443,7 @@ def _build_power_tree_dot(voltage: str = None) -> str:
 
             src_id = _safe_id(f"comp_{src_refdes}")
             label = f"{src_refdes}\\n{src_pt}\\n{src_model}" if src_model else f"{src_refdes}\\n{src_pt}"
+            safe_label = _safe_label(label)
 
             # Color by type
             type_colors = {
@@ -434,7 +455,7 @@ def _build_power_tree_dot(voltage: str = None) -> str:
             color = type_colors.get(src_pt, "#1565C0")
 
             dot_nodes.append(
-                f'    {src_id} [label="{label}", shape=box, '
+                f'    {src_id} [label="{safe_label}", shape=box, '
                 f'style=filled, fillcolor="{color}", fontcolor=white, fontsize=10];'
             )
             dot_edges.append(f'    power_root -- {src_id};')
@@ -467,7 +488,7 @@ def _build_power_tree_dot(voltage: str = None) -> str:
                 net_id = _safe_id(f"net_{net_name}")
 
                 dot_nodes.append(
-                    f'    {net_id} [label="{net_name}\\n({net_v}V)", shape=circle, '
+                    f'    {net_id} [label="{_safe_label(net_name)}\\n({_safe_label(str(net_v))}V)", shape=circle, '
                     f'style=filled, fillcolor="#e53935", fontcolor=white, '
                     f'fontsize=9, width=0.8];'
                 )
@@ -498,8 +519,9 @@ def _build_power_tree_dot(voltage: str = None) -> str:
                         for pt, refs in sorted(by_type.items(), key=lambda x: -len(x[1])):
                             agg_id = _safe_id(f"agg_{net_name}_{pt}")
                             label = f"{pt}\\n({len(refs)}个)"
+                            safe_label = _safe_label(label)
                             dot_nodes.append(
-                                f'    {agg_id} [label="{label}", shape=box, '
+                                f'    {agg_id} [label="{safe_label}", shape=box, '
                                 f'style=filled, fillcolor="#37474F", fontcolor=white, '
                                 f'fontsize=9, tooltip="{", ".join(refs[:5])}"];'
                             )
@@ -510,8 +532,9 @@ def _build_power_tree_dot(voltage: str = None) -> str:
                             ld_pt = ld.get("part_type", "")
                             ld_id = _safe_id(f"comp_{ld_refdes}")
                             label = f"{ld_refdes}\\n({ld_pt})" if ld_pt else ld_refdes
+                            safe_label = _safe_label(label)
                             dot_nodes.append(
-                                f'    {ld_id} [label="{label}", shape=box, '
+                                f'    {ld_id} [label="{safe_label}", shape=box, '
                                 f'style=filled, fillcolor="#37474F", fontcolor=white, '
                                 f'fontsize=9];'
                             )
@@ -538,8 +561,9 @@ def _build_power_tree_dot(voltage: str = None) -> str:
                     visited.add(ds_refdes)
                     ds_id = _safe_id(f"comp_{ds_refdes}")
                     ds_color = type_colors.get(ds_pt, "#1565C0")
+                    ds_label = _safe_label(f"{ds_refdes}\\n({ds_pt})")
                     dot_nodes.append(
-                        f'    {ds_id} [label="{ds_refdes}\\n({ds_pt})", shape=box, '
+                        f'    {ds_id} [label="{ds_label}", shape=box, '
                         f'style=filled, fillcolor="{ds_color}", fontcolor=white, fontsize=10];'
                     )
                     dot_edges.append(f'    {net_id} -- {ds_id};')
