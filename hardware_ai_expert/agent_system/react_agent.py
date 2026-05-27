@@ -95,13 +95,20 @@ GRAPH_TOOLS = {
 }
 
 
+# 审查引擎单例缓存（支持热更新）
+_review_engine_cache = {}
+
+
 def _run_review(rule_ids: list = None) -> str:
     """执行规则审查引擎（返回摘要）"""
     try:
         from agent_system.graph_tools import _get_driver, get_current_project
         driver = _get_driver()
         pid = get_current_project()
-        engine = ReviewRuleEngine(driver, project_id=pid)
+        # 按 project_id 缓存引擎实例，复用 mtime 缓存实现热更新
+        if pid not in _review_engine_cache:
+            _review_engine_cache[pid] = ReviewRuleEngine(driver, project_id=pid)
+        engine = _review_engine_cache[pid]
         violations = engine.run_rules(rule_ids=rule_ids, enabled_only=True)
 
         # 只返回摘要，不返回完整报告
