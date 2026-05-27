@@ -15,7 +15,15 @@ import streamlit as st
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT_DIR)
 
-from agent_system.graph_tools import _run_cypher
+from agent_system.graph_tools import _run_cypher, get_current_project
+
+
+def _pid_where(alias: str = "n", prefix: str = " AND ") -> str:
+    """根据当前 project_id 生成 WHERE 子句片段"""
+    pid = get_current_project()
+    if pid == "default":
+        return ""
+    return f"{prefix}({alias}.project_id = '{pid}' OR {alias}.project_id IS NULL)"
 
 # 最大邻居数限制，避免渲染卡顿
 MAX_NEIGHBORS = 50
@@ -381,9 +389,9 @@ def _build_power_tree_dot(voltage: str = None) -> str:
 
     try:
         # Find all power source components (PMIC, LDO, BUCK)
-        source_query = """
+        source_query = f"""
         MATCH (c:Component)
-        WHERE c.PartType IN ['PMIC', 'LDO', 'BUCK', 'DCDC']
+        WHERE c.PartType IN ['PMIC', 'LDO', 'BUCK', 'DCDC']{_pid_where('c')}
         RETURN c.RefDes AS refdes, c.PartType AS part_type, c.Model AS model
         ORDER BY c.PartType, c.RefDes
         """
@@ -563,7 +571,7 @@ def render_graph_viz():
 
     # Check Neo4j connectivity
     try:
-        node_count = _run_cypher("MATCH (n) RETURN count(n) AS cnt")[0]["cnt"]
+        node_count = _run_cypher(f"MATCH (n) WHERE 1=1{_pid_where('n')} RETURN count(n) AS cnt")[0]["cnt"]
     except Exception as e:
         st.error(f"❌ Neo4j 连接失败: {e}")
         return
@@ -622,8 +630,8 @@ def render_graph_viz():
 
     elif viz_type == "电源树":
         try:
-            voltages = _run_cypher("""
-                MATCH (n:Net) WHERE n.VoltageLevel IS NOT NULL
+            voltages = _run_cypher(f"""
+                MATCH (n:Net) WHERE n.VoltageLevel IS NOT NULL{_pid_where('n')}
                 RETURN DISTINCT n.VoltageLevel AS v ORDER BY n.VoltageLevel
             """)
             voltage_options = ["全部"] + [v["v"] for v in voltages]

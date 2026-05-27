@@ -98,9 +98,10 @@ GRAPH_TOOLS = {
 def _run_review(rule_ids: list = None) -> str:
     """执行规则审查引擎（返回摘要）"""
     try:
-        from agent_system.graph_tools import _get_driver
+        from agent_system.graph_tools import _get_driver, get_current_project
         driver = _get_driver()
-        engine = ReviewRuleEngine(driver)
+        pid = get_current_project()
+        engine = ReviewRuleEngine(driver, project_id=pid)
         violations = engine.run_rules(rule_ids=rule_ids, enabled_only=True)
 
         # 只返回摘要，不返回完整报告
@@ -131,7 +132,9 @@ def _run_review(rule_ids: list = None) -> str:
 def _search_knowledge(query: str, mpn: str = "") -> str:
     """搜索知识库"""
     try:
-        router = KnowledgeRouter()
+        from agent_system.graph_tools import get_current_project
+        pid = get_current_project()
+        router = KnowledgeRouter(project_id=pid)
         result = router.search(mpn=mpn or "general", query=query)
         if result.status == "success" and result.content:
             content = result.content

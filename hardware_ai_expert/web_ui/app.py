@@ -1859,12 +1859,12 @@ with st.sidebar:
     # Project selector
     st.markdown("---")
     try:
-        from agent_system.graph_tools import list_projects, set_current_project
+        from agent_system.graph_tools import list_projects, set_current_project, _run_cypher
         projects = list_projects()
         if not projects:
             projects = ["default"]
         
-        col1, col2 = st.columns([3, 1])
+        col1, col2, col3 = st.columns([3, 1, 1])
         with col1:
             current_project = st.selectbox(
                 "📁 项目",
@@ -1877,6 +1877,11 @@ with st.sidebar:
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("➕ 新建", key="_new_project_btn", help="新建项目"):
                 st.session_state._show_new_project = True
+        with col3:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if current_project != "default":
+                if st.button("🗑️ 删除", key="_del_project_btn", help="删除当前项目及其数据"):
+                    st.session_state._show_delete_project = True
         
         # 新建项目对话框
         if st.session_state.get("_show_new_project", False):
@@ -1885,7 +1890,6 @@ with st.sidebar:
             with col_a:
                 if st.button("✅ 创建", key="_create_project_btn"):
                     if new_name and new_name not in projects:
-                        # 创建 Project 节点
                         from neo4j import GraphDatabase
                         driver = GraphDatabase.driver(
                             os.environ.get("NEO4J_URI", "bolt://localhost:7687"),
@@ -1905,12 +1909,57 @@ with st.sidebar:
                 if st.button("❌ 取消", key="_cancel_project_btn"):
                     st.session_state._show_new_project = False
         
+        # 删除项目对话框
+        if st.session_state.get("_show_delete_project", False):
+            st.warning(f"⚠️ 确认删除项目 **{current_project}**？此操作将删除该项目所有数据且不可恢复！")
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("🗑️ 确认删除", key="_confirm_del_btn", type="primary"):
+                    from neo4j import GraphDatabase
+                    driver = GraphDatabase.driver(
+                        os.environ.get("NEO4J_URI", "bolt://localhost:7687"),
+                        auth=("neo4j", os.environ.get("NEO4J_PASSWORD", "SecretPassword123"))
+                    )
+                    try:
+                        with driver.session() as session:
+                            # 删除项目节点及关联数据
+                            cnt = session.run("MATCH (n) WHERE n.project_id = $pid RETURN count(n) AS cnt", pid=current_project).single()["cnt"]
+                            session.run("MATCH (n) WHERE n.project_id = $pid DETACH DELETE n", pid=current_project)
+                            session.run("MATCH (p:Project {id: $pid}) DELETE p", pid=current_project)
+                        st.success(f"✅ 已删除项目 {current_project}（{cnt} 个节点）")
+                    except Exception as e:
+                        st.error(f"删除失败: {e}")
+                    finally:
+                        driver.close()
+                    st.session_state._show_delete_project = False
+                    st.session_state._project_selector = "default"
+                    set_current_project("default")
+                    st.session_state.current_project = "default"
+                    st.rerun()
+            with col_b:
+                if st.button("❌ 取消", key="_cancel_del_btn"):
+                    st.session_state._show_delete_project = False
+        
         set_current_project(current_project)
         st.session_state.current_project = current_project
         
         # 显示当前项目信息
         if current_project != "default":
-            st.caption(f"🔄 当前项目: **{current_project}**")
+            # 查询项目统计
+            try:
+                comp_cnt = _run_cypher("MATCH (c:Component) WHERE c.project_id = $pid RETURN count(c) AS cnt", {"pid": current_project})[0]["cnt"]
+                net_cnt = _run_cypher("MATCH (n:Net) WHERE n.project_id = $pid RETURN count(n) AS cnt", {"pid": current_project})[0]["cnt"]
+                st.caption(f"🔄 **{current_project}** — {comp_cnt} 器件, {net_cnt} 网络")
+            except Exception:
+                st.caption(f"🔄 当前项目: **{current_project}**")
+        else:
+            # default 项目统计
+            try:
+                comp_cnt = _run_cypher("MATCH (c:Component) WHERE c.project_id = 'default' OR c.project_id IS NULL RETURN count(c) AS cnt")[0]["cnt"]
+                net_cnt = _run_cypher("MATCH (n:Net) WHERE n.project_id = 'default' OR n.project_id IS NULL RETURN count(n) AS cnt")[0]["cnt"]
+                st.caption(f"📊 默认项目 — {comp_cnt} 器件, {net_cnt} 网络")
+            except Exception:
+                pass
     except Exception:
         pass  # Neo4j may not be available
 

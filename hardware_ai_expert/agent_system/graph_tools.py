@@ -72,10 +72,12 @@ def _run_cypher(query: str, params: dict = None, timeout: int = None, project_id
             f"[Read-Only Mode] 写入操作被拦截: {query[:80]}..."
         )
 
-    # 注入 project_id 参数
+    # 注入 project_id 参数（未显式指定时从全局取）
     params = dict(params or {})
     if project_id is not None:
         params["project_id"] = project_id
+    elif "project_id" not in params and _current_project_id != "default":
+        params["project_id"] = _current_project_id
 
     driver = _get_driver()
     timeout = timeout or CYPHER_TIMEOUT_SECONDS

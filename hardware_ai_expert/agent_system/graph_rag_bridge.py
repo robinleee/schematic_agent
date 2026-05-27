@@ -68,7 +68,11 @@ class GraphRAGResult:
 class GraphRAGBridge:
     """True GraphRAG 桥接器（Neo4j 原生向量索引版）"""
 
-    def __init__(self):
+    def __init__(self, project_id: str = None):
+        self._driver = None
+        self._vector_index_ready = False
+        from agent_system.graph_tools import get_current_project
+        self.project_id = project_id or get_current_project()
         self._driver = None
         self._vector_index_ready = False
 
@@ -124,7 +128,8 @@ class GraphRAGBridge:
                         vc.source = $source,
                         vc.embedding = $embedding,
                         vc.indexed_at = datetime(),
-                        vc.vector_dim = $dim
+                        vc.vector_dim = $dim,
+                        vc.project_id = $pid
                 """, {
                     "chunk_id": chunk.chunk_id,
                     "mpn": chunk.mpn,
@@ -134,14 +139,16 @@ class GraphRAGBridge:
                     "page": chunk.page,
                     "source": chunk.source,
                     "embedding": emb,
-                    "dim": len(emb)
+                    "dim": len(emb),
+                    "pid": self.project_id
                 })
 
                 # 建立 [:DESCRIBES] 关系（精确匹配）
                 session.run("""
                     MATCH (vc:VectorChunk {chunk_id: $chunk_id})
                     MATCH (c:Component)
-                    WHERE c.RefDes = $mpn OR c.Model CONTAINS $mpn OR $mpn CONTAINS c.Model
+                    WHERE (c.RefDes = $mpn OR c.Model CONTAINS $mpn OR $mpn CONTAINS c.Model)
+                      AND (c.project_id = $pid OR c.project_id IS NULL)
                     MERGE (vc)-[r:DESCRIBES]->(c)
                     SET r.rel_type = $rel_type,
                         r.confidence = 1.0,
@@ -149,14 +156,15 @@ class GraphRAGBridge:
                 """, {
                     "chunk_id": chunk.chunk_id,
                     "mpn": chunk.mpn,
-                    "rel_type": chunk.chunk_type
+                    "rel_type": chunk.chunk_type,
+                    "pid": self.project_id
                 })
 
                 # 模糊匹配 Model 字段
                 session.run("""
                     MATCH (vc:VectorChunk {chunk_id: $chunk_id})
                     MATCH (c:Component)
-                    WHERE c.Model =~ $pattern
+                    WHERE c.Model =~ $pattern AND (c.project_id = $pid OR c.project_id IS NULL)
                     MERGE (vc)-[r:DESCRIBES]->(c)
                     SET r.rel_type = $rel_type,
                         r.confidence = 0.9,
@@ -164,7 +172,8 @@ class GraphRAGBridge:
                 """, {
                     "chunk_id": chunk.chunk_id,
                     "pattern": f"(?i).*{chunk.mpn}.*",
-                    "rel_type": chunk.chunk_type
+                    "rel_type": chunk.chunk_type,
+                    "pid": self.project_id
                 })
 
             logger.info(f"Indexed chunk: {chunk.chunk_id}")
@@ -208,6 +217,7 @@ class GraphRAGBridge:
                 # 方法：找到与 Component 关联的 VectorChunk，再计算向量相似度
                 result = session.run("""
                     MATCH (c:Component {RefDes: $refdes})<-[r:DESCRIBES]-(vc:VectorChunk)
+                    WHERE c.project_id = $pid OR c.project_id IS NULL
                     WITH vc, r.confidence AS rel_conf
                     WITH vc, rel_conf,
                          gds.similarity.cosine(vc.embedding, $query_emb) AS sim
@@ -218,7 +228,7 @@ class GraphRAGBridge:
                            sim * rel_conf AS score
                     ORDER BY score DESC
                     LIMIT $limit
-                """, {"refdes": refdes, "query_emb": query_emb, "limit": n})
+                """, {"refdes": refdes, "query_emb": query_emb, "limit": n, "pid": self.project_id})
 
                 records = list(result)
                 return [
@@ -246,14 +256,15 @@ class GraphRAGBridge:
                 # 拉取候选 VectorChunk（按 mpn 过滤）
                 result = session.run("""
                     MATCH (vc:VectorChunk)
-                    WHERE vc.mpn = $mpn OR vc.mpn CONTAINS $mpn OR $mpn CONTAINS vc.mpn
+                    WHERE (vc.mpn = $mpn OR vc.mpn CONTAINS $mpn OR $mpn CONTAINS vc.mpn)
+                      AND (vc.project_id = $pid OR vc.project_id IS NULL)
                     RETURN vc.chunk_id AS chunk_id,
                            vc.content AS content,
                            vc.source AS source,
                            vc.chunk_type AS chunk_type,
                            vc.embedding AS embedding
                     LIMIT 100
-                """, {"mpn": mpn})
+                """, {"mpn": mpn, "pid": self.project_id})
 
                 candidates = list(result)
                 if not candidates:
@@ -344,14 +355,18 @@ class GraphRAGBridge:
         try:
             driver = self._get_driver()
             with driver.session() as session:
+                pid = self.project_id
                 stats["vector_chunks"] = session.run(
-                    "MATCH (vc:VectorChunk) RETURN count(vc) AS cnt"
+                    "MATCH (vc:VectorChunk) WHERE vc.project_id = $pid OR vc.project_id IS NULL RETURN count(vc) AS cnt",
+                    {"pid": pid}
                 ).single()["cnt"]
                 stats["describes_relations"] = session.run(
-                    "MATCH ()-[r:DESCRIBES]->() RETURN count(r) AS cnt"
+                    "MATCH (vc:VectorChunk)-[r:DESCRIBES]->(c:Component) WHERE vc.project_id = $pid OR vc.project_id IS NULL RETURN count(r) AS cnt",
+                    {"pid": pid}
                 ).single()["cnt"]
                 stats["linked_components"] = session.run(
-                    "MATCH (c:Component)<-[:DESCRIBES]-() RETURN count(DISTINCT c) AS cnt"
+                    "MATCH (c:Component)<-[:DESCRIBES]-(vc:VectorChunk) WHERE c.project_id = $pid OR c.project_id IS NULL RETURN count(DISTINCT c) AS cnt",
+                    {"pid": pid}
                 ).single()["cnt"]
         except Exception:
             pass
@@ -362,9 +377,9 @@ class GraphRAGBridge:
         try:
             driver = self._get_driver()
             with driver.session() as session:
-                session.run("MATCH ()-[r:DESCRIBES]->() DELETE r")
-                session.run("MATCH (vc:VectorChunk) DELETE vc")
-            logger.info("GraphRAG data reset")
+                pid = self.project_id
+                session.run("MATCH (vc:VectorChunk) WHERE vc.project_id = $pid DETACH DELETE vc", {"pid": pid})
+            logger.info(f"GraphRAG data reset (project: {pid})")
         except Exception as e:
             logger.error(f"Reset failed: {e}")
 

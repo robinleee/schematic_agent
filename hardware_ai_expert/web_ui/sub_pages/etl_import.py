@@ -158,11 +158,14 @@ def render_upload():
 
         st.markdown("---")
         st.markdown("#### 项目信息")
+        current_pid = st.session_state.get("current_project", "default")
+        if current_pid != "default":
+            st.info(f"📌 当前项目: **{current_pid}**，数据将导入到此项目")
         project_name = st.text_input(
             "项目名称",
-            value="",
+            value=current_pid if current_pid != "default" else "",
             placeholder="如: Beet7_V1",
-            help="用于标识本次导入的数据"
+            help="用于标识本次导入的数据，留空则使用侧栏当前项目"
         )
 
     # 保存文件到 session state
@@ -197,7 +200,7 @@ def render_preview():
         return
 
     files = st.session_state.etl_files
-    project = st.session_state.get("etl_project", "")
+    project = st.session_state.get("etl_project", "") or st.session_state.get("current_project", "default")
 
     # 显示已上传文件
     st.markdown("#### 已上传文件")
@@ -356,7 +359,7 @@ def render_load():
         return
 
     files = st.session_state.etl_files
-    project = st.session_state.get("etl_project", "")
+    project = st.session_state.get("etl_project", "") or st.session_state.get("current_project", "default")
     skip_quality = st.session_state.get("etl_skip_quality", False)
 
     # 显示准备信息
