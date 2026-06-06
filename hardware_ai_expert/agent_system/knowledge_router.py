@@ -312,6 +312,29 @@ class PublicMPNRetriever:
 # Knowledge Router 核心
 # ============================================================
 
+def _create_tier3():
+    """创建 Tier3 检索器（支持轻量 Python / Firecrawl）"""
+    tier3_type = os.getenv("TIER3_TYPE", "lightweight").lower()
+    if tier3_type in ("lightweight", "python"):
+        try:
+            from agent_system.tier3_retriever import Tier3Retriever
+            return Tier3Retriever()
+        except ImportError:
+            logger.warning("tier3_retriever 不可用，fallback 到空实现")
+    elif tier3_type == "firecrawl":
+        try:
+            from agent_system.firecrawl_tier3 import FirecrawlTier3Retriever
+            return FirecrawlTier3Retriever()
+        except ImportError:
+            logger.warning("firecrawl_tier3 不可用，fallback 到轻量实现")
+            try:
+                from agent_system.tier3_retriever import Tier3Retriever
+                return Tier3Retriever()
+            except ImportError:
+                pass
+    return PublicMPNRetriever()
+
+
 class KnowledgeRouter:
     """
     三级降级知识路由器。
@@ -323,7 +346,7 @@ class KnowledgeRouter:
     def __init__(self, project_id: str = "default"):
         self.tier1 = LocalRAGRetriever(project_id=project_id)
         self.tier2 = ChromaDBTier2Retriever(project_id=project_id)  # ChromaDB hardware_knowledge
-        self.tier3 = PublicMPNRetriever()
+        self.tier3 = _create_tier3()
         self._graphrag = None  # 延迟加载 GraphRAG Pipeline (Tier0)
 
     @property
