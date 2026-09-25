@@ -394,6 +394,25 @@
 
 ## 已完成但需持续关注
 
+### [x] Agent 图谱统计与 System 状态不一致
+
+**完成状态**: 已完成（2026-09-25）。
+
+**问题原因**: `get_graph_summary()` 在未选择项目时使用 `project_id = 'default'` 过滤，
+但实际导入项目为 `legacy` / `beet7_acceptance`，导致 Agent 看到 Component=0；
+System 页面使用全图统计，因此两者结果不一致。
+
+**修复内容**: 未选择具体项目（`project_id == "default"`）时，图谱摘要统计全部项目；
+选择具体项目时继续按项目过滤并保留共享节点。避免改变现有多项目隔离语义。
+
+**验证结果**:
+- 默认范围：142,765 节点 / 25,376 Component / 16,318 Net / 99,140 Pin。
+- `beet7_acceptance` 范围：12,688 Component / 8,159 Net / 49,570 Pin。
+- `hardware_ai_expert/tests/test_graph_tools.py`: 29 passed。
+- `/api/v1/system/status`: Neo4j/Ollama/ChromaDB/API 全部 running。
+
+---
+
 ### [x] Quality Guard 核心网络识别改为网络级校验
 
 **完成状态**: 已完成。

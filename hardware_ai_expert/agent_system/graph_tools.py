@@ -512,23 +512,54 @@ def get_graph_summary() -> str:
     """
     try:
         pid = get_current_project()
-        total_nodes = _run_cypher("MATCH (n) WHERE n.project_id = $project_id OR n.project_id IS NULL RETURN count(n) AS cnt", {"project_id": pid})[0]["cnt"]
-        comp_count = _run_cypher("MATCH (c:Component) WHERE c.project_id = $project_id OR c.project_id IS NULL RETURN count(c) AS cnt", {"project_id": pid})[0]["cnt"]
-        net_count = _run_cypher("MATCH (n:Net) WHERE n.project_id = $project_id OR n.project_id IS NULL RETURN count(n) AS cnt", {"project_id": pid})[0]["cnt"]
-        pin_count = _run_cypher("MATCH (p:Pin) WHERE p.project_id = $project_id OR p.project_id IS NULL RETURN count(p) AS cnt", {"project_id": pid})[0]["cnt"]
+        # ``default`` means no concrete project has been selected yet.  In
+        # that mode the Agent must see the same aggregate graph as the
+        # System page; otherwise project-scoped predicates such as
+        # ``project_id = 'default' OR project_id IS NULL`` hide all imported
+        # projects (currently ``legacy`` and ``beet7_acceptance``).
+        project_filter = (
+            "(n.project_id = $project_id OR n.project_id IS NULL)"
+            if pid != "default"
+            else "true"
+        )
+        component_filter = (
+            "(c.project_id = $project_id OR c.project_id IS NULL)"
+            if pid != "default"
+            else "true"
+        )
+        params = {"project_id": pid}
+
+        total_nodes = _run_cypher(
+            f"MATCH (n) WHERE {project_filter} RETURN count(n) AS cnt",
+            params,
+        )[0]["cnt"]
+        comp_count = _run_cypher(
+            f"MATCH (c:Component) WHERE {component_filter} RETURN count(c) AS cnt",
+            params,
+        )[0]["cnt"]
+        net_count = _run_cypher(
+            f"MATCH (n:Net) WHERE {project_filter} RETURN count(n) AS cnt",
+            params,
+        )[0]["cnt"]
+        pin_count = _run_cypher(
+            f"MATCH (p:Pin) WHERE {project_filter.replace('n.', 'p.')} "
+            "RETURN count(p) AS cnt",
+            params,
+        )[0]["cnt"]
 
         # 按类型统计器件
-        by_type = _run_cypher("""
+        by_type = _run_cypher(f"""
             MATCH (c:Component)
-            WHERE c.project_id = $project_id OR c.project_id IS NULL
+            WHERE {component_filter}
             RETURN c.PartType AS part_type, count(c) AS cnt
             ORDER BY cnt DESC
-        """, {"project_id": pid})
+        """, params)
 
         lines = [
             "=" * 50,
             "Neo4j 图谱统计摘要",
             "=" * 50,
+            f"项目范围: {'全部项目' if pid == 'default' else pid}",
             f"总节点数: {total_nodes}",
             f"  - Component: {comp_count}",
             f"  - Net: {net_count}",
