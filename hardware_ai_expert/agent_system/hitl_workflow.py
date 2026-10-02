@@ -78,7 +78,9 @@ class HITLManager:
     RULES_DIR = os.path.join(ROOT_DIR, "agent_system", "review_engine", "config")
     CUSTOM_RULES_FILE = os.path.join(RULES_DIR, "custom_rules.yaml")
 
-    def __init__(self):
+    def __init__(self, project_id=None, shared=False):
+        self.project_id = project_id
+        self.shared = shared
         self._driver = None
         self._pending: List[PendingReview] = []
 
@@ -88,7 +90,9 @@ class HITLManager:
                 raise RuntimeError("neo4j not installed")
             uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
             user = os.getenv("NEO4J_USER", "neo4j")
-            password = os.getenv("NEO4J_PASSWORD", "SecretPassword123")
+            password = os.getenv("NEO4J_PASSWORD")
+            if not password:
+                raise RuntimeError("NEO4J_PASSWORD is required")
             self._driver = GraphDatabase.driver(uri, auth=(user, password))
         return self._driver
 
@@ -103,11 +107,13 @@ class HITLManager:
 
     def add_pending(self, review: PendingReview) -> bool:
         """添加一个待审批项到队列和 Neo4j"""
+        if self.project_id is None and not self.shared:
+            raise ValueError("Explicit project_id or shared=True required for pending review")
+        if self.project_id is not None and not self.project_id.strip():
+            raise ValueError("project_id must not be blank")
         review.created_at = datetime.now().isoformat()
         if not review.review_id:
             review.review_id = f"REV_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{hash(review.rule_id + review.refdes) % 10000:04d}"
-
-        self._pending.append(review)
 
         try:
             driver = self._get_driver()
@@ -125,7 +131,9 @@ class HITLManager:
                         pr.suggested_fix = $suggested_fix,
                         pr.status = 'pending',
                         pr.created_at = datetime(),
-                        pr.source = $source
+                        pr.source = $source,
+                        pr.scope = $scope,
+                        pr.project_id = $project_id
                 """, {
                     "review_id": review.review_id,
                     "rule_id": review.rule_id,
@@ -138,7 +146,10 @@ class HITLManager:
                     "actual": review.actual,
                     "suggested_fix": review.suggested_fix,
                     "source": review.source,
+                    "scope": "project" if self.project_id is not None else "shared",
+                    "project_id": self.project_id,
                 })
+            self._pending.append(review)
             return True
         except Exception as e:
             logger.error(f"Failed to save pending review to Neo4j: {e}")
@@ -181,31 +192,35 @@ class HITLManager:
     def _update_status(self, review_id: str, action: ReviewAction,
                        reviewer: str, comment: str) -> bool:
         """更新审批状态"""
-        # 更新内存队列
-        for pr in self._pending:
-            if pr.review_id == review_id:
-                pr.status = action.value
-                pr.reviewer = reviewer
-                pr.review_comment = comment
-                pr.reviewed_at = datetime.now().isoformat()
-                break
-
-        # 更新 Neo4j
+        # Only pending reviews may transition; never report success for unknown IDs.
         try:
             driver = self._get_driver()
             with driver.session() as session:
-                session.run("""
-                    MATCH (pr:PendingReview {review_id: $review_id})
+                record = session.run("""
+                    MATCH (pr:PendingReview {review_id: $review_id, status: 'pending'})
+                    WHERE pr.scope = 'shared' AND $project_id IS NULL
+                       OR pr.scope = 'project' AND pr.project_id = $project_id
                     SET pr.status = $status,
                         pr.reviewer = $reviewer,
                         pr.review_comment = $comment,
                         pr.reviewed_at = datetime()
+                    RETURN pr.review_id AS review_id
                 """, {
                     "review_id": review_id,
-                    "status": action.value,
+                    "project_id": self.project_id,
+                    "status": "approved" if action == ReviewAction.APPROVE else "rejected",
                     "reviewer": reviewer,
                     "comment": comment,
-                })
+                }).single()
+            if record is None:
+                return False
+            for pr in self._pending:
+                if pr.review_id == review_id:
+                    pr.status = "approved" if action == ReviewAction.APPROVE else "rejected"
+                    pr.reviewer = reviewer
+                    pr.review_comment = comment
+                    pr.reviewed_at = datetime.now().isoformat()
+                    break
             return True
         except Exception as e:
             logger.error(f"Failed to update review status: {e}")
@@ -227,7 +242,7 @@ class HITLManager:
         """
         approved = [pr for pr in self._pending if pr.status == "approved"]
         if not approved:
-            return {"saved": 0, "message": "没有 approved 的审查项"}
+            return {"saved": 0, "rules": [], "message": "没有 approved 的审查项"}
 
         # 按 rule_id 分组
         rules_by_id = {}
@@ -265,7 +280,8 @@ class HITLManager:
                 pr.status = "persisted"
             self._mark_persisted_in_neo4j([pr.review_id for pr in approved])
 
-            return {"saved": len(rules_by_id), "rules": list(rules_by_id.keys())}
+            return {"saved": len(rules_by_id), "rules": list(rules_by_id.keys()),
+                    "location": self.CUSTOM_RULES_FILE}
         except Exception as e:
             logger.error(f"Failed to save custom rules: {e}")
             return {"saved": 0, "error": str(e)}

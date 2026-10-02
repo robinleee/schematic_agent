@@ -9,10 +9,15 @@ Knowledge Router - 三级降级检索路由
 import os
 import hashlib
 import logging
-from datetime import datetime
+import re
+import time
+from datetime import datetime, timezone
 from typing import Optional
 from dataclasses import dataclass
 from enum import Enum
+from urllib.parse import urlsplit
+
+import requests
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
@@ -41,13 +46,25 @@ class TierLevel(str):
 
 
 class RetrievalResult(BaseModel):
-    status: str = "not_found"  # success, not_found, error
+    status: str = "not_found"  # success, not_found, error, degraded
     tier: str = ""
     content: str = ""
     source: str = ""
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     mpn: Optional[str] = None
     cached: bool = False
+    retrieved_at: Optional[str] = None
+    reason: Optional[str] = None
+
+
+_MPN_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9.+-]{1,63}\Z", re.ASCII)
+
+
+def valid_public_mpn(mpn: str) -> bool:
+    """Reject whitespace, URLs, fragments, control chars and BOM/context text."""
+    return (isinstance(mpn, str) and bool(_MPN_PATTERN.fullmatch(mpn))
+            and any(c.isalpha() for c in mpn) and any(c.isdigit() for c in mpn)
+            and ".." not in mpn)
 
 
 @dataclass
@@ -91,6 +108,30 @@ def _get_chroma_client():
     return _chroma_client
 
 
+def delete_project_vectors(project_id: str) -> dict[str, int]:
+    """Remove only explicitly project-owned records; never reset a collection."""
+    if not project_id or not project_id.strip():
+        raise ValueError("project_id must not be blank")
+    client = _get_chroma_client()
+    counts = {}
+    for name in (LocalRAGRetriever.COLLECTION, ChromaDBTier2Retriever.COLLECTION):
+        try:
+            col = client.get_collection(name)
+        except Exception as exc:
+            # A missing collection is fine; a disconnected store is not.
+            if exc.__class__.__name__ not in ("NotFoundError", "InvalidCollectionException"):
+                raise
+            counts[name] = 0
+            continue
+        where = {"$and": [{"scope": {"$eq": "project"}},
+                          {"project_id": {"$eq": project_id}}]}
+        ids = col.get(where=where, include=[])["ids"]
+        if ids:
+            col.delete(ids=ids)
+        counts[name] = len(ids)
+    return counts
+
+
 # ============================================================
 # Tier 1: 本地 ChromaDB RAG
 # ============================================================
@@ -100,9 +141,10 @@ class LocalRAGRetriever:
 
     COLLECTION = "hardware_datasheets"
 
-    def __init__(self, project_id: str = "default"):
+    def __init__(self, project_id: Optional[str] = None, shared: bool = False):
         self._col = None
         self.project_id = project_id
+        self.shared = shared
 
     @property
     def collection(self):
@@ -123,14 +165,20 @@ class LocalRAGRetriever:
 
     def add_chunk(self, chunk: DatasheetChunk) -> bool:
         """添加一个切片到向量库"""
+        if self.project_id is None and not self.shared:
+            raise ValueError("Explicit project_id or shared=True required for indexing")
         if not chunk.content_hash:
             chunk.content_hash = hashlib.md5(chunk.content.encode()).hexdigest()
 
-        chunk_id = f"{chunk.mpn}_p{chunk.page}_{chunk.chunk_type}_{chunk.content_hash[:8]}"
-
-        embedding = embed(chunk.content)
+        if self.project_id is not None and not self.project_id.strip():
+            raise ValueError("project_id must not be blank")
+        scope = "project" if self.project_id is not None else "shared"
+        chunk_id = hashlib.sha256(
+            f"{scope}:{self.project_id}:{chunk.mpn}:{chunk.page}:{chunk.chunk_type}:{chunk.content_hash}".encode()
+        ).hexdigest()
 
         try:
+            embedding = embed(chunk.content)
             self.collection.add(
                 documents=[chunk.content],
                 embeddings=[embedding],
@@ -140,12 +188,14 @@ class LocalRAGRetriever:
                     "chunk_type": chunk.chunk_type,
                     "content_hash": chunk.content_hash,
                     "indexed_at": datetime.now().isoformat(),
+                    "scope": scope,
+                    "project_id": self.project_id if self.project_id is not None else "",
                 }],
                 ids=[chunk_id]
             )
             return True
         except Exception as e:
-            logger.error(f"Failed to add chunk: {e}")
+            logger.error("Failed to add chunk: %s", e)
             return False
 
     def search(self, mpn: str, query: str, n: int = 5) -> list[RetrievalResult]:
@@ -158,9 +208,11 @@ class LocalRAGRetriever:
         where_filter = {}
         if mpn:
             where_filter["mpn"] = {"$eq": mpn}
-        if self.project_id and self.project_id != "default":
-            where_filter["project_id"] = {"$eq": self.project_id}
-        where_clause = where_filter if where_filter else None
+        scope_filter = ({"scope": {"$eq": "shared"}} if self.project_id is None else
+                        {"$or": [{"scope": {"$eq": "shared"}},
+                                 {"$and": [{"scope": {"$eq": "project"}},
+                                           {"project_id": {"$eq": self.project_id}}]}]})
+        where_clause = {"$and": [where_filter, scope_filter]} if where_filter else scope_filter
 
         try:
             results = self.collection.query(
@@ -197,9 +249,16 @@ class LocalRAGRetriever:
     def count(self) -> int:
         """返回向量库中的切片数量"""
         try:
-            return self.collection.count()
+            return len(self.collection.get(where=self._visibility_filter(), include=[])["ids"])
         except Exception:
             return 0
+
+    def _visibility_filter(self):
+        if self.project_id is None:
+            return {"scope": {"$eq": "shared"}}
+        return {"$or": [{"scope": {"$eq": "shared"}},
+                        {"$and": [{"scope": {"$eq": "project"}},
+                                  {"project_id": {"$eq": self.project_id}}]}]}
 
     def reset(self):
         """重置向量库"""
@@ -219,7 +278,7 @@ class ChromaDBTier2Retriever:
 
     COLLECTION = "hardware_knowledge"
 
-    def __init__(self, project_id: str = "default"):
+    def __init__(self, project_id: Optional[str] = None):
         self._col = None
         self.project_id = project_id
 
@@ -246,9 +305,8 @@ class ChromaDBTier2Retriever:
             where_filter = {}
             if mpn:
                 where_filter["mpn"] = {"$eq": mpn}
-            if self.project_id and self.project_id != "default":
-                where_filter["project_id"] = {"$eq": self.project_id}
-            where_clause = where_filter if where_filter else None
+            scope_filter = LocalRAGRetriever(self.project_id)._visibility_filter()
+            where_clause = {"$and": [where_filter, scope_filter]} if where_filter else scope_filter
             results = self.collection.query(
                 query_embeddings=[query_emb],
                 n_results=n,
@@ -285,6 +343,107 @@ class ChromaDBTier2Retriever:
         except Exception as e:
             logger.error(f"ChromaDB Tier2 search error: {e}")
             return None
+
+
+class InternalPLMRetriever:
+    """Opt-in PLM JSON GET adapter. No endpoint or response contract is assumed.
+
+    Configure PLM_ENDPOINT (full HTTPS lookup URL), PLM_TOKEN, and all five
+    PLM_*_FIELD names below from the actual approved API contract. Response
+    fields must be top-level strings: MPN, content, scope, project ID and source.
+    Only explicit ``shared`` or matching ``project`` records are visible.
+    """
+
+    def __init__(self, project_id: Optional[str] = None, *,
+                 endpoint: Optional[str] = None, token: Optional[str] = None,
+                 fields: Optional[dict[str, str]] = None, session=None,
+                 timeout: float = 2.0, retries: int = 1, ttl: float = 300.0):
+        self.project_id = project_id
+        self.endpoint = endpoint if endpoint is not None else os.getenv("PLM_ENDPOINT", "")
+        self.token = token if token is not None else os.getenv("PLM_TOKEN", "")
+        self.fields = fields if fields is not None else {
+            key: os.getenv(f"PLM_{key.upper()}_FIELD", "")
+            for key in ("mpn", "content", "scope", "project_id", "source")
+        }
+        parsed = urlsplit(self.endpoint)
+        # Fail closed: no implicit localhost, userinfo, query params or redirect.
+        self.enabled = (parsed.scheme == "https" and bool(parsed.hostname)
+                        and not parsed.username and not parsed.password
+                        and not parsed.query and not parsed.fragment
+                        and bool(self.token)
+                        and all(isinstance(self.fields.get(k), str) and self.fields[k]
+                                for k in ("mpn", "content", "scope", "project_id", "source")))
+        self.session = session or requests.Session()
+        self.timeout = max(0.1, min(float(timeout), 5.0))
+        self.retries = max(0, min(int(retries), 2))
+        self.ttl = max(0.0, min(float(ttl), 3600.0))
+        self._cache: dict[tuple[str, str], tuple[float, RetrievalResult]] = {}
+        self.last_reason = "plm_unconfigured" if not self.enabled else None
+
+    def search(self, mpn: str, query: str = "") -> Optional[RetrievalResult]:
+        # No query or private project context is ever sent to PLM.
+        if not self.enabled:
+            self.last_reason = "plm_unconfigured"
+            return None
+        if not valid_public_mpn(mpn):
+            self.last_reason = "invalid_mpn"
+            return None
+        key = (self.project_id or "", mpn)
+        cached = self._cache.get(key)
+        if cached and cached[0] > time.monotonic():
+            self.last_reason = None
+            return cached[1].model_copy(update={"cached": True})
+        for attempt in range(self.retries + 1):
+            try:
+                response = self.session.get(
+                    self.endpoint, params={"mpn": mpn},
+                    headers={"Authorization": f"Bearer {self.token}"},
+                    timeout=self.timeout, allow_redirects=False,
+                )
+                if response.status_code in (401, 403):
+                    self.last_reason = "plm_unauthorized"
+                    return None
+                if response.status_code == 404:
+                    self.last_reason = "plm_not_found"
+                    return None
+                if response.status_code in (429, 500, 502, 503, 504) and attempt < self.retries:
+                    continue
+                if response.status_code != 200:
+                    self.last_reason = "plm_http_error"
+                    return None
+                if len(response.content) > 65536:
+                    self.last_reason = "plm_parse_error"
+                    return None
+                record = response.json()
+                if not isinstance(record, dict):
+                    raise ValueError("not a record")
+                values = {key: record.get(field) for key, field in self.fields.items()}
+                if (values["mpn"] != mpn or not isinstance(values["content"], str)
+                        or not values["content"].strip() or len(values["content"]) > 16000
+                        or not isinstance(values["source"], str) or not values["source"].strip()):
+                    raise ValueError("invalid record")
+                if not (values["scope"] == "shared" or
+                        (values["scope"] == "project" and self.project_id
+                         and values["project_id"] == self.project_id)):
+                    self.last_reason = "plm_forbidden"
+                    return None
+                result = RetrievalResult(
+                    status="success", tier=TierLevel.TIER_2,
+                    content=values["content"], source="plm:" + values["source"][:128],
+                    confidence=0.8, mpn=mpn,
+                    retrieved_at=datetime.now(timezone.utc).isoformat(),
+                )
+                self._cache[key] = (time.monotonic() + self.ttl, result)
+                self.last_reason = None
+                return result
+            except requests.exceptions.Timeout:
+                self.last_reason = "plm_timeout"
+            except requests.exceptions.RequestException:
+                self.last_reason = "plm_unavailable"
+            except (ValueError, TypeError, KeyError):
+                self.last_reason = "plm_parse_error"
+                return None
+        return None
 
 
 class PublicMPNRetriever:
@@ -343,9 +502,11 @@ class KnowledgeRouter:
     Tier 3 命中后自动缓存到 Tier 1。
     """
 
-    def __init__(self, project_id: str = "default"):
-        self.tier1 = LocalRAGRetriever(project_id=project_id)
+    def __init__(self, project_id: Optional[str] = None, shared: bool = False):
+        self.project_id = project_id
+        self.tier1 = LocalRAGRetriever(project_id=project_id, shared=shared)
         self.tier2 = ChromaDBTier2Retriever(project_id=project_id)  # ChromaDB hardware_knowledge
+        self.plm = InternalPLMRetriever(project_id=project_id)
         self.tier3 = _create_tier3()
         self._graphrag = None  # 延迟加载 GraphRAG Pipeline (Tier0)
 
@@ -355,7 +516,7 @@ class KnowledgeRouter:
         if self._graphrag is None:
             try:
                 from agent_system.graph_rag.pipeline import GraphRAGPipeline
-                self._graphrag = GraphRAGPipeline()
+                self._graphrag = GraphRAGPipeline(project_id=self.project_id)
                 logger.info("GraphRAG Pipeline (Tier0) 已初始化")
             except Exception as e:
                 logger.warning(f"GraphRAG 初始化失败: {e}")
@@ -400,32 +561,53 @@ class KnowledgeRouter:
                 logger.info(f"Tier1 hit: {mpn} confidence={best.confidence:.2f}")
                 return best
 
-        # Tier 2: 内网 PLM（预留）
+        # Local supplementary collection (retains Task8 project visibility filter).
         if self.tier2:
             result = self.tier2.search(mpn, query)
             if result and result.status == "success":
                 self._cache_to_tier1(result)
                 return result
 
-        # Tier 3: 公网 MPN
-        result = self.tier3.search(mpn, query)
+        # Optional internal PLM; no private query text leaves this router.
+        result = self.plm.search(mpn)
         if result and result.status == "success":
-            logger.info(f"Tier3 hit: {mpn}")
             self._cache_to_tier1(result)
             return result
 
-        # 未找到
+        # Tier 3: only a strictly validated MPN may leave the process.
+        if not valid_public_mpn(mpn):
+            return RetrievalResult(status="degraded", tier="none", mpn=mpn,
+                                   source="public_mpn", reason="invalid_mpn",
+                                   retrieved_at=datetime.now(timezone.utc).isoformat())
+        result = self.tier3.search(mpn, "")
+        if result and result.status == "success":
+            if self.plm.last_reason not in (None, "plm_unconfigured", "plm_not_found"):
+                result = result.model_copy(update={"reason": self.plm.last_reason})
+            logger.info("Tier3 hit")
+            self._cache_to_tier1(result)
+            return result
+
+        reason = getattr(self.tier3, "last_reason", None)
+        if not getattr(self.tier3, "enabled", False):
+            reason = "tier3_disabled"
+        reason = reason or "tier3_not_found"
+        degraded = reason not in ("tier3_not_found",)
         return RetrievalResult(
-            status="not_found",
+            status="degraded" if degraded else "not_found",
             tier="none",
             content=f"未找到 {mpn} 相关规格信息",
             mpn=mpn,
+            source="public_mpn",
+            retrieved_at=datetime.now(timezone.utc).isoformat(),
+            reason=reason,
         )
 
     def _cache_to_tier1(self, result: RetrievalResult):
         """将外部检索结果缓存到本地"""
         if not result.mpn or not result.content:
             return
+        if self.project_id is None and not self.tier1.shared:
+            return  # A missing project is not permission to publish shared data.
         chunk = DatasheetChunk(
             mpn=result.mpn,
             page=0,
@@ -459,6 +641,40 @@ class KnowledgeRouter:
             if self.tier1.add_chunk(chunk):
                 imported += 1
         return imported
+
+    def upload_document(self, file_path: str, mpn: str, category: str = "general",
+                        source: Optional[str] = None) -> dict:
+        """Index text pages from a PDF or UTF-8 text file in the local retriever."""
+        if not mpn or not mpn.strip():
+            raise ValueError("mpn must not be blank")
+        suffix = os.path.splitext(file_path)[1].lower()
+        if suffix == ".pdf":
+            try:
+                import fitz
+            except ImportError as exc:
+                raise RuntimeError("PDF extraction unavailable: PyMuPDF not installed") from exc
+            try:
+                with fitz.open(file_path) as doc:
+                    pages = {str(i + 1): page.get_text() for i, page in enumerate(doc)}
+            except Exception as exc:
+                raise ValueError("Invalid PDF document") from exc
+        elif suffix == ".txt":
+            try:
+                with open(file_path, encoding="utf-8") as handle:
+                    pages = {"1": handle.read()}
+            except UnicodeDecodeError as exc:
+                raise ValueError("Text document must be UTF-8") from exc
+        else:
+            raise ValueError("Only PDF and TXT documents are supported")
+        if not any(text.strip() for text in pages.values()):
+            raise ValueError("Document contains no extractable text")
+        count = self.import_text_knowledge(mpn, pages)
+        if count != sum(bool(text.strip()) for text in pages.values()):
+            raise RuntimeError(
+                f"Knowledge index unavailable or partially indexed ({count} pages indexed); "
+                "retry may create duplicates"
+            )
+        return {"chunk_count": count, "mpn": mpn, "category": category, "source": source}
 
     def import_design_guide(self, source_id: str, chunks: list, category: str = "general") -> int:
         """
@@ -508,7 +724,7 @@ class KnowledgeRouter:
         """获取向量库统计"""
         return {
             "tier1_chunks": self.tier1.count(),
-            "tier2_enabled": self.tier2 is not None,
+            "tier2_enabled": self.tier2 is not None or self.plm.enabled,
             "tier3_enabled": self.tier3.enabled,
         }
 
@@ -550,8 +766,8 @@ if _LANGCHAIN_AVAILABLE:
         router = KnowledgeRouter()
         result = router.search(mpn, query)
 
-        if result.status == "not_found":
-            return f"未找到 {mpn} 的相关信息。"
+        if result.status != "success":
+            return f"未找到 {mpn} 的相关信息。状态: {result.status}；原因: {result.reason or 'not_found'}"
 
         return f"""来源: {result.source} | 置信度: {result.confidence:.0%} | 层级: {result.tier}
 

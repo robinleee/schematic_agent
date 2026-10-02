@@ -13,6 +13,8 @@ import os
 import yaml
 import json
 import logging
+import tempfile
+from uuid import uuid4
 from datetime import datetime
 from typing import Optional, List, Dict
 from dataclasses import dataclass, asdict
@@ -34,6 +36,7 @@ class DatasheetReviewStatus(str, Enum):
     APPROVED = "approved"
     REJECTED = "rejected"
     MODIFIED = "modified"
+    PERSISTED = "persisted"
 
 
 @dataclass
@@ -63,6 +66,7 @@ class DatasheetParamReview:
     # 元数据
     created_at: str = ""
     source_file: str = ""
+    persisted_at: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -95,6 +99,7 @@ class DatasheetHITLManager:
         self._pending: List[DatasheetParamReview] = []
         self._approved: List[DatasheetParamReview] = []
         self._rejected: List[DatasheetParamReview] = []
+        self._persisted: List[DatasheetParamReview] = []
         self._load_pending()
 
     # --------------------------------------------------------
@@ -116,22 +121,39 @@ class DatasheetHITLManager:
                             self._approved.append(review)
                         elif review.status == DatasheetReviewStatus.REJECTED.value:
                             self._rejected.append(review)
+                        elif review.status == DatasheetReviewStatus.MODIFIED.value:
+                            self._approved.append(review)
+                        elif review.status == DatasheetReviewStatus.PERSISTED.value:
+                            self._persisted.append(review)
                 logger.info(f"Loaded {len(self._pending)} pending, {len(self._approved)} approved, {len(self._rejected)} rejected datasheet reviews")
             except Exception as e:
-                logger.error(f"Failed to load pending reviews: {e}")
+                raise RuntimeError(f"Failed to load datasheet reviews: {e}") from e
+
+    @staticmethod
+    def _write_yaml(path: str, data: dict):
+        """Replace a YAML file atomically, leaving the previous version on failure."""
+        directory = os.path.dirname(os.path.abspath(path))
+        os.makedirs(directory, exist_ok=True)
+        name = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=directory, prefix=".datasheet-",
+                suffix=".yaml", delete=False,
+            ) as f:
+                name = f.name
+                yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
+            os.replace(name, path)
+        finally:
+            if name and os.path.exists(name):
+                os.unlink(name)
 
     def _save_pending(self):
         """保存待审批列表到文件"""
-        try:
-            os.makedirs(self.AMR_DATA_DIR, exist_ok=True)
-            data = {
-                "reviews": [r.to_dict() for r in self._pending + self._approved + self._rejected],
-                "updated_at": datetime.now().isoformat(),
-            }
-            with open(self.PENDING_FILE, 'w', encoding='utf-8') as f:
-                yaml.dump(data, f, allow_unicode=True, sort_keys=False)
-        except Exception as e:
-            logger.error(f"Failed to save pending reviews: {e}")
+        data = {
+            "reviews": [r.to_dict() for r in self._pending + self._approved + self._rejected + self._persisted],
+            "updated_at": datetime.now().isoformat(),
+        }
+        self._write_yaml(self.PENDING_FILE, data)
 
     # --------------------------------------------------------
     # 添加待审批项
@@ -146,7 +168,7 @@ class DatasheetHITLManager:
         """
         review_ids = []
         for param in component.parameters:
-            review_id = f"DS_{component.mpn}_{param.param_type.value}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{len(review_ids)}"
+            review_id = f"DS_{uuid4().hex}"
 
             review = DatasheetParamReview(
                 review_id=review_id,
@@ -168,7 +190,11 @@ class DatasheetHITLManager:
             self._pending.append(review)
             review_ids.append(review_id)
 
-        self._save_pending()
+        try:
+            self._save_pending()
+        except Exception:
+            del self._pending[-len(review_ids):]
+            raise
         logger.info(f"Added {len(review_ids)} parameters from {component.mpn} to HITL queue")
         return review_ids
 
@@ -180,13 +206,20 @@ class DatasheetHITLManager:
         """批准参数"""
         for review in self._pending:
             if review.review_id == review_id:
+                old = (review.status, review.reviewer, review.review_comment, review.reviewed_at)
                 review.status = DatasheetReviewStatus.APPROVED.value
                 review.reviewer = reviewer
                 review.review_comment = comment
                 review.reviewed_at = datetime.now().isoformat()
                 self._approved.append(review)
                 self._pending.remove(review)
-                self._save_pending()
+                try:
+                    self._save_pending()
+                except Exception:
+                    self._approved.remove(review)
+                    self._pending.append(review)
+                    review.status, review.reviewer, review.review_comment, review.reviewed_at = old
+                    raise
                 logger.info(f"Approved datasheet param: {review_id}")
                 return True
         return False
@@ -195,13 +228,20 @@ class DatasheetHITLManager:
         """拒绝参数"""
         for review in self._pending:
             if review.review_id == review_id:
+                old = (review.status, review.reviewer, review.review_comment, review.reviewed_at)
                 review.status = DatasheetReviewStatus.REJECTED.value
                 review.reviewer = reviewer
                 review.review_comment = comment
                 review.reviewed_at = datetime.now().isoformat()
                 self._rejected.append(review)
                 self._pending.remove(review)
-                self._save_pending()
+                try:
+                    self._save_pending()
+                except Exception:
+                    self._rejected.remove(review)
+                    self._pending.append(review)
+                    review.status, review.reviewer, review.review_comment, review.reviewed_at = old
+                    raise
                 logger.info(f"Rejected datasheet param: {review_id}")
                 return True
         return False
@@ -211,6 +251,8 @@ class DatasheetHITLManager:
         """修改并批准参数"""
         for review in self._pending:
             if review.review_id == review_id:
+                old = (review.status, review.modified_value, review.modified_unit,
+                       review.reviewer, review.review_comment, review.reviewed_at)
                 review.status = DatasheetReviewStatus.MODIFIED.value
                 review.modified_value = new_value
                 review.modified_unit = new_unit
@@ -219,7 +261,14 @@ class DatasheetHITLManager:
                 review.reviewed_at = datetime.now().isoformat()
                 self._approved.append(review)
                 self._pending.remove(review)
-                self._save_pending()
+                try:
+                    self._save_pending()
+                except Exception:
+                    self._approved.remove(review)
+                    self._pending.append(review)
+                    (review.status, review.modified_value, review.modified_unit,
+                     review.reviewer, review.review_comment, review.reviewed_at) = old
+                    raise
                 logger.info(f"Modified and approved datasheet param: {review_id}")
                 return True
         return False
@@ -237,12 +286,16 @@ class DatasheetHITLManager:
     def get_rejected_list(self) -> List[DatasheetParamReview]:
         return list(self._rejected)
 
+    def get_persisted_list(self) -> List[DatasheetParamReview]:
+        return list(self._persisted)
+
     def get_stats(self) -> dict:
         return {
             "pending": len(self._pending),
             "approved": len(self._approved),
             "rejected": len(self._rejected),
-            "total": len(self._pending) + len(self._approved) + len(self._rejected),
+            "persisted": len(self._persisted),
+            "total": len(self._pending) + len(self._approved) + len(self._rejected) + len(self._persisted),
         }
 
     # --------------------------------------------------------
@@ -268,9 +321,11 @@ class DatasheetHITLManager:
                 with open(self.AMR_DATA_FILE, 'r', encoding='utf-8') as f:
                     existing = yaml.safe_load(f)
                 if existing:
+                    if not isinstance(existing, dict) or not isinstance(existing.get("components", {}), dict):
+                        raise ValueError("Invalid AMR data format")
                     amr_data = existing.get("components", {})
             except Exception as e:
-                logger.warning(f"Failed to load existing AMR data: {e}")
+                return {"saved": 0, "error": f"Cannot read existing AMR data: {e}"}
 
         # 添加新批准的参数
         saved_count = 0
@@ -296,16 +351,21 @@ class DatasheetHITLManager:
                 "condition": review.condition,
                 "approved_by": review.reviewer,
                 "approved_at": review.reviewed_at,
+                "review_id": review.review_id,
+                "source_file": review.source_file,
+                "source_text": review.source_text,
             }
             saved_count += 1
 
         # 保存
         try:
-            os.makedirs(self.AMR_DATA_DIR, exist_ok=True)
-            with open(self.AMR_DATA_FILE, 'w', encoding='utf-8') as f:
-                yaml.dump({"components": amr_data}, f, allow_unicode=True, sort_keys=False)
+            self._write_yaml(self.AMR_DATA_FILE, {"components": amr_data})
 
-            # 清空已落盘的 approved 列表
+            # Retain the decision and its evidence for audit after restart.
+            for review in self._approved:
+                review.status = DatasheetReviewStatus.PERSISTED.value
+                review.persisted_at = datetime.now().isoformat()
+            self._persisted.extend(self._approved)
             self._approved = []
             self._save_pending()
 
@@ -314,7 +374,7 @@ class DatasheetHITLManager:
 
         except Exception as e:
             logger.error(f"Failed to save AMR data: {e}")
-            return {"saved": 0, "message": f"保存失败: {e}"}
+            return {"saved": 0, "error": f"保存失败: {e}"}
 
 
 # ============================================================
@@ -332,16 +392,20 @@ class FileBasedAMRSource:
 
     def __init__(self):
         self._data: Dict[str, dict] = {}
+        self._mtime_ns = None
         self._load()
 
     def _load(self):
         """加载 AMR 数据"""
+        self._data = {}
+        self._mtime_ns = None
         if os.path.exists(self.AMR_DATA_FILE):
             try:
                 with open(self.AMR_DATA_FILE, 'r', encoding='utf-8') as f:
                     data = yaml.safe_load(f)
                 if data:
                     self._data = data.get("components", {})
+                self._mtime_ns = os.stat(self.AMR_DATA_FILE).st_mtime_ns
                 logger.info(f"Loaded AMR data for {len(self._data)} components")
             except Exception as e:
                 logger.error(f"Failed to load AMR data: {e}")
@@ -350,11 +414,18 @@ class FileBasedAMRSource:
         """重新加载"""
         self._load()
 
+    def _refresh(self):
+        """An existing AMR consumer sees an approval without process restart."""
+        mtime = os.stat(self.AMR_DATA_FILE).st_mtime_ns if os.path.exists(self.AMR_DATA_FILE) else None
+        if mtime != self._mtime_ns:
+            self._load()
+
     def get_capacitor_voltage_rating(self, refdes: str, model: str, value: str) -> Optional[float]:
         """获取电容耐压值 (V)"""
+        self._refresh()
         # 尝试通过 model 名查找
         for mpn, comp_data in self._data.items():
-            if mpn.upper() in model.upper() or model.upper() in mpn.upper():
+            if model and (mpn.upper() in model.upper() or model.upper() in mpn.upper()):
                 params = comp_data.get("parameters", {})
                 if "cap_voltage_rating" in params:
                     return float(params["cap_voltage_rating"]["value"])
@@ -362,8 +433,9 @@ class FileBasedAMRSource:
 
     def get_resistor_power_rating(self, refdes: str, model: str, value: str) -> Optional[float]:
         """获取电阻额定功率 (W)"""
+        self._refresh()
         for mpn, comp_data in self._data.items():
-            if mpn.upper() in model.upper() or model.upper() in mpn.upper():
+            if model and (mpn.upper() in model.upper() or model.upper() in mpn.upper()):
                 params = comp_data.get("parameters", {})
                 if "res_power_rating" in params:
                     return float(params["res_power_rating"]["value"])
@@ -371,8 +443,9 @@ class FileBasedAMRSource:
 
     def get_ic_voltage_range(self, refdes: str, model: str) -> Optional[tuple[float, float]]:
         """获取 IC 电源电压范围 (min, max)"""
+        self._refresh()
         for mpn, comp_data in self._data.items():
-            if mpn.upper() in model.upper() or model.upper() in mpn.upper():
+            if model and (mpn.upper() in model.upper() or model.upper() in mpn.upper()):
                 params = comp_data.get("parameters", {})
                 vmin = params.get("voltage_min", {}).get("value")
                 vmax = params.get("voltage_max", {}).get("value")
@@ -382,6 +455,7 @@ class FileBasedAMRSource:
 
     def get_parameter(self, mpn: str, param_type: str) -> Optional[dict]:
         """获取指定器件的指定参数"""
+        self._refresh()
         comp_data = self._data.get(mpn)
         if comp_data:
             return comp_data.get("parameters", {}).get(param_type)

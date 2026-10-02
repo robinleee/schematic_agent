@@ -68,6 +68,7 @@ SAME_TOOL_REPEAT_LIMIT = 3
 OBSERVATION_TRUNCATE = 1200
 TOOL_RESULT_TRUNCATE = 3000
 MAX_HISTORY_STEPS = 6
+MAX_SELF_CORRECTION_RETRIES = 2
 
 
 # ============================================================
@@ -494,6 +495,65 @@ class ReActAgent:
     # Tool Execution
     # --------------------------------------------------------
 
+
+    @staticmethod
+    def _looks_empty_observation(observation: str) -> bool:
+        """Heuristic: detect empty/no-hit tool observations that merit one relaxed retry."""
+        if not observation:
+            return True
+        text = observation.strip().lower()
+        empty_markers = [
+            "无返回内容", "未找到", "没有找到", "无结果", "empty", "not found",
+            "0 个", "0条", "no result", "no matching", "[]",
+        ]
+        return any(marker in text for marker in empty_markers)
+
+    @staticmethod
+    def _relax_action_input(action_input: dict) -> dict:
+        """Relax overly strict query parameters for one self-correction retry."""
+        relaxed = dict(action_input or {})
+        for key in list(relaxed.keys()):
+            value = relaxed[key]
+            if value in (None, "", [], {}):
+                relaxed.pop(key, None)
+        for key in ("exact", "strict", "exact_match", "case_sensitive"):
+            if key in relaxed:
+                relaxed[key] = False
+        for key in ("limit", "max_results", "top_k"):
+            if isinstance(relaxed.get(key), int):
+                relaxed[key] = max(relaxed[key], 10)
+        return relaxed
+
+    def _self_correct_tool_call(self, action: str, action_input: dict, observation: str,
+                                trace: list[ReActTraceStep], step_id: int) -> tuple[str, int]:
+        """Retry once/twice with relaxed parameters when a graph/Cypher-like query returns no data."""
+        if action not in self.tool_map or not self._looks_empty_observation(observation):
+            return observation, 0
+
+        retries = 0
+        relaxed_input = self._relax_action_input(action_input)
+        if relaxed_input == (action_input or {}):
+            return observation, 0
+
+        last_observation = observation
+        while retries < MAX_SELF_CORRECTION_RETRIES:
+            retries += 1
+            corrected = self._execute_tool(action, relaxed_input)
+            trace.append(ReActTraceStep(
+                step_id=step_id * 10 + retries,
+                thought="Self-Correction: 上一次工具返回空结果，放宽查询参数后重试",
+                action=f"self_correction:{action}",
+                action_input=relaxed_input,
+                observation=corrected,
+            ))
+            last_observation = corrected
+            if not self._looks_empty_observation(corrected):
+                break
+            # second retry: drop likely narrow entity filters if still empty
+            for key in ("pin", "pin_number", "net_type", "direction"):
+                relaxed_input.pop(key, None)
+        return last_observation, retries
+
     def _execute_tool(self, action: str, action_input: dict) -> str:
         """执行工具调用"""
         if action not in self.tool_map:
@@ -686,6 +746,10 @@ class ReActAgent:
 
             observation = self._execute_tool(decision.action, decision.action_input)
             tool_call_count += 1
+            observation, correction_retries = self._self_correct_tool_call(
+                decision.action, decision.action_input, observation, trace, step + 1
+            )
+            tool_call_count += correction_retries
 
             graph_tool_count = sum(1 for t in trace if t.action in GRAPH_TOOLS)
             if graph_tool_count >= 4 and decision.action in GRAPH_TOOLS:

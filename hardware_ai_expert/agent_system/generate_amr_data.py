@@ -31,7 +31,9 @@ def fetch_components_from_neo4j():
     
     NEO4J_URI = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
     NEO4J_USER = os.environ.get("NEO4J_USER", "neo4j")
-    NEO4J_PASS = os.environ.get("NEO4J_PASS", "SecretPassword123")
+    NEO4J_PASS = os.environ.get("NEO4J_PASSWORD")
+    if not NEO4J_PASS:
+        raise RuntimeError("NEO4J_PASSWORD is required")
     
     driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASS))
     components = []
