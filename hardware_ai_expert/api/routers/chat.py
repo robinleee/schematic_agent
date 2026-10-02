@@ -2,6 +2,7 @@
 import asyncio
 import os
 import sys
+import time
 from datetime import datetime
 from typing import Dict, Any
 
@@ -34,6 +35,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
     For streaming, use WebSocket /ws/chat
     """
     try:
+        started = time.monotonic()
         task_type = request.task_type.value if request.task_type else "auto"
         # ReActAgent.run() is synchronous and can take minutes with a thinking
         # model. Keep it out of the event loop so health/review endpoints remain
@@ -64,15 +66,22 @@ async def chat(request: ChatRequest) -> ChatResponse:
             tool_call_count=result.get("tool_call_count", 0),
             timestamp=datetime.now().isoformat()
         )
+        from .system import record_agent_query
+        record_agent_query(chat_result.task_type, chat_result.tool_call_count,
+                           int((time.monotonic() - started) * 1000), chat_result.status)
         return ChatResponse(
             success=True,
             data=chat_result,
             timestamp=datetime.now().isoformat()
         )
     except asyncio.TimeoutError as e:
+        from .system import record_agent_query
+        record_agent_query(task_type, 0, int((time.monotonic() - started) * 1000), "timeout")
         raise HTTPException(
             status_code=504,
             detail=f"Agent execution timed out after {CHAT_AGENT_TIMEOUT_SECONDS:.0f}s",
         ) from e
     except Exception as e:
+        from .system import record_agent_query
+        record_agent_query(task_type, 0, int((time.monotonic() - started) * 1000), "error")
         raise HTTPException(status_code=500, detail=str(e))

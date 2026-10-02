@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "documents": [
+    {"source": "ldo-input", "text": "LDO 输入电压必须高于输出电压和压差电压之和，检查最大额定输入电压。"},
+    {"source": "ldo-thermal", "text": "线性稳压器的耗散功率等于输入输出压差乘以负载电流，结温取决于热阻。"},
+    {"source": "buck-inductor", "text": "Buck 降压转换器电感选型需要检查纹波电流和饱和电流。"},
+    {"source": "decoupling", "text": "芯片电源引脚附近放置去耦电容，降低高频电源噪声。"},
+    {"source": "i2c-pullup", "text": "I2C SDA 和 SCL 是开漏信号，需要根据总线电容选择上拉电阻。"},
+    {"source": "mosfet-gate", "text": "MOSFET 栅极驱动电压和总栅极电荷决定开关损耗。"},
+    {"source": "esd", "text": "连接器外部信号应检查 ESD 防护器件钳位电压。"},
+    {"source": "capacitor-rating", "text": "电容额定耐压应高于工作电压，并考虑直流偏压造成的容量下降。"},
+    {"source": "reset", "text": "电压监控器欠压阈值和复位延时决定复位信号释放时机。"},
+    {"source": "uart", "text": "UART TX 和 RX 交叉连接，并检查逻辑电平是否兼容。"},
+    {"source": "ground", "text": "模拟地和数字地的返回路径应降低噪声耦合。"}
+  ],
+  "queries": [
+    {"id": "ldo-headroom", "query": "LDO 输入输出电压压差如何检查", "answer": "输入电压应超过输出电压与 dropout 之和。", "relevance": {"ldo-input": 2}},
+    {"id": "ldo-heat", "query": "线性稳压器发热和结温怎么计算", "answer": "耗散功率为压差乘电流，结合热阻估算结温。", "relevance": {"ldo-thermal": 2}},
+    {"id": "buck", "query": "降压芯片电感饱和电流与纹波", "answer": "选电感时核对饱和电流和纹波。", "relevance": {"buck-inductor": 2}},
+    {"id": "i2c", "query": "I2C 总线开漏上拉电阻", "answer": "按总线电容确定 SDA/SCL 上拉阻值。", "relevance": {"i2c-pullup": 2}},
+    {"id": "capacitor", "query": "电容耐压和直流偏压问题", "answer": "耐压留余量并计入直流偏压容量损失。", "relevance": {"capacitor-rating": 2}},
+    {"id": "power-noise", "query": "电源噪声与去耦电容布局", "answer": "去耦电容应靠近电源引脚。", "relevance": {"decoupling": 2}},
+    {"id": "ldo-design", "query": "LDO 稳压器压差与发热设计", "answer": "检查输入输出压差余量，并用压差乘负载电流评估热耗散。", "relevance": {"ldo-input": 2, "ldo-thermal": 1}}
+  ]
+}

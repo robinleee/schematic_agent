@@ -1,0 +1,41 @@
+name: Offline Python tests
+on:
+  push:
+  pull_request:
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/hardware_ai_expert
+      ETL_JOB_DB: ${{ runner.temp }}/hardware-etl-jobs.sqlite
+      UPLOAD_STAGING_DIR: ${{ runner.temp }}/hardware-uploads
+      # Do not enable PLM/Tier3 or expose production credentials in offline CI.
+      TIER3_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-test.txt
+      - name: Format and lint maintained test surface
+        run: |
+          ruff format --check hardware_ai_expert/tests/test_task12_api_e2e.py
+          ruff check --select E,F hardware_ai_expert/tests/test_task12_api_e2e.py
+      - name: Typecheck API schemas and job persistence
+        run: mypy --follow-imports=skip --ignore-missing-imports hardware_ai_expert/api/schemas hardware_ai_expert/api/services/etl_jobs.py
+      - name: Offline tests and truthful package coverage (no unearned threshold)
+        run: |
+          timeout 600s python -m pytest hardware_ai_expert/tests -m "not live and not llm" -q --timeout=90 \
+            --cov=hardware_ai_expert --cov-report=term --cov-report=json:coverage.json
+          coverage report --omit='*/tests/*'
+          coverage report --omit='*/tests/*' --include='*/hardware_ai_expert/api/*'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: offline-coverage
+          path: coverage.json
+          if-no-files-found: ignore

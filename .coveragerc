@@ -1,0 +1,7 @@
+[run]
+source = hardware_ai_expert
+omit =
+    */tests/*
+
+[report]
+show_missing = False

@@ -1,0 +1,14 @@
+# FastAPI and dependencies for API server
+fastapi>=0.100.0
+uvicorn[standard]>=0.22.0
+python-multipart>=0.0.6
+websockets>=11.0
+
+# Pydantic for schemas
+pydantic>=2.0.0
+
+# HTTP client
+httpx>=0.24.0
+
+# For async support
+aiofiles>=23.0.0

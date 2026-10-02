@@ -2,6 +2,8 @@
 from fastapi import APIRouter, HTTPException
 from datetime import datetime
 from typing import List, Dict, Optional
+from collections import deque
+from threading import Lock
 
 from ..schemas.system import (
     SystemStatusResponse, SystemStatus,
@@ -9,6 +11,39 @@ from ..schemas.system import (
 )
 
 router = APIRouter(prefix="/system", tags=["System"])
+_agent_lock = Lock()
+_agent_query_count = 0
+_agent_success_count = 0
+_agent_failure_count = 0
+_agent_total_duration_ms = 0
+_recent_queries = deque(maxlen=20)
+
+
+def record_agent_query(task_type: str, tool_calls: int, duration_ms: int, status: str,
+                       source: str = "rest") -> None:
+    """Track completed REST/WS chat calls without retaining private prompt text."""
+    global _agent_query_count, _agent_success_count, _agent_failure_count, _agent_total_duration_ms
+    with _agent_lock:
+        _agent_query_count += 1
+        _agent_total_duration_ms += duration_ms
+        if status == "success":
+            _agent_success_count += 1
+        else:
+            _agent_failure_count += 1
+        _recent_queries.append(QueryRecord(
+            query="[redacted]", task_type=f"{source}:{task_type} ({status})",
+            tool_calls=tool_calls, duration_ms=duration_ms,
+            timestamp=datetime.now().isoformat(),
+        ))
+
+
+def get_agent_stats() -> AgentStats:
+    with _agent_lock:
+        return AgentStats(query_count=_agent_query_count,
+                          success_count=_agent_success_count, failure_count=_agent_failure_count,
+                          average_duration_ms=round(_agent_total_duration_ms / _agent_query_count, 1)
+                          if _agent_query_count else None,
+                          recent_queries=list(reversed(_recent_queries)))
 
 
 @router.get("/status", response_model=SystemStatusResponse)
@@ -30,14 +65,13 @@ async def get_system_status() -> SystemStatusResponse:
             services.append(ServiceInfo(
                 name="Neo4j",
                 status=ServiceStatus.RUNNING,
-                latency_ms=latency,
-                version="5.x"
+                latency_ms=latency
             ))
-        except Exception as e:
+        except Exception:
             services.append(ServiceInfo(
                 name="Neo4j",
-                status=ServiceStatus.ERROR,
-                message=str(e)[:100]
+                status=ServiceStatus.DEGRADED,
+                message="Neo4j unavailable"
             ))
         
         # Ollama
@@ -50,14 +84,13 @@ async def get_system_status() -> SystemStatusResponse:
             services.append(ServiceInfo(
                 name="Ollama",
                 status=ServiceStatus.RUNNING,
-                latency_ms=latency,
-                version="0.1.x"
+                latency_ms=latency
             ))
-        except Exception as e:
+        except Exception:
             services.append(ServiceInfo(
                 name="Ollama",
-                status=ServiceStatus.ERROR,
-                message=str(e)[:100]
+                status=ServiceStatus.DEGRADED,
+                message="Ollama unavailable"
             ))
         
         # ChromaDB
@@ -75,7 +108,8 @@ async def get_system_status() -> SystemStatusResponse:
         except Exception:
             services.append(ServiceInfo(
                 name="ChromaDB",
-                status=ServiceStatus.STOPPED
+                status=ServiceStatus.DEGRADED,
+                message="ChromaDB unavailable"
             ))
         
         # API Server
@@ -86,13 +120,7 @@ async def get_system_status() -> SystemStatusResponse:
         ))
         
         # Data stats
-        data_stats = DataStats(
-            components=0,
-            pins=0,
-            nets=0,
-            part_type_coverage=0.0,
-            by_parttype={}
-        )
+        data_stats = DataStats(by_parttype={})
         
         try:
             from agent_system.connection_pool import get_neo4j_driver
@@ -101,7 +129,8 @@ async def get_system_status() -> SystemStatusResponse:
                 rec = session.run(
                     "MATCH (c:Component) "
                     "RETURN count(c) AS comps, "
-                    "sum(CASE WHEN c.PartType = 'UNKNOWN' THEN 1 ELSE 0 END) AS unknown"
+                    "sum(CASE WHEN c.PartType IS NULL OR trim(c.PartType) = '' "
+                    "OR c.PartType = 'UNKNOWN' THEN 1 ELSE 0 END) AS unknown"
                 ).single()
                 comps = rec["comps"] or 0
                 unknown = rec["unknown"] or 0
@@ -117,17 +146,15 @@ async def get_system_status() -> SystemStatusResponse:
                 pins=pins,
                 nets=nets,
                 part_type_coverage=round(coverage, 1),
-                by_parttype=by_parttype
+                by_parttype=by_parttype,
+                status="available",
             )
         except Exception:
-            pass
+            # Keep all observed data fields unavailable. Do not substitute
+            # zeroes or project-independent fixture values when Neo4j fails.
+            data_stats = DataStats(by_parttype={}, status="unavailable")
         
-        # Agent stats (placeholder)
-        agent_stats = AgentStats(
-            query_count=0,
-            token_usage=0,
-            recent_queries=[]
-        )
+        agent_stats = get_agent_stats()
         
         system_status = SystemStatus(
             services=services,
@@ -142,4 +169,4 @@ async def get_system_status() -> SystemStatusResponse:
         )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="System status unavailable") from e
