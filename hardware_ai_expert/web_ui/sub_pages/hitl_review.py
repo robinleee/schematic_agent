@@ -36,7 +36,10 @@ def _get_neo4j_driver():
             return None
         uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
         user = os.getenv("NEO4J_USER", "neo4j")
-        password = os.getenv("NEO4J_PASSWORD", "SecretPassword123")
+        password = os.getenv("NEO4J_PASSWORD")
+        if not password:
+            st.error("NEO4J_PASSWORD 未配置")
+            return None
         st.session_state.hitl_neo4j_driver = GraphDatabase.driver(uri, auth=(user, password))
     return st.session_state.hitl_neo4j_driver
 

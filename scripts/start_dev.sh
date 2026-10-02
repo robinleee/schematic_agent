@@ -7,6 +7,16 @@ RUN_DIR="$ROOT/.run"
 LOG_DIR="$ROOT/logs"
 mkdir -p "$RUN_DIR" "$LOG_DIR" "$ROOT/scripts"
 
+# Load local dependency credentials without inventing production secrets. API_TOKEN
+# remains an explicit operator-provided requirement for production mode.
+ENV_FILE="$ROOT/hardware_ai_expert/.env"
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
+
 start_bg() {
   local name="$1"; shift
   local pidfile="$RUN_DIR/$name.pid"
@@ -54,7 +64,11 @@ else
   echo "chromadb already running"
 fi
 
-# FastAPI serves both the API and the built React SPA on port 8501.
+# Mainline UI: FastAPI serves the built React SPA on :8501. Do not launch
+# legacy Streamlit here; keep it available until seven-page live validation.
+if [[ ! -f "$ROOT/frontend/dist/index.html" ]]; then
+  echo "WARNING: React build missing. Run 'cd frontend && npm run build' before opening the UI." >&2
+fi
 if ! curl -fsS --max-time 2 http://127.0.0.1:8501/api/v1/health >/dev/null 2>&1; then
   start_bg api env PYTHONPATH="$ROOT/hardware_ai_expert" "$VENV/bin/uvicorn" api.main:app --host 0.0.0.0 --port 8501
 else
