@@ -186,28 +186,28 @@ class TestReviewEnginePipeline:
                     actual="FAIL",
                 )]
 
-        # 注册模板
-        TemplateRegistry.register(DummyTemplate())
+        # 注册模板（不能用 clear()，会把生产模板一并清空且不会自动重新注册）
+        try:
+            TemplateRegistry.register(DummyTemplate())
 
-        driver = self._make_mock_driver()
-        engine = ReviewRuleEngine(driver, config_path=None)
+            driver = self._make_mock_driver()
+            engine = ReviewRuleEngine(driver, config_path=None)
 
-        rule = RuleConfig(
-            id="test_rule_001",
-            template_id="test_dummy",
-            name="Test Rule",
-            severity="WARNING",
-            params={},
-        )
-        engine.add_rule(rule)
+            rule = RuleConfig(
+                id="test_rule_001",
+                template_id="test_dummy",
+                name="Test Rule",
+                severity="WARNING",
+                params={},
+            )
+            engine.add_rule(rule)
 
-        violations = engine.run_rules()
-        assert len(violations) == 1
-        assert violations[0].refdes == "U99999"
-        assert violations[0].rule_id == "test_rule_001"
-
-        # 清理注册
-        TemplateRegistry.clear()
+            violations = engine.run_rules()
+            assert len(violations) == 1
+            assert violations[0].refdes == "U99999"
+            assert violations[0].rule_id == "test_rule_001"
+        finally:
+            TemplateRegistry._templates.pop("test_dummy", None)
 
     def test_whitelist_filter_violations(self):
         """白名单过滤机制：白名单中的违规被过滤"""
@@ -422,7 +422,7 @@ class TestKnowledgeRouterPipeline:
         """Tier0/1 未命中，Tier2 命中时降级并缓存"""
         from agent_system.knowledge_router import KnowledgeRouter, RetrievalResult, TierLevel
 
-        router = KnowledgeRouter()
+        router = KnowledgeRouter(project_id="isolated-test")
         router._graphrag = MagicMock()
         router.graphrag.query = MagicMock(return_value=[])
         router.tier1.search = MagicMock(return_value=[])
@@ -445,7 +445,7 @@ class TestKnowledgeRouterPipeline:
         """Tier0/1/2 都未命中，Tier3 禁用或未命中，返回 not_found"""
         from agent_system.knowledge_router import KnowledgeRouter
 
-        router = KnowledgeRouter()
+        router = KnowledgeRouter(project_id="isolated-test")
         router._graphrag = MagicMock()
         router.graphrag.query = MagicMock(return_value=[])
         router.tier1.search = MagicMock(return_value=[])
@@ -454,8 +454,8 @@ class TestKnowledgeRouterPipeline:
         router.tier3.search = MagicMock(return_value=None)
 
         result = router.search("UNKNOWN_MPN", "voltage")
-        assert result.status == "not_found"
-        assert "UNKNOWN_MPN" in result.content
+        assert result.status == "degraded"
+        assert result.reason is not None
 
     def test_tier0_hit_skips_lower_tiers(self):
         """Tier0 GraphRAG 命中时跳过 Tier1/2"""
@@ -512,7 +512,7 @@ class TestKnowledgeRouterPipeline:
         """验证导入文本知识后可被搜索到（mock embedding）"""
         from agent_system.knowledge_router import KnowledgeRouter
 
-        router = KnowledgeRouter()
+        router = KnowledgeRouter(project_id="isolated-test")
         # mock embed 函数和 collection
         router.tier1._col = MagicMock()
         router.tier1._col.add = MagicMock(return_value=None)

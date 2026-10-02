@@ -131,7 +131,7 @@ class ReviewRuleEngine:
         neo4j_driver: Any,
         config_path: str | None = None,
         auto_reload: bool = True,
-        project_id: str = "default",
+        project_id: str | None = None,
     ):
         self.driver = neo4j_driver
         self.context = RuleContext(neo4j_driver=neo4j_driver, project_id=project_id)
@@ -173,6 +173,18 @@ class ReviewRuleEngine:
         Returns:
             违规列表（已过滤白名单）
         """
+        if self.driver is None:
+            raise RuntimeError(
+                "Review driver unavailable; refusing to run unscoped or project graph queries"
+            )
+        # Probe before invoking templates: several legacy rule helpers treat
+        # query failures as rule-local errors, which must not turn a missing
+        # graph session into a successful zero-violation review.
+        try:
+            with self.driver.session():
+                pass
+        except Exception as e:
+            raise RuntimeError("Review graph session unavailable; refusing unscoped review") from e
         # 热更新检查
         self._check_auto_reload()
 
@@ -198,11 +210,21 @@ class ReviewRuleEngine:
 
         # 执行每个规则
         for rule in rules:
+            self.context.infrastructure_error = None
             violations = self._execute_rule(rule)
+            if self.context.infrastructure_error is not None:
+                raise RuntimeError("Review graph query unavailable or unsafe") from self.context.infrastructure_error
             all_violations.extend(violations)
 
         # 过滤白名单
-        filtered = self.whitelist.filter_violations(all_violations)
+        # ReviewWhitelist has no project ownership field.  Do not perform a
+        # global whitelist read for a selected project; that would leak
+        # aggregate metadata into a project-scoped review.
+        filtered = (
+            all_violations
+            if self.project_id is not None
+            else self.whitelist.filter_violations(all_violations)
+        )
 
         print(f"[ReviewEngine] 检查完成: {len(all_violations)} 个原始违规, "
               f"过滤后 {len(filtered)} 个")
@@ -231,7 +253,15 @@ class ReviewRuleEngine:
                 print(f"  [{rule.id}] {rule.name or template.name}: "
                       f"发现 {len(violations)} 个违规")
             return violations
+        except RuntimeError:
+            # RuntimeError is reserved for unavailable infrastructure and
+            # unsafe project-scoping failures.  Let the caller map those to
+            # an infrastructure response instead of returning a false clean
+            # review.
+            raise
         except Exception as e:
+            # A malformed rule or other rule-local business failure must not
+            # prevent the remaining rules from running.
             print(f"[ReviewEngine] 规则 '{rule.id}' 执行失败: {e}")
             return []
 
@@ -295,7 +325,9 @@ class ReviewRuleEngine:
             "warnings": warnings,
             "infos": infos,
             "by_rule": by_rule,
-            "whitelist_count": self.whitelist.count(),
+            "whitelist_count": (
+                0 if self.project_id is not None else self.whitelist.count()
+            ),
         }
 
     def export_rules(self, path: str):

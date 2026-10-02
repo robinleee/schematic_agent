@@ -80,7 +80,7 @@ class DecapCheckTemplate(RuleTemplate):
         rule_id = params.get("rule_id", self.template_id)
         severity = params.get("severity", self.default_severity)
 
-        driver = context.neo4j_driver
+        driver = context.scoped_driver
 
         # 1. 查找目标电压网络
         cypher_nets = """

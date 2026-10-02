@@ -72,12 +72,15 @@ class AMRCheckTemplate(RuleTemplate):
         except ValueError:
             standard = DeratingStandard.INDUSTRY
 
-        driver = context.neo4j_driver
+        driver = context.scoped_driver
 
         # 1. 标注网络电压
         print(f"[AMR] 开始 AMR 降额检查（标准: {standard.value}）")
-        annotated = VoltageLevelExtractor.batch_annotate_neo4j(driver)
-        print(f"[AMR] 已标注 {annotated} 个网络的电压")
+        if context.project_id is None:
+            annotated = VoltageLevelExtractor.batch_annotate_neo4j(driver)
+            print(f"[AMR] 已标注 {annotated} 个网络的电压")
+        else:
+            print("[AMR] 项目级审查使用只读电压推断，不执行全局网络标注")
 
         # 2. 检查电阻功率降额
         if check_resistor:

@@ -44,7 +44,7 @@ class ESDCheckTemplate(RuleTemplate):
         severity = params.get("severity", self.default_severity)
         rule_name = params.get("rule_name", self.name)
 
-        driver = context.neo4j_driver
+        driver = context.scoped_driver
 
         # ============================================
         # 策略：先定位目标网络，再检查网络上是否有 ESD 保护

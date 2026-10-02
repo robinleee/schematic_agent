@@ -84,10 +84,16 @@ def _run_cypher(query: str, params: dict = None, timeout: int = None, project_id
     with driver.session() as session:
         # 大网络安全保护：若无 LIMIT 且查询含 Net，自动加 LIMIT
         safe_query = query
+        if params.get("project_id") not in (None, "default"):
+            # Legacy null-owned nodes are not shared. Never include them for
+            # a selected project, even in power-tree traversals.
+            safe_query = re.sub(
+                r"(\b\w+\.project_id\s*=\s*\$project_id)\s+OR\s+\w+\.project_id\s+IS\s+NULL",
+                r"\1", safe_query, flags=re.IGNORECASE)
         if 'LIMIT' not in query.upper() and 'COUNT(' not in query.upper() and 'AGG' not in query.upper():
             # 检查是否是返回大量行的查询（含 MATCH...RETURN 无聚合）
             if 'RETURN' in query.upper() and not any(agg in query.upper() for agg in ['SUM(', 'AVG(', 'MIN(', 'MAX(', 'COLLECT(']):
-                safe_query = query.rstrip().rstrip(';') + f'\nLIMIT {CYPHER_ROW_LIMIT}'
+                safe_query = safe_query.rstrip().rstrip(';') + f'\nLIMIT {CYPHER_ROW_LIMIT}'
 
         result = session.run(safe_query, params)
         records = [dict(record) for record in result]

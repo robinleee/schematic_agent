@@ -44,7 +44,7 @@ class VoltageCompatibilityCheck(RuleTemplate):
         rule_id = params.get("rule_id", self.template_id)
         severity = params.get("severity", self.default_severity)
 
-        driver = context.neo4j_driver
+        driver = context.scoped_driver
 
         if check_type in ("overvoltage", "all"):
             violations.extend(self._check_overvoltage(

@@ -94,7 +94,7 @@ class PullupCheckTemplate(RuleTemplate):
         if not net_patterns:
             return violations
 
-        driver = context.neo4j_driver
+        driver = context.scoped_driver
 
         # Pass driver to sub-checks via params
         params["_driver"] = driver
