@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 NEO4J_URI = "bolt://localhost:7687"
 NEO4J_USER = "neo4j"
-NEO4J_PASS = "SecretPassword123"
+NEO4J_PASS = os.getenv("NEO4J_PASSWORD")
 
 
 # ============================================================
@@ -36,16 +36,16 @@ NEO4J_PASS = "SecretPassword123"
 # 扩展的电压命名模式（按优先级排序）
 VOLTAGE_NAME_RULES = [
     # === P-format: 0P8=0.8V, 1P2=1.2V ===
-    (r'(?<=[A-Z])(\d)P(\d)(?:V?)\b', 'P-format'),
+    (r'(?<![A-Z0-9])(\d+)P(\d+)(?:V?)\b', 'P-format'),
     
     # === 标准 V-format: 3V3, 1V8, 0V9 ===
-    (r'(?:^|[_\-])(\d)V(\d+)(?:[_\-]|$)', 'V-format'),
+    (r'(?:^|[_\-]|V)(\d+)V(\d+)(?:[_\-]|$)', 'V-format'),
     
     # === VDD/VCC + voltage ===
     (r'(?:VDDQ?|VCC|AVDD|DVDD|IOVDD|PVDD)[_\-]?(\d+)V?(\d+)?(?:[_\-]|$)', 'VDD/VCC'),
     
     # === 显式 x.xV ===
-    (r'(\d+\.\d+)V(?:[_\-]|$)', 'explicit_V'),
+    (r'(?<![A-Z0-9])(\d+\.\d+)V(?:[_\-]|$)', 'explicit_V'),
     
     # === SWREG/SW + voltage ===
     (r'(?:SWREG|SW)(\d)P(\d)', 'SWREG'),
@@ -92,9 +92,29 @@ def extract_voltage_from_name(net_name: str) -> Tuple[Optional[str], Optional[st
     """
     从网络名推断电压，返回 (voltage_str, rule_name)
     """
-    name_upper = net_name.upper()
-    
-    # 1. 已知电源轨映射
+    name_upper = (net_name or "").upper()
+
+    # 1. Explicit numeric tokens take precedence over broad rail aliases.
+    # For example, VTT_0P675 is more specific than the generic VTT=0.6V
+    # fallback below.
+    for pattern, rule_name in VOLTAGE_NAME_RULES:
+        if rule_name not in {"P-format", "V-format", "explicit_V", "SWREG"}:
+            continue
+        m = re.search(pattern, name_upper)
+        if not m:
+            continue
+        groups = m.groups()
+        if rule_name == "explicit_V":
+            voltage = groups[0]
+        else:
+            voltage = f"{groups[0]}.{groups[1]}"
+        try:
+            if 0.1 <= float(voltage) <= 60:
+                return voltage, rule_name
+        except ValueError:
+            pass
+
+    # 2. 已知电源轨映射
     for pattern, voltage in KNOWN_RAIL_VOLTAGES.items():
         if re.search(pattern, name_upper):
             # 确保不是 EN/PWRGD/SENSOR 等控制信号
@@ -102,12 +122,14 @@ def extract_voltage_from_name(net_name: str) -> Tuple[Optional[str], Optional[st
                 continue
             return voltage, f'known_rail:{pattern}'
     
-    # 2. 正则模式匹配
+    # 3. Remaining name patterns
     for pattern, rule_name in VOLTAGE_NAME_RULES:
         m = re.search(pattern, name_upper)
         if m:
             groups = m.groups()
-            if len(groups) == 2:
+            if rule_name == "explicit_V":
+                voltage = groups[0]
+            elif len(groups) == 2:
                 voltage = f'{groups[0]}.{groups[1]}'
             else:
                 voltage = groups[0]

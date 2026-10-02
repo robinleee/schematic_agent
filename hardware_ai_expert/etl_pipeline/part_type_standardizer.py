@@ -20,7 +20,7 @@ from __future__ import annotations
 import os
 import re
 import csv
-from typing import Optional
+from typing import Optional, Any
 from pathlib import Path
 
 
@@ -123,6 +123,22 @@ VALUE_PATTERNS = {
     "IND": re.compile(r'^[0-9]+(\.[0-9]+)?\s*[UNµμ]?H$', re.IGNORECASE),    # 10uH, 100nH
 }
 
+MANUFACTURER_ALIASES = {
+    "MURATA ELECTRONICS": "Murata", "MURATA": "Murata",
+    "TEXAS INSTRUMENTS": "Texas Instruments", "TI": "Texas Instruments",
+    "TDK CORPORATION": "TDK", "TDK": "TDK",
+    "YAGEO CORPORATION": "Yageo", "YAGEO": "Yageo",
+}
+
+
+def _text(value):
+    return str(value).strip() if value is not None else ""
+
+
+def _normalize_mpn(value):
+    # Do not strip punctuation: suffixes and separators can identify different parts.
+    return re.sub(r"\s+", "", value).upper()
+
 
 class PartTypeStandardizer:
     """PartType 标准化器"""
@@ -133,6 +149,10 @@ class PartTypeStandardizer:
             bom_path: BOM 文件路径（CSV 或 Excel），可选
         """
         self.bom_data: dict[str, str] = {}
+        self.bom_records: dict[str, dict[str, str]] = {}
+        self.bom_issues: list[dict] = []
+        self.bom_refs: set[str] = set()
+        self._conflicted_refs: set[str] = set()
         self.stats = {
             "bom_hits": 0,
             "model_hits": 0,
@@ -143,6 +163,94 @@ class PartTypeStandardizer:
 
         if bom_path:
             self.bom_data = self._load_bom(bom_path)
+
+    def get_bom_record(self, refdes: str) -> dict[str, str]:
+        """Return normalized BOM metadata for a RefDes, if available."""
+        return dict(self.bom_records.get(refdes, {}))
+
+    def bom_report(self, component_refs) -> list[dict]:
+        """Line-addressable issues; never infer a match outside the netlist."""
+        refs = set(component_refs)
+        return self.bom_issues + [
+            {"source_line": self.bom_records[r]["source_line"],
+             "refdes": r, "reason": "unmatched_refdes"}
+            for r in sorted(self.bom_refs - refs)
+            if r in self.bom_records
+        ]
+
+    def _ingest_row(self, row, columns, line, result):
+        def raw(name):
+            key = columns.get(name)
+            value = row.get(key) if key is not None else None
+            return str(value) if value is not None else ""
+
+        def get(name):
+            return raw(name).strip()
+
+        raw_refs = raw("ref")
+        refs = list(dict.fromkeys(r.upper() for r in re.split(r"[,;\s]+", raw_refs) if r))
+        if not refs:
+            self.bom_issues.append({"source_line": line, "refdes": "", "reason": "missing_refdes"})
+            return
+        mpn_raw = raw("mpn")
+        manufacturer_raw = raw("manufacturer")
+        # Never guess a preferred item from an alternatives list.
+        ambiguous = bool(re.search(r"[,;|\n]", mpn_raw))
+        normalized = _normalize_mpn(mpn_raw) if not ambiguous else ""
+        record = {
+            "description": get("description"), "mpn": mpn_raw.strip() if not ambiguous else "",
+            "mpn_raw": mpn_raw, "mpn_normalized": normalized,
+            "manufacturer": MANUFACTURER_ALIASES.get(manufacturer_raw.strip().upper(), manufacturer_raw.strip()),
+            "manufacturer_raw": manufacturer_raw,
+            "quantity": get("quantity"), "package": get("package"),
+            "source_line": line, "refdes_raw": raw_refs, "refdes_list": refs,
+        }
+        for ref in refs:
+            self.bom_refs.add(ref)
+            if ref in self.bom_records:
+                self.bom_issues.append({"source_line": line, "refdes": ref,
+                                        "reason": "duplicate_refdes",
+                                        "previous_line": self.bom_records[ref]["source_line"]})
+                # Conflicting refs cannot safely be enriched (including identical rows).
+                self.bom_records.pop(ref)
+                result.pop(ref, None)
+                self._conflicted_refs.add(ref)
+            elif ref in self._conflicted_refs:
+                self.bom_issues.append({"source_line": line, "refdes": ref,
+                                        "reason": "duplicate_refdes"})
+            else:
+                self.bom_records[ref] = dict(record)
+                result[ref] = record["description"]
+            if not mpn_raw.strip() or ambiguous:
+                self.bom_issues.append({"source_line": line, "refdes": ref,
+                                        "reason": "missing_mpn" if not mpn_raw.strip() else "multiple_mpn"})
+
+    def enrich_component(self, refdes: str, component: dict[str, Any]) -> dict[str, Any]:
+        """Merge BOM metadata into a Component dict without overwriting ETL core fields."""
+        record = self.get_bom_record(refdes)
+        if not record:
+            return component
+        enriched = dict(component)
+        mapping = {
+            "mpn_raw": "MPNRaw",
+            "mpn_normalized": "MPNNormalized",
+            "manufacturer": "Manufacturer",
+            "manufacturer_raw": "ManufacturerRaw",
+            "description": "Description",
+            "quantity": "Quantity",
+            "package": "Package",
+            "source_line": "BOMSourceLine",
+            "refdes_raw": "BOMRefDesRaw",
+            "refdes_list": "BOMRefDesList",
+        }
+        for src, dst in mapping.items():
+            if record.get(src) and not enriched.get(dst):
+                enriched[dst] = record[src]
+        if record["mpn_normalized"] and not enriched.get("MPN"):
+            enriched["MPN"] = record["mpn_normalized"]
+        enriched.setdefault("MPNRaw", record["mpn_raw"])
+        enriched.setdefault("ManufacturerRaw", record["manufacturer_raw"])
+        return enriched
 
     # --------------------------------------------------------
     # Public API
@@ -227,8 +335,10 @@ class PartTypeStandardizer:
 
         if ext in (".csv", ".txt"):
             return self._load_bom_csv(path)
-        elif ext in (".xlsx", ".xls"):
+        elif ext == ".xlsx":
             return self._load_bom_excel(path)
+        elif ext == ".xls":
+            return self._load_bom_xls(path)
         else:
             print(f"[BOM] 不支持的文件格式: {ext}")
             return {}
@@ -254,24 +364,30 @@ class PartTypeStandardizer:
                     reader = csv.DictReader(f, delimiter=delimiter)
 
                     ref_col = self._find_column(reader.fieldnames,
-                                                  ["RefDes", "Ref", "Designator", "位号"])
+                                                  ["RefDes", "BOM.Ref Des", "BOM.RefDes",
+                                                   "Ref", "Designator", "Reference", "位号"])
                     desc_col = self._find_column(reader.fieldnames,
-                                                  ["Description", "Desc", "Part Description",
-                                                   "描述", "Comment"])
+                                                  ["Description", "BOM.Item Description", "Desc",
+                                                   "Part Description", "描述", "Comment"])
+                    mpn_col = self._find_column(reader.fieldnames,
+                                                ["MPN", "BOM.MPN", "Manufacturer Part Number",
+                                                 "Part Number", "P/N", "PN", "料号"])
+                    mfr_col = self._find_column(reader.fieldnames,
+                                                ["Manufacturer", "BOM.Manufacturer", "Mfr",
+                                                 "MFG", "Vendor", "厂商"])
+                    qty_col = self._find_column(reader.fieldnames,
+                                                ["Qty", "BOM.Qty", "Quantity", "数量"])
+                    pkg_col = self._find_column(reader.fieldnames,
+                                                ["Package", "Footprint", "封装"])
 
-                    if not ref_col or not desc_col:
+                    if not ref_col:
                         print(f"[BOM] 未找到 RefDes/Description 列，可用列: {reader.fieldnames}")
                         return {}
 
+                    columns = dict(ref=ref_col, description=desc_col, mpn=mpn_col,
+                                   manufacturer=mfr_col, quantity=qty_col, package=pkg_col)
                     for row in reader:
-                        ref = row.get(ref_col, "").strip()
-                        desc = row.get(desc_col, "").strip()
-                        if ref and desc:
-                            # 处理逗号分隔的位号（如 "C1,C2,C3"）
-                            for r in ref.split(","):
-                                r = r.strip()
-                                if r:
-                                    result[r] = desc
+                        self._ingest_row(row, columns, reader.line_num, result)
 
                 print(f"[BOM] 从 CSV 加载了 {len(result)} 条 BOM 记录")
                 return result
@@ -286,7 +402,10 @@ class PartTypeStandardizer:
         return {}
 
     def _load_bom_excel(self, path: Path) -> dict[str, str]:
-        """加载 Excel 格式的 BOM"""
+        """加载 .xlsx 格式的 BOM."""
+        if path.suffix.lower() == ".xls":
+            return self._load_bom_xls(path)
+
         try:
             import openpyxl
         except ImportError:
@@ -302,29 +421,109 @@ class PartTypeStandardizer:
             headers = [str(cell.value).strip() if cell.value else "" for cell in ws[1]]
 
             ref_col_idx = self._find_column_index(headers,
-                                                  ["RefDes", "Ref", "Designator", "位号"])
+                                                  ["RefDes", "BOM.Ref Des", "BOM.RefDes",
+                                                   "Ref", "Designator", "Reference", "位号"])
             desc_col_idx = self._find_column_index(headers,
-                                                   ["Description", "Desc", "Part Description",
-                                                    "描述", "Comment"])
+                                                   ["Description", "BOM.Item Description", "Desc",
+                                                    "Part Description", "描述", "Comment"])
+            mpn_col_idx = self._find_column_index(headers,
+                                                  ["MPN", "BOM.MPN", "Manufacturer Part Number",
+                                                   "Part Number", "P/N", "PN", "料号"])
+            mfr_col_idx = self._find_column_index(headers,
+                                                  ["Manufacturer", "BOM.Manufacturer", "Mfr",
+                                                   "MFG", "Vendor", "厂商"])
+            qty_col_idx = self._find_column_index(headers, ["Qty", "BOM.Qty", "Quantity", "数量"])
+            pkg_col_idx = self._find_column_index(headers, ["Package", "Footprint", "封装"])
 
-            if ref_col_idx is None or desc_col_idx is None:
+            if ref_col_idx is None:
                 print(f"[BOM] 未找到 RefDes/Description 列，可用列: {headers}")
                 return {}
 
-            for row in ws.iter_rows(min_row=2, values_only=True):
-                ref = str(row[ref_col_idx]).strip() if row[ref_col_idx] else ""
-                desc = str(row[desc_col_idx]).strip() if row[desc_col_idx] else ""
-                if ref and desc:
-                    for r in ref.split(","):
-                        r = r.strip()
-                        if r:
-                            result[r] = desc
+            columns = dict(ref=ref_col_idx, description=desc_col_idx, mpn=mpn_col_idx,
+                           manufacturer=mfr_col_idx, quantity=qty_col_idx, package=pkg_col_idx)
+            for line, values in enumerate(ws.iter_rows(min_row=2, values_only=True), 2):
+                row = {idx: values[idx] if idx < len(values) else None
+                       for idx in columns.values() if idx is not None}
+                self._ingest_row(row, columns, line, result)
 
             print(f"[BOM] 从 Excel 加载了 {len(result)} 条 BOM 记录")
             return result
 
         except Exception as e:
             print(f"[BOM] Excel 读取失败: {e}")
+            return {}
+
+    def _load_bom_xls(self, path: Path) -> dict[str, str]:
+        """使用 xlrd 加载旧式 .xls BOM。"""
+        try:
+            import xlrd
+        except ImportError:
+            print("[BOM] 未安装 xlrd，无法读取 .xls。请运行: pip install xlrd")
+            return {}
+
+        result = {}
+        try:
+            workbook = xlrd.open_workbook(path, on_demand=True)
+            sheet = workbook.sheet_by_index(0)
+            headers = [
+                str(sheet.cell_value(0, column)).strip()
+                if sheet.ncols else ""
+                for column in range(sheet.ncols)
+            ]
+            columns = {
+                "ref": self._find_column_index(
+                    headers,
+                    ["RefDes", "Ref", "Designator", "Reference", "BOM.Ref Des", "位号"],
+                ),
+                "description": self._find_column_index(
+                    headers,
+                    [
+                        "Description",
+                        "Desc",
+                        "Part Description",
+                        "BOM.Item Description",
+                        "描述",
+                        "Comment",
+                    ],
+                ),
+                "mpn": self._find_column_index(
+                    headers,
+                    [
+                        "MPN",
+                        "Manufacturer Part Number",
+                        "Part Number",
+                        "P/N",
+                        "PN",
+                        "BOM.MPN",
+                        "料号",
+                    ],
+                ),
+                "manufacturer": self._find_column_index(
+                    headers,
+                    ["Manufacturer", "Mfr", "MFG", "Vendor", "BOM.Manufacturer", "厂商"],
+                ),
+                "quantity": self._find_column_index(
+                    headers, ["Qty", "Quantity", "BOM.Qty", "数量"]
+                ),
+                "package": self._find_column_index(headers, ["Package", "Footprint", "封装"]),
+            }
+
+            if columns["ref"] is None:
+                print(f"[BOM] 未找到 RefDes/Description 列，可用列: {headers}")
+                return {}
+
+            for line in range(1, sheet.nrows):
+                row = {
+                    column: sheet.cell_value(line, column)
+                    for column in columns.values()
+                    if column is not None
+                }
+                self._ingest_row(row, columns, line + 1, result)
+
+            print(f"[BOM] 从旧式 XLS 加载了 {len(result)} 条 BOM 记录")
+            return result
+        except Exception as e:
+            print(f"[BOM] XLS 读取失败: {e}")
             return {}
 
     @staticmethod
@@ -334,8 +533,9 @@ class PartTypeStandardizer:
             return None
         fieldnames_lower = [f.strip().lower() for f in fieldnames]
         for cand in candidates:
-            if cand.lower() in fieldnames_lower:
-                idx = fieldnames_lower.index(cand.lower())
+            normalized_candidate = cand.strip().lower()
+            if normalized_candidate in fieldnames_lower:
+                idx = fieldnames_lower.index(normalized_candidate)
                 return fieldnames[idx]
         return None
 
@@ -344,8 +544,9 @@ class PartTypeStandardizer:
         """在表头中查找匹配的列索引"""
         headers_lower = [h.strip().lower() for h in headers]
         for cand in candidates:
-            if cand.lower() in headers_lower:
-                return headers_lower.index(cand.lower())
+            normalized_candidate = cand.strip().lower()
+            if normalized_candidate in headers_lower:
+                return headers_lower.index(normalized_candidate)
         return None
 
     def _match_bom(self, refdes: str) -> Optional[str]:

@@ -109,6 +109,19 @@ def clear_and_init_neo4j(driver, project_id: str = None):
     
     with driver.session() as session:
         if project_id:
+            # 迁移旧版全局图谱：旧节点没有 project_id，且旧版全局唯一约束会阻塞
+            # 新项目导入。保留旧数据为 legacy 项目后，再切换到项目复合约束。
+            legacy_constraints = {
+                "component_refdes", "pin_id", "net_name"
+            }
+            for constraint in session.run("SHOW CONSTRAINTS"):
+                name = constraint.get("name")
+                if name in legacy_constraints:
+                    session.run(f"DROP CONSTRAINT `{name}`")
+            session.run("MATCH (n:Component) WHERE n.project_id IS NULL SET n.project_id = 'legacy'")
+            session.run("MATCH (n:Pin) WHERE n.project_id IS NULL SET n.project_id = 'legacy'")
+            session.run("MATCH (n:Net) WHERE n.project_id IS NULL SET n.project_id = 'legacy'")
+
             # 只删除指定项目的数据
             result = session.run(
                 "MATCH (n) WHERE n.project_id = $pid RETURN count(n) as cnt",
@@ -126,7 +139,7 @@ def clear_and_init_neo4j(driver, project_id: str = None):
             
             # 创建 Project 节点
             session.run(
-                "MERGE (p:Project {id: $pid}) ON CREATE SET p.created_at = datetime()",
+                "MERGE (p:Project {project_id: $pid}) ON CREATE SET p.name = $pid, p.created_at = datetime()",
                 pid=project_id
             )
         else:
@@ -141,11 +154,15 @@ def clear_and_init_neo4j(driver, project_id: str = None):
         print(f"  清空后节点数: {after:,}")
 
         # 确保约束存在
-        constraints = [
+        constraints = ([
+            "CREATE CONSTRAINT component_project_refdes_unique IF NOT EXISTS FOR (c:Component) REQUIRE (c.project_id, c.RefDes) IS UNIQUE",
+            "CREATE CONSTRAINT pin_project_id_unique IF NOT EXISTS FOR (p:Pin) REQUIRE (p.project_id, p.Id) IS UNIQUE",
+            "CREATE CONSTRAINT net_project_name_unique IF NOT EXISTS FOR (n:Net) REQUIRE (n.project_id, n.Name) IS UNIQUE",
+        ] if project_id else [
             "CREATE CONSTRAINT component_refdes IF NOT EXISTS FOR (c:Component) REQUIRE c.RefDes IS UNIQUE",
             "CREATE CONSTRAINT pin_id IF NOT EXISTS FOR (p:Pin) REQUIRE p.Id IS UNIQUE",
             "CREATE CONSTRAINT net_name IF NOT EXISTS FOR (n:Net) REQUIRE n.Name IS UNIQUE",
-        ]
+        ])
         for c in constraints:
             try:
                 session.run(c)
