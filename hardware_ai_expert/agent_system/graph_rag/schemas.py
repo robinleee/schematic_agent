@@ -15,6 +15,8 @@ class VectorChunk:
     source: str = ""  # PDF filename or MPN
     chunk_index: int = 0
     metadata: dict = field(default_factory=dict)
+    scope: str = "shared"
+    project_id: Optional[str] = None
 
 
 @dataclass
@@ -59,11 +61,11 @@ class GraphRAGConfig:
     """GraphRAG 配置"""
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
-    neo4j_password: str = "SecretPassword123"
+    neo4j_password: Optional[str] = None
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "gemma4:26b"
-    embedding_model: str = "all-MiniLM-L6-v2"
-    embedding_dim: int = 384
+    embedding_model: str = "BAAI/bge-m3"  # override with SCHEMATIC_EMBEDDING_MODEL
+    embedding_dim: int = 1024  # all-MiniLM-L6-v2=384 (legacy)
     chunk_size: int = 512
     chunk_overlap: int = 50
     top_k: int = 5

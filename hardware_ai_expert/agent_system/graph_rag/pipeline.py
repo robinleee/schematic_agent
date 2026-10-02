@@ -29,7 +29,8 @@ class GraphRAGPipeline:
     """True GraphRAG 管道"""
 
     def __init__(self, driver=None, config: Optional[GraphRAGConfig] = None,
-                 llm_client=None):
+                 llm_client=None, project_id: Optional[str] = None):
+        self.project_id = project_id
         self.config = config or GraphRAGConfig()
         self._driver = driver
         self._llm = llm_client
@@ -96,7 +97,8 @@ class GraphRAGPipeline:
     # 索引构建
     # --------------------------------------------------------
 
-    def build_index(self, pdf_dir: str = None, texts: list[dict] = None) -> dict:
+    def build_index(self, pdf_dir: str = None, texts: list[dict] = None,
+                    project_id: Optional[str] = None, shared: bool = False) -> dict:
         """
         构建 GraphRAG 索引
 
@@ -114,6 +116,10 @@ class GraphRAGPipeline:
             "communities_detected": 0,
             "errors": [],
         }
+        if project_id is None and not shared:
+            raise ValueError("Explicit project_id or shared=True required for indexing")
+        if project_id is not None and shared:
+            raise ValueError("project_id and shared=True are mutually exclusive")
 
         # Step 1: 准备文本 chunks
         chunks = []
@@ -137,6 +143,16 @@ class GraphRAGPipeline:
         if not chunks:
             logger.warning("没有可索引的文本")
             return stats
+        if project_id is not None and not project_id.strip():
+            raise ValueError("project_id must not be blank")
+        if not pdf_dir and not texts:
+            chunks = [c for c in chunks if c.scope == "shared" and project_id is None
+                      or c.scope == "project" and c.project_id == project_id
+                      and project_id is not None]
+        else:
+            for chunk in chunks:
+                chunk.scope = "project" if project_id is not None else "shared"
+                chunk.project_id = project_id
 
         # Step 2: 向量索引
         try:
@@ -159,8 +175,8 @@ class GraphRAGPipeline:
                 all_entities.extend(entities)
                 all_relations.extend(relations)
 
-            if all_entities:
-                self.entity_extractor.write_to_neo4j(all_entities, all_relations, self.driver)
+            # Entity extractor merges by name globally; do not persist entities
+            # until it supports project-aware identity and relation matching.
 
             stats["entities_extracted"] = len(all_entities)
             stats["relations_extracted"] = len(all_relations)
@@ -170,11 +186,8 @@ class GraphRAGPipeline:
 
         # Step 4: 社区检测
         try:
-            communities = self.community_detector.detect_communities()
-            if communities:
-                communities = self.community_detector.generate_summaries(communities)
-                self.community_detector.write_communities(communities)
-            stats["communities_detected"] = len(communities)
+            # Community detector likewise merges globally by integer id.
+            stats["communities_detected"] = 0
         except Exception as e:
             stats["errors"].append(f"社区检测失败: {e}")
             logger.warning(f"社区检测失败: {e}")
@@ -204,9 +217,12 @@ class GraphRAGPipeline:
         """
         if mode == "auto":
             mode = self._infer_mode(question)
+        # Existing community and graph traversals are not ownership-safe.
+        if self.project_id is not None and mode != "local":
+            mode = "local"
 
         if mode == "local":
-            return self.local_retriever.retrieve(question, top_k)
+            return self.local_retriever.retrieve(question, top_k, project_id=self.project_id)
         elif mode == "global":
             return self.global_retriever.retrieve(question, top_k)
         elif mode == "graph":
@@ -341,12 +357,18 @@ class GraphRAGPipeline:
             results = collection.get(include=["documents", "metadatas"])
 
             for i, (doc, meta) in enumerate(zip(results["documents"], results["metadatas"])):
+                if not meta or meta.get("scope") not in ("shared", "project"):
+                    continue  # legacy unscoped data is never implicitly shared
+                if meta["scope"] == "project" and not meta.get("project_id"):
+                    continue
                 chunks.append(VectorChunk(
                     id=str(uuid.uuid4()),
                     text=doc,
                     source=meta.get("source", "") if meta else "",
                     chunk_index=i,
                     metadata=meta or {},
+                    scope=meta["scope"],
+                    project_id=meta.get("project_id") if meta["scope"] == "project" else None,
                 ))
 
             logger.info(f"从 ChromaDB 迁移了 {len(chunks)} 个 chunks")
