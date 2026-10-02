@@ -2,6 +2,12 @@
 source = hardware_ai_expert
 omit =
     */tests/*
+    */web_ui/*
+    */etl_pipeline/run_real_etl.py
+    */etl_pipeline/run_etl_validation.py
+    */etl_pipeline/main_etl.py
+    */etl_pipeline/load_to_neo4j.py
+    */tools/*
 
 [report]
-show_missing = False
+show_missing = True
