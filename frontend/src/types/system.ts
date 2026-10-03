@@ -28,6 +28,9 @@ export interface QueryRecord {
 
 export interface AgentStats {
   query_count: number;
+  success_count: number;
+  failure_count: number;
+  average_duration_ms: number | null;
   token_usage: number | null;
   recent_queries: QueryRecord[];
   status: string;

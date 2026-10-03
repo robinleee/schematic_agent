@@ -25,6 +25,7 @@ export interface RuleInfo {
 export interface ReviewRequest {
   rule_ids?: string[];
   enabled_only: boolean;
+  project_id?: string;
 }
 
 export interface ReviewReport {

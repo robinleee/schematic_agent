@@ -19,11 +19,13 @@ import {
 import { PlayCircleOutlined } from '@ant-design/icons';
 import { reviewApi } from '@/api';
 import { apiErrorText } from '@/api/client';
+import { useProjectStore } from '@/stores/useProjectStore';
 import type { RuleInfo, Violation, Severity } from '@/types/review';
 
 const { Title, Paragraph } = Typography;
 
 const ReviewPage: React.FC = () => {
+  const currentProject = useProjectStore((state) => state.currentProject);
   const [rules, setRules] = useState<RuleInfo[]>([]);
   const [selectedRules, setSelectedRules] = useState<string[]>([]);
   const [violations, setViolations] = useState<Violation[]>([]);
@@ -58,6 +60,11 @@ const ReviewPage: React.FC = () => {
       const response = await reviewApi.runReview({
         rule_ids: selectedRules.length > 0 ? selectedRules : undefined,
         enabled_only: enabledOnly,
+        // Backend project_id=None means the shared/aggregate graph; "default"
+        // is the frontend's sentinel for that same aggregate view, so it must
+        // not be sent as a literal project_id (which would scope to a project
+        // actually named "default" instead).
+        project_id: currentProject === 'default' ? undefined : currentProject,
       });
       setViolations(response.data.violations);
       setSummary(response.data.summary);
@@ -145,7 +152,7 @@ const ReviewPage: React.FC = () => {
   return (
     <div>
       <Title level={4}>原理图审查</Title>
-      
+
       <Card style={{ marginBottom: 16 }}>
         <Space style={{ width: '100%', justifyContent: 'space-between' }}>
           <Space>
@@ -172,7 +179,7 @@ const ReviewPage: React.FC = () => {
             onClick={runReview}
             loading={loading}
           >
-            执行审查
+            执行审查（项目：{currentProject}）
           </Button>
         </Space>
       </Card>

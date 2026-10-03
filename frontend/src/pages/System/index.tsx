@@ -148,10 +148,23 @@ const SystemPage: React.FC = () => {
 
       <Card title="Agent 统计">
         <Row gutter={24}>
-          <Col span={8}>
+          <Col span={6}>
             <Statistic title="本进程 REST/WS 查询次数" value={status?.agent_stats.query_count ?? '不可用'} />
           </Col>
-          <Col span={8}>
+          <Col span={6}>
+            <Statistic
+              title="成功 / 失败"
+              value={status ? `${status.agent_stats.success_count} / ${status.agent_stats.failure_count}` : '不可用'}
+            />
+          </Col>
+          <Col span={6}>
+            <Statistic
+              title="平均耗时"
+              value={status?.agent_stats.average_duration_ms ?? '不可用'}
+              suffix={status?.agent_stats.average_duration_ms == null ? undefined : 'ms'}
+            />
+          </Col>
+          <Col span={6}>
             <Statistic title="Token 使用量" value={status?.agent_stats.token_usage ?? '不可用'} />
           </Col>
         </Row>
