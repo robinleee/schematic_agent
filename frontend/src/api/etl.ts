@@ -5,6 +5,7 @@ import type {
   ETLResponse,
   ProjectListResponse,
   ProjectActionResponse,
+  ProjectDeleteResponse,
   ETLProgress,
 } from '@/types/etl';
 
@@ -21,8 +22,8 @@ export const etlApi = {
     return response.data;
   },
 
-  deleteProject: async (projectName: string): Promise<ProjectActionResponse> => {
-    const response = await apiClient.delete<ProjectActionResponse>(`/etl/projects/${encodeURIComponent(projectName)}`);
+  deleteProject: async (projectName: string): Promise<ProjectDeleteResponse> => {
+    const response = await apiClient.delete<ProjectDeleteResponse>(`/etl/projects/${encodeURIComponent(projectName)}`);
     return response.data;
   },
 

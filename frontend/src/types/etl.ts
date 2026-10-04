@@ -74,3 +74,16 @@ export interface ProjectActionResponse {
   message?: string;
   timestamp: string;
 }
+
+export interface ProjectDeleteResult {
+  project_id: string;
+  deleted_nodes: string;
+  deleted_vectors: Record<string, number>;
+}
+
+export interface ProjectDeleteResponse {
+  success: boolean;
+  data: ProjectDeleteResult;
+  message?: string;
+  timestamp: string;
+}

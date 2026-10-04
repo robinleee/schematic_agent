@@ -424,7 +424,7 @@ def test_openapi_all_core_router_responses():
         ("get", "/knowledge/stats"): "KnowledgeStatsResponse",
         ("get", "/etl/projects"): "ProjectListResponse",
         ("post", "/etl/projects"): "ProjectActionResponse",
-        ("delete", "/etl/projects/{project_name}"): "ProjectActionResponse",
+        ("delete", "/etl/projects/{project_name}"): "ProjectDeleteResponse",
         ("post", "/etl/preview"): "ETLPreviewResponse",
         ("post", "/etl/run"): "ETLResponse",
         ("get", "/etl/progress/{job_id}"): "ETLProgress",

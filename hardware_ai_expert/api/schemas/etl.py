@@ -1,6 +1,6 @@
 """ETL import schemas."""
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Union
 from enum import Enum
 
 
@@ -103,8 +103,23 @@ class ProjectActionRequest(BaseModel):
 
 
 class ProjectActionResponse(BaseModel):
-    """Project action response."""
+    """Project create/action response."""
     success: bool = True
     data: Dict[str, str]  # {"project_id": "..."}
+    message: Optional[str] = None
+    timestamp: str
+
+
+class ProjectDeleteResult(BaseModel):
+    """Project deletion result."""
+    project_id: str
+    deleted_nodes: str
+    deleted_vectors: Dict[str, int] = Field(default_factory=dict)
+
+
+class ProjectDeleteResponse(BaseModel):
+    """Project deletion response."""
+    success: bool = True
+    data: ProjectDeleteResult
     message: Optional[str] = None
     timestamp: str

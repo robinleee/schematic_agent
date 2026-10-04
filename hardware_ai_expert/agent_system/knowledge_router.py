@@ -28,10 +28,18 @@ try:
 except ImportError:
     chromadb = None
 
-from agent_system.embedding import embed, embed_batch, EMBEDDING_DIM
+from agent_system.embedding import embed, embed_batch, EMBEDDING_DIM, MODEL_NAME
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(ROOT_DIR, ".env"))
+
+# Chroma collections are created with a fixed vector dimension; switching the
+# embedding model (e.g. all-MiniLM-L6-v2 384-dim -> bge-m3 1024-dim) makes the
+# old collection reject every new write with a dimension mismatch. Suffix the
+# collection name so a model change gets its own collection instead of
+# silently failing against stale 384-dim data, mirroring the chunk_embedding
+# vs chunk_embedding_v2 split already used by graph_rag's vector_indexer.
+_COLLECTION_SUFFIX = "" if MODEL_NAME == "all-MiniLM-L6-v2" else "_v2"
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +147,7 @@ def delete_project_vectors(project_id: str) -> dict[str, int]:
 class LocalRAGRetriever:
     """本地 ChromaDB 向量检索器"""
 
-    COLLECTION = "hardware_datasheets"
+    COLLECTION = "hardware_datasheets" + _COLLECTION_SUFFIX
 
     def __init__(self, project_id: Optional[str] = None, shared: bool = False):
         self._col = None
@@ -276,7 +284,7 @@ class LocalRAGRetriever:
 class ChromaDBTier2Retriever:
     """Tier 2: ChromaDB hardware_knowledge 全文检索（Datasheet chunks）"""
 
-    COLLECTION = "hardware_knowledge"
+    COLLECTION = "hardware_knowledge" + _COLLECTION_SUFFIX
 
     def __init__(self, project_id: Optional[str] = None):
         self._col = None

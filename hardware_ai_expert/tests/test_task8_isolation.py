@@ -44,7 +44,7 @@ def match(meta, clause):
 class Chroma:
     def __init__(self):
         self.cols = {name: Collection() for name in
-                     ("hardware_datasheets", "hardware_knowledge")}
+                     (kr.LocalRAGRetriever.COLLECTION, kr.ChromaDBTier2Retriever.COLLECTION)}
 
     def get_collection(self, name):
         return self.cols[name]
@@ -64,14 +64,14 @@ def test_chroma_ab_shared_legacy_delete_and_rebuild(store):
     for retriever, content in ((a, "A private"), (b, "B private"),
                                (shared, "explicit shared")):
         assert retriever.add_chunk(kr.DatasheetChunk("MPN", 1, content))
-    col = store.cols["hardware_datasheets"]
+    col = store.cols[kr.LocalRAGRetriever.COLLECTION]
     col.rows["legacy"] = ("unowned legacy", {"mpn": "MPN"})
     for retriever, expected in ((a, {"A private", "explicit shared"}),
                                 (b, {"B private", "explicit shared"}),
                                 (shared, {"explicit shared"})):
         assert {r.content for r in retriever.search("MPN", "query")} == expected
     counts = kr.delete_project_vectors("A")
-    assert counts["hardware_datasheets"] == 1
+    assert counts[kr.LocalRAGRetriever.COLLECTION] == 1
     assert "legacy" in col.rows
     assert {r.content for r in b.search("MPN", "query")} == {"B private", "explicit shared"}
     assert a.add_chunk(kr.DatasheetChunk("MPN", 1, "A rebuilt"))
@@ -79,7 +79,7 @@ def test_chroma_ab_shared_legacy_delete_and_rebuild(store):
 
 
 def test_tier2_does_not_promote_unowned_records_to_shared(store):
-    col = store.cols["hardware_knowledge"]
+    col = store.cols[kr.ChromaDBTier2Retriever.COLLECTION]
     for key, scope, pid in (("a", "project", "A"), ("b", "project", "B"),
                             ("s", "shared", ""), ("legacy", None, None)):
         col.rows[key] = (key, {"mpn": "MPN", "source": key,
@@ -198,14 +198,14 @@ def test_delete_project_never_cleans_other_owners(monkeypatch, store):
         def close(self):
             pass
     monkeypatch.setattr(GraphDatabase, "driver", lambda *args, **kwargs: Driver())
-    col = store.cols["hardware_datasheets"]
+    col = store.cols[kr.LocalRAGRetriever.COLLECTION]
     for pid in ("A", "B"):
         col.rows[pid] = (pid, {"scope": "project", "project_id": pid})
     col.rows["shared"] = ("shared", {"scope": "shared", "project_id": ""})
     executor = ETLWebExecutor()
     with pytest.raises(ValueError):
         executor.delete_project("")
-    assert executor.delete_project("A")["deleted_vectors"]["hardware_datasheets"] == 1
+    assert executor.delete_project("A")["deleted_vectors"][kr.LocalRAGRetriever.COLLECTION] == 1
     assert set(col.rows) == {"B", "shared"}
     assert all(params["pid"] == "A" for _, params in session.calls)
     assert "n.project_id = $pid" in session.calls[0][0]

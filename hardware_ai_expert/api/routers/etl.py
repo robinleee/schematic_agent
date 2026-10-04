@@ -13,6 +13,7 @@ from ..schemas.etl import (
     ETLPreviewResponse, ETLPreviewResult,
     ETLResponse, ETLResult, QualityReport,
     ProjectListResponse, ProjectActionRequest, ProjectActionResponse,
+    ProjectDeleteResponse, ProjectDeleteResult,
     ETLProgress, ETLStep
 )
 
@@ -132,8 +133,8 @@ async def create_project(request: ProjectActionRequest) -> ProjectActionResponse
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/projects/{project_name}", response_model=ProjectActionResponse)
-async def delete_project(project_name: str = Path(...)) -> ProjectActionResponse:
+@router.delete("/projects/{project_name}", response_model=ProjectDeleteResponse)
+async def delete_project(project_name: str = Path(...)) -> ProjectDeleteResponse:
     """Delete project."""
     if not project_name.strip():
         raise HTTPException(status_code=422, detail="project_name must not be blank")
@@ -142,17 +143,17 @@ async def delete_project(project_name: str = Path(...)) -> ProjectActionResponse
         import os
         sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
         from agent_system.etl_web_bridge import ETLWebExecutor
-        
+
         executor = ETLWebExecutor()
         result = executor.delete_project(project_name)
-        
-        return ProjectActionResponse(
+
+        return ProjectDeleteResponse(
             success=True,
-            data=result,
+            data=ProjectDeleteResult(**result),
             message=f"项目 {project_name} 已删除",
             timestamp=datetime.now().isoformat()
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
