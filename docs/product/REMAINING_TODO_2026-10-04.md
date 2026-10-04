@@ -6,13 +6,18 @@
 
 ## P0 — 阻塞交付的核心项
 
-- [ ] **1. 七页面真实服务联调**（Chat/Review/HITL/Knowledge/ETL/Graph/System）
-  - 启动 start_dev.sh 全服务，构建前端，逐页面执行核心操作，用脚本模拟请求+人工确认视觉/交互
-  - 记录每页核心操作的请求/响应证据
-- [ ] **2. 独立测试项目做真实 A/B 隔离验证**（Task 5/8）
-  - 用隔离 project_id（如 `closure_test_YYYYMMDD`）跑 Preview→Run→Review，验证质量门禁不污染现有数据
-  - 验证两个不同 project_id 之间 Review/HITL/GraphRAG 查询互不可见
-  - 完成后清理测试项目数据
+- [x] **1a. Chat/Agent 真实服务核对** ✅ 2026-10-04（七页面全量联调仍未完成，见下）
+  - 用真实请求核对了 System/ETL/HITL/Knowledge/Graph/Review/Chat 共7个接口，全部跑通
+  - 过程中发现并修复 Chat/WS 从未传递 project_id 的严重 bug（Agent 查任何具体器件都失败）
+  - 浏览器人工点击仍未做，接口层验证 ≠ 完整的七页面联调
+- [ ] **1b. 七页面浏览器人工联调**（Chat/Review/HITL/Knowledge/ETL/Graph/System）
+  - 需要在浏览器中逐页面执行核心操作，确认视觉/交互正确
+- [x] **2. 独立测试项目做真实 A/B 隔离验证**（Task 5/8）✅ 2026-10-04
+  - 用隔离 project_id（`closure_ab_test_A`/`closure_ab_test_B`）跑通 ETL Preview→Run→Review→HITL→Knowledge 全链路
+  - 验证通过：Neo4j Component/Net 数据正确隔离（A/B 各自2个器件，互不可见）；Review 按项目返回不同违规（A:1条, B:1条）；HITL 跨项目 approve 正确拒绝；Knowledge 搜索 B 看不到 A 上传的文档
+  - 过程中发现并修复两个真实 bug（Chroma 集合维度不匹配导致 Knowledge 上传全部 503；删除项目接口返回类型不匹配导致 500）
+  - 测试数据已清理
+
 - [ ] **3. Datasheet HITL 真实闭环（3+ 个真实 PDF，接真实 Neo4j）**（Task 7）
   - 用 datasheets/ 下的 PDF 跑完整链路：解析→Pending→Approve→持久化到 AMR/规则→重启后可查询
   - 不同于已有的 mock 测试，这次要接真实 Neo4j 写入
