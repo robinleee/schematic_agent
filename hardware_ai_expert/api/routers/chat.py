@@ -17,7 +17,7 @@ router = APIRouter(prefix="/chat", tags=["Chat"])
 CHAT_AGENT_TIMEOUT_SECONDS = float(os.getenv("CHAT_AGENT_TIMEOUT_SECONDS", "300"))
 
 
-def _run_agent(message: str, task_type: str) -> dict:
+def _run_agent(message: str, task_type: str, project_id: str = None) -> dict:
     """Run the synchronous ReAct agent outside FastAPI's event loop."""
     sys.path.insert(
         0,
@@ -25,7 +25,7 @@ def _run_agent(message: str, task_type: str) -> dict:
     )
     from agent_system.react_agent import ReActAgent
 
-    return ReActAgent().run(message, task_type=task_type)
+    return ReActAgent().run(message, task_type=task_type, project_id=project_id)
 
 
 @router.post("", response_model=ChatResponse)
@@ -41,7 +41,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         # model. Keep it out of the event loop so health/review endpoints remain
         # responsive while this request is in progress.
         result = await asyncio.wait_for(
-            run_in_threadpool(_run_agent, request.message, task_type),
+            run_in_threadpool(_run_agent, request.message, task_type, request.project_id),
             timeout=CHAT_AGENT_TIMEOUT_SECONDS,
         )
 

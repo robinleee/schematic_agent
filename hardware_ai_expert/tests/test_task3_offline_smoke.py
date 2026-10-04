@@ -46,7 +46,7 @@ def _etl_files():
 
 def test_all_page_operations_and_websocket_contracts_are_offline(client, monkeypatch):
     """Exercise every frontend API operation using only deterministic fakes."""
-    monkeypatch.setattr(chat, "_run_agent", lambda message, task_type: {
+    monkeypatch.setattr(chat, "_run_agent", lambda message, task_type, project_id=None: {
         "status": "success", "task_type": task_type, "report": "chat report",
         "execution_trace": [], "tool_call_count": 1,
     })
@@ -161,9 +161,7 @@ def test_all_page_operations_and_websocket_contracts_are_offline(client, monkeyp
     assert status.json()["data"]["data_stats"]["status"] == "unavailable"
 
     class Agent:
-        def run(self, message, task_type, step_callback):
-            step_callback({"step_id": 1, "thought": "thinking", "action": "noop",
-                           "action_input": {}, "observation": "ok"})
+        def run(self, message, task_type, project_id=None):
             return {"status": "success", "task_type": task_type, "report": "ws report",
                     "execution_trace": [], "tool_call_count": 1}
 
@@ -176,15 +174,12 @@ def test_all_page_operations_and_websocket_contracts_are_offline(client, monkeyp
         websocket.send_json({"type": "chat", "payload": {
             "message": "hello", "task_type": "query",
         }})
-        step = websocket.receive_json()
-        assert step["type"] == "step"
-        assert step["payload"]["step"]["action"] == "noop"
         result = websocket.receive_json()
         assert result["type"] == "result"
         assert result["payload"]["result"]["report"] == "ws report"
 
     class FailingAgent:
-        def run(self, message, task_type, step_callback):
+        def run(self, message, task_type, project_id=None):
             raise RuntimeError("offline agent failure")
 
     monkeypatch.setitem(sys.modules, "agent_system.react_agent",

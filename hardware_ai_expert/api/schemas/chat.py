@@ -29,6 +29,7 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     task_type: Optional[TaskType] = TaskType.AUTO
     context: Optional[Dict[str, Any]] = None
+    project_id: Optional[str] = None
 
     @field_validator("message")
     @classmethod
@@ -36,6 +37,13 @@ class ChatRequest(BaseModel):
         if not message.strip():
             raise ValueError("message must not be blank")
         return message
+
+    @field_validator("project_id")
+    @classmethod
+    def project_id_nonblank(cls, project_id: Optional[str]) -> Optional[str]:
+        if project_id is not None and not project_id.strip():
+            raise ValueError("project_id must not be blank")
+        return project_id
 
 
 class ChatResult(BaseModel):

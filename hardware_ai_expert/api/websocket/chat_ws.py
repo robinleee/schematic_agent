@@ -46,9 +46,10 @@ async def handle_chat_websocket(websocket: WebSocket):
                 payload = data.get("payload", {})
                 message = payload.get("message", "")
                 task_type = payload.get("task_type", "auto")
-                
+                project_id = payload.get("project_id")
+
                 # Run agent with streaming
-                await run_agent_streaming(websocket, message, task_type)
+                await run_agent_streaming(websocket, message, task_type, project_id)
                 
     except WebSocketDisconnect:
         manager.disconnect(websocket)
@@ -60,7 +61,8 @@ async def handle_chat_websocket(websocket: WebSocket):
         manager.disconnect(websocket)
 
 
-async def run_agent_streaming(websocket: WebSocket, message: str, task_type: str = "auto"):
+async def run_agent_streaming(websocket: WebSocket, message: str, task_type: str = "auto",
+                               project_id: Optional[str] = None):
     """Run agent and stream results."""
     started = time.monotonic()
     try:
@@ -68,10 +70,10 @@ async def run_agent_streaming(websocket: WebSocket, message: str, task_type: str
         import os
         sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
         from agent_system.react_agent import ReActAgent
-        
+
         # Initialize agent
         agent = ReActAgent()
-        
+
         # ReActAgent is synchronous. Run it off the event loop so callbacks can
         # send steps before the final result and other requests remain responsive.
         loop = asyncio.get_running_loop()
@@ -94,10 +96,10 @@ async def run_agent_streaming(websocket: WebSocket, message: str, task_type: str
                     }
                 }
             }), loop))
-        
+
         # Run agent
         result = await run_in_threadpool(agent.run, message, task_type=task_type,
-                                         step_callback=step_callback)
+                                         project_id=project_id)
         for pending in pending_steps:
             await asyncio.wrap_future(pending)
         from ..routers.system import record_agent_query

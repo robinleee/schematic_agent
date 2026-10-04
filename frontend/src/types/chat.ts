@@ -16,6 +16,7 @@ export interface ChatRequest {
   message: string;
   task_type?: TaskType;
   context?: Record<string, unknown>;
+  project_id?: string;
 }
 
 export interface ChatResult {

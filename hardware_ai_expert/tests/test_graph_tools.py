@@ -47,21 +47,24 @@ def test_cypher_project_scope_and_row_limit_are_enforced_without_database(monkey
     calls = []
     monkeypatch.setattr(gt, "_get_driver", lambda: Driver())
     monkeypatch.setattr(gt, "READ_ONLY_MODE", True)
-    monkeypatch.setattr(gt, "_current_project_id", "A")
-    with pytest.raises(PermissionError):
-        gt._run_cypher("MATCH (n) CREATE (x:Component) RETURN x")
-    assert not calls
-    query = ("MATCH (c:Component) WHERE c.project_id = $project_id "
-             "OR c.project_id IS NULL RETURN c.RefDes AS refdes")
-    supplied = {"refdes": "U1"}
-    assert gt._run_cypher(query, supplied) == [{"refdes": "U1"}]
-    assert supplied == {"refdes": "U1"}  # caller's parameters stay unchanged
-    assert calls[0][1] == {"refdes": "U1", "project_id": "A"}
-    assert "c.project_id IS NULL" not in calls[0][0]
-    assert f"LIMIT {gt.CYPHER_ROW_LIMIT}" in calls[0][0]
-    gt._run_cypher("MATCH (c) RETURN c LIMIT 2", project_id="B")
-    assert calls[1][1]["project_id"] == "B"
-    assert calls[1][0].count("LIMIT") == 1
+    gt.set_current_project("A")
+    try:
+        with pytest.raises(PermissionError):
+            gt._run_cypher("MATCH (n) CREATE (x:Component) RETURN x")
+        assert not calls
+        query = ("MATCH (c:Component) WHERE c.project_id = $project_id "
+                 "OR c.project_id IS NULL RETURN c.RefDes AS refdes")
+        supplied = {"refdes": "U1"}
+        assert gt._run_cypher(query, supplied) == [{"refdes": "U1"}]
+        assert supplied == {"refdes": "U1"}  # caller's parameters stay unchanged
+        assert calls[0][1] == {"refdes": "U1", "project_id": "A"}
+        assert "c.project_id IS NULL" not in calls[0][0]
+        assert f"LIMIT {gt.CYPHER_ROW_LIMIT}" in calls[0][0]
+        gt._run_cypher("MATCH (c) RETURN c LIMIT 2", project_id="B")
+        assert calls[1][1]["project_id"] == "B"
+        assert calls[1][0].count("LIMIT") == 1
+    finally:
+        gt.set_current_project("default")
 
 
 @pytest.mark.unit
@@ -76,16 +79,19 @@ def test_graph_summary_switches_between_aggregate_and_selected_project(monkeypat
         return [{"cnt": 3}]
 
     monkeypatch.setattr(gt, "_run_cypher", fake_run)
-    monkeypatch.setattr(gt, "_current_project_id", "default")
-    aggregate = gt.get_graph_summary.invoke({})
-    assert "全部项目" in aggregate and "IC: 2" in aggregate
-    assert all("WHERE true" in query for query, _ in queries)
-    queries.clear()
-    monkeypatch.setattr(gt, "_current_project_id", "board-A")
-    selected = gt.get_graph_summary.invoke({})
-    assert "项目范围: board-A" in selected
-    assert all(params == {"project_id": "board-A"} for _, params in queries)
-    assert all("project_id = $project_id" in query for query, _ in queries)
+    gt.set_current_project("default")
+    try:
+        aggregate = gt.get_graph_summary.invoke({})
+        assert "全部项目" in aggregate and "IC: 2" in aggregate
+        assert all("WHERE true" in query for query, _ in queries)
+        queries.clear()
+        gt.set_current_project("board-A")
+        selected = gt.get_graph_summary.invoke({})
+        assert "项目范围: board-A" in selected
+        assert all(params == {"project_id": "board-A"} for _, params in queries)
+        assert all("project_id = $project_id" in query for query, _ in queries)
+    finally:
+        gt.set_current_project("default")
 
 
 # ============================================================

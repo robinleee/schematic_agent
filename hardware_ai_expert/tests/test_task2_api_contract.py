@@ -234,7 +234,7 @@ def test_system_unavailable_data_not_fabricated(monkeypatch):
 
 
 def test_chat_http_success_failure_and_ws_stats(monkeypatch):
-    monkeypatch.setattr(chat, "_run_agent", lambda message, task_type: {
+    monkeypatch.setattr(chat, "_run_agent", lambda message, task_type, project_id=None: {
         "status": "success", "task_type": task_type, "report": "ok",
         "execution_trace": [], "tool_call_count": 2})
     before = system.get_agent_stats().query_count
@@ -243,10 +243,11 @@ def test_chat_http_success_failure_and_ws_stats(monkeypatch):
     assert response.json()["data"]["tool_call_count"] == 2
     assert client.post(BASE + "/chat", json={"message": " "}).status_code == 422
     assert client.post(BASE + "/chat", json={"message": "hello", "task_type": "other"}).status_code == 422
+    assert client.post(BASE + "/chat", json={"message": "hello", "project_id": " "}).status_code == 422
     assert system.get_agent_stats().query_count == before + 1
 
     class FakeAgent:
-        def run(self, message, task_type, step_callback):
+        def run(self, message, task_type, project_id=None):
             return {"report": "ws ok", "task_type": task_type, "tool_call_count": 1}
 
     monkeypatch.setitem(sys.modules, "agent_system.react_agent",

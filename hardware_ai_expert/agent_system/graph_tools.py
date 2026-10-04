@@ -11,6 +11,7 @@ V2 增强：
 
 import os
 import re
+import threading
 from typing import Optional, Any
 from dotenv import load_dotenv
 from langchain_core.tools import tool
@@ -72,12 +73,12 @@ def _run_cypher(query: str, params: dict = None, timeout: int = None, project_id
             f"[Read-Only Mode] 写入操作被拦截: {query[:80]}..."
         )
 
-    # 注入 project_id 参数（未显式指定时从全局取）
+    # 注入 project_id 参数（未显式指定时从调用线程的当前项目取）
     params = dict(params or {})
     if project_id is not None:
         params["project_id"] = project_id
-    elif "project_id" not in params and _current_project_id != "default":
-        params["project_id"] = _current_project_id
+    elif "project_id" not in params and get_current_project() != "default":
+        params["project_id"] = get_current_project()
 
     driver = _get_driver()
     timeout = timeout or CYPHER_TIMEOUT_SECONDS
@@ -101,19 +102,20 @@ def _run_cypher(query: str, params: dict = None, timeout: int = None, project_id
 
 
 
-# 默认 project_id，可通过 set_current_project() 切换
-_current_project_id = "default"
+# 当前 project_id 为线程本地状态，而非进程全局：FastAPI 的 /chat 和 /ws/chat
+# 用线程池处理并发请求的 ReActAgent.run()，不同请求携带不同 project_id 时，
+# 进程全局变量会让后到的请求覆盖先到请求仍在用的项目范围（跨请求数据泄露/误报）。
+_project_context = threading.local()
 
 
 def set_current_project(project_id: str):
-    """设置当前 project_id，用于多项目数据隔离"""
-    global _current_project_id
-    _current_project_id = project_id
+    """设置当前线程的 project_id，用于多项目数据隔离"""
+    _project_context.project_id = project_id
 
 
 def get_current_project() -> str:
-    """获取当前 project_id"""
-    return _current_project_id
+    """获取当前线程的 project_id，未设置时默认 'default'（聚合视图）"""
+    return getattr(_project_context, "project_id", "default")
 
 
 def list_projects() -> list[str]:

@@ -664,17 +664,22 @@ class ReActAgent:
     # Main ReAct Loop
     # --------------------------------------------------------
 
-    def run(self, user_input: str, task_type: str = "") -> dict:
+    def run(self, user_input: str, task_type: str = "", project_id: Optional[str] = None) -> dict:
         """
         执行统一 ReAct 循环
 
         Args:
             user_input: 用户输入
             task_type: 任务类型提示 (review/diagnosis/query)，为空则自动检测
+            project_id: 本次调用要查询的项目范围；为 None 时使用聚合视图（'default'）。
+                仅影响当前线程，不污染其他并发请求的项目上下文。
 
         Returns:
             dict: {status, report, execution_trace, tool_call_count, ...}
         """
+        from agent_system.graph_tools import set_current_project
+        set_current_project(project_id or "default")
+
         if not task_type:
             # 检测复合意图
             sub_tasks = self._detect_composite_intent(user_input)

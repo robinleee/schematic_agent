@@ -75,12 +75,12 @@ export function useChatWebSocket(options: UseWebSocketOptions = {}) {
   }, []);
 
   const send = useCallback(
-    (message: string, taskType?: string): boolean => {
+    (message: string, taskType?: string, projectId?: string): boolean => {
       if (socketRef.current && isConnected) {
         socketRef.current.send(
           JSON.stringify({
             type: 'chat',
-            payload: { message, task_type: taskType || 'auto' },
+            payload: { message, task_type: taskType || 'auto', project_id: projectId },
           })
         );
         return true;
