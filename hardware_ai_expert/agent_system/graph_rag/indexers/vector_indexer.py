@@ -23,9 +23,15 @@ class Neo4jVectorIndexer:
 
     def __init__(self, driver, config: Optional[GraphRAGConfig] = None):
         self.driver = driver
-        self.config = config or GraphRAGConfig()
-        self.config.embedding_model = os.environ.get("SCHEMATIC_EMBEDDING_MODEL", self.config.embedding_model)
-        self.config.embedding_dim = int(os.environ.get("SCHEMATIC_EMBEDDING_DIM", str(self.config.embedding_dim)))
+        # Only fall back to the environment when the caller didn't pass an
+        # explicit config — an explicitly-passed embedding_model/embedding_dim
+        # must not be silently overridden by SCHEMATIC_EMBEDDING_* env vars.
+        if config is None:
+            self.config = GraphRAGConfig()
+            self.config.embedding_model = os.environ.get("SCHEMATIC_EMBEDDING_MODEL", self.config.embedding_model)
+            self.config.embedding_dim = int(os.environ.get("SCHEMATIC_EMBEDDING_DIM", str(self.config.embedding_dim)))
+        else:
+            self.config = config
         # Neo4j allows only one VECTOR INDEX per (label, property) pair, so
         # switching embedding models needs both a distinct index name AND a
         # distinct node property — otherwise CREATE ... IF NOT EXISTS silently
