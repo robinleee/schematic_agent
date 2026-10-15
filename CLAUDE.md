@@ -12,7 +12,7 @@ Hardware AI Expert System for schematic review and fault diagnosis using EDA het
 - FastAPI (http://localhost:8501) — backend API + WebSocket, docs at /docs
 - React frontend (Vite dev :3000) — 7 page routes, Ant Design, WebSocket streaming chat; live seven-page validation is still pending
 
-**Current completion: ~88%** (per `docs/product/PRD_GAP_ANALYSIS_V2.md`, 2026-09-30 revalidation — BOM CSV import, core-net voltage annotation, AMR coverage, and ReAct self-correction are now done; professional embedding model switch is the one remaining P0 gap)
+**Current completion: ~95%** (per `docs/product/PRD_GAP_ANALYSIS_V2.md`, 2026-10-14 cross-check — all four P0 items are done: BOM CSV import, embedding model switch to bge-m3, frontend/backend API schema audit, and HITL Datasheet-to-Neo4j persistence. P2 Cypher perf benchmark and the single full-chain E2E test are also done — the latter already existed in `tests/test_full_chain_e2e.py` and was previously mis-reported as missing. Remaining: P1 LlamaIndex bridge code disposition decision — `agent_system/llama_index_bridge.py` is a zero-reference, zero-test module in tension with the "self-developed GraphRAG, not LlamaIndex" architecture decision; see `docs/product/DEV_STATUS_AUDIT_2026-10-14.md`. Also pending: test coverage (43.99% measured, below the 60% target), vLLM (blocked on CUDA wheel version, not driver incompatibility as previously stated), Neo4j read-only DB account)
 
 ## Living Documents
 
@@ -114,9 +114,10 @@ KnowledgeRouter (knowledge_router.py)
 
 Self-developed GraphRAG (agent_system/graph_rag/)
     ├── GraphRAGPipeline: query(mode=local/global/graph/auto)
-    ├── Neo4jVectorIndexer: native vector index (384-dim cosine)
+    ├── Neo4jVectorIndexer: dual-track native vector index — legacy `chunk_embedding`
+    │   (384-dim, all-MiniLM-L6-v2) + `chunk_embedding_v2` (1024-dim, bge-m3), side by side
     ├── HardwareEntityExtractor + CommunityDetector (Louvain, 22 communities)
-    └── 1901 VectorChunk / 10504 [:DESCRIBES] relations
+    └── 7595 VectorChunk (1901 legacy 384-dim + 5694 bge-m3 1024-dim) / 10504 [:DESCRIBES] relations
 
 ETL Pipeline (etl_pipeline/)
     ├── chip_parser / prt_parser / net_parser → Cadence netlist parse
@@ -135,7 +136,7 @@ ETL Pipeline (etl_pipeline/)
 | Pin.Type coverage | 100% | ✅ fixed |
 | PartType UNKNOWN | 1 | ✅ fixed |
 | [:POWERED_BY] edges | 593 | ✅ created |
-| VectorChunk | 1,901 | ✅ |
+| VectorChunk | 7,595 (1,901 legacy 384-dim + 5,694 bge-m3 1024-dim) | ✅ bge-m3 index rebuilt |
 | Core net recognition | 1068/1076 valid core nets (99.3%) | ✅ network-level check implemented; 8 suspicious stubs detected |
 | POWER net voltage coverage | 95.7% | ✅ |
 | AMR capacitor voltage coverage | 83.1% | ⚠️ target ≥95% |
@@ -145,7 +146,7 @@ ETL Pipeline (etl_pipeline/)
 - **Agent**: self-developed ReActAgent + AgentOrchestrator (not LangGraph) — LLM-driven, not hardcoded
 - **GraphRAG**: self-developed graph_rag/ (not LlamaIndex) — Neo4j native vector index, not ChromaDB dual-write
 - **LLM**: local Ollama gemma4:26b (not vLLM — T4 driver incompatible) for data security
-- **Embedding**: sentence-transformers all-MiniLM-L6-v2 (P0: upgrade to bge-m3)
+- **Embedding**: sentence-transformers BAAI/bge-m3 (1024-dim, default since `c2fb8b0`); legacy all-MiniLM-L6-v2 (384-dim) index kept side by side as `chunk_embedding` for rollback, new data goes to `chunk_embedding_v2`
 - **Frontend**: React + TypeScript / FastAPI is the mainline. `web_ui/app.py` is a legacy Streamlit fallback, not started by `scripts/start_dev.sh`; do not archive until the seven React pages have been validated live against their core flows.
 - **Review engine**: 3-layer (Template + Config + Knowledge), 9 templates / 24 rules, mtime hot-reload
 - **Multi-project isolation**: project_id propagated across full chain (ETL, graph, review, knowledge)
