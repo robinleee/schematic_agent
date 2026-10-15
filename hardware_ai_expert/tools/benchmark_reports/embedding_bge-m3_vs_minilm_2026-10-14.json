@@ -1,0 +1,353 @@
+{
+  "mode": "offline-isolated",
+  "reports": [
+    {
+      "model": "/home/caros/.cache/huggingface/hub/models--BAAI--bge-m3/snapshots/5617a9f61b028005a4858fdac845db406aefb181",
+      "dimension": 1024,
+      "golden_sha256": "161adf6c5b10b5473a475f3d8c64246eb72b18d5eb6b1971773c8a60d02a2f69",
+      "documents": 11,
+      "queries": 7,
+      "load_ms": 2021.9848969718441,
+      "index_ms": 794.977476936765,
+      "latency_p50_ms": 13.980967923998833,
+      "latency_p95_ms": 17.176116933114827,
+      "peak_rss_kb": 3088804,
+      "metrics": {
+        "recall@5": 1.0,
+        "recall@10": 1.0,
+        "mrr": 1.0,
+        "ndcg@10": 1.0
+      },
+      "details": [
+        {
+          "id": "ldo-headroom",
+          "sources": [
+            "ldo-input",
+            "esd",
+            "reset",
+            "i2c-pullup",
+            "ldo-thermal",
+            "capacitor-rating",
+            "buck-inductor",
+            "uart",
+            "mosfet-gate",
+            "decoupling"
+          ],
+          "latency_ms": 17.176116933114827,
+          "metrics": {
+            "recall@5": 1.0,
+            "recall@10": 1.0,
+            "mrr": 1.0,
+            "ndcg@10": 1.0
+          }
+        },
+        {
+          "id": "ldo-heat",
+          "sources": [
+            "ldo-thermal",
+            "reset",
+            "ldo-input",
+            "esd",
+            "capacitor-rating",
+            "mosfet-gate",
+            "i2c-pullup",
+            "buck-inductor",
+            "uart",
+            "decoupling"
+          ],
+          "latency_ms": 14.941615983843803,
+          "metrics": {
+            "recall@5": 1.0,
+            "recall@10": 1.0,
+            "mrr": 1.0,
+            "ndcg@10": 1.0
+          }
+        },
+        {
+          "id": "buck",
+          "sources": [
+            "buck-inductor",
+            "capacitor-rating",
+            "decoupling",
+            "reset",
+            "ldo-thermal",
+            "mosfet-gate",
+            "esd",
+            "ldo-input",
+            "uart",
+            "i2c-pullup"
+          ],
+          "latency_ms": 13.91319592949003,
+          "metrics": {
+            "recall@5": 1.0,
+            "recall@10": 1.0,
+            "mrr": 1.0,
+            "ndcg@10": 1.0
+          }
+        },
+        {
+          "id": "i2c",
+          "sources": [
+            "i2c-pullup",
+            "esd",
+            "decoupling",
+            "mosfet-gate",
+            "capacitor-rating",
+            "uart",
+            "ldo-input",
+            "ldo-thermal",
+            "buck-inductor",
+            "reset"
+          ],
+          "latency_ms": 13.980967923998833,
+          "metrics": {
+            "recall@5": 1.0,
+            "recall@10": 1.0,
+            "mrr": 1.0,
+            "ndcg@10": 1.0
+          }
+        },
+        {
+          "id": "capacitor",
+          "sources": [
+            "capacitor-rating",
+            "ldo-thermal",
+            "ldo-input",
+            "mosfet-gate",
+            "reset",
+            "buck-inductor",
+            "esd",
+            "decoupling",
+            "i2c-pullup",
+            "uart"
+          ],
+          "latency_ms": 13.96102795843035,
+          "metrics": {
+            "recall@5": 1.0,
+            "recall@10": 1.0,
+            "mrr": 1.0,
+            "ndcg@10": 1.0
+          }
+        },
+        {
+          "id": "power-noise",
+          "sources": [
+            "decoupling",
+            "ground",
+            "capacitor-rating",
+            "mosfet-gate",
+            "uart",
+            "i2c-pullup",
+            "ldo-thermal",
+            "esd",
+            "buck-inductor",
+            "ldo-input"
+          ],
+          "latency_ms": 13.831679010763764,
+          "metrics": {
+            "recall@5": 1.0,
+            "recall@10": 1.0,
+            "mrr": 1.0,
+            "ndcg@10": 1.0
+          }
+        },
+        {
+          "id": "ldo-design",
+          "sources": [
+            "ldo-input",
+            "ldo-thermal",
+            "reset",
+            "capacitor-rating",
+            "esd",
+            "buck-inductor",
+            "i2c-pullup",
+            "decoupling",
+            "mosfet-gate",
+            "uart"
+          ],
+          "latency_ms": 13.983224984258413,
+          "metrics": {
+            "recall@5": 1.0,
+            "recall@10": 1.0,
+            "mrr": 1.0,
+            "ndcg@10": 1.0
+          }
+        }
+      ]
+    },
+    {
+      "model": "/home/caros/.cache/huggingface/hub/models--sentence-transformers--all-MiniLM-L6-v2/snapshots/1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+      "dimension": 384,
+      "golden_sha256": "161adf6c5b10b5473a475f3d8c64246eb72b18d5eb6b1971773c8a60d02a2f69",
+      "documents": 11,
+      "queries": 7,
+      "load_ms": 172.2885649651289,
+      "index_ms": 29.366218950599432,
+      "latency_p50_ms": 4.266895935870707,
+      "latency_p95_ms": 4.661798011511564,
+      "peak_rss_kb": 3088804,
+      "metrics": {
+        "recall@5": 0.7857142857142857,
+        "recall@10": 1.0,
+        "mrr": 0.7023809523809523,
+        "ndcg@10": 0.7622645723819278
+      },
+      "details": [
+        {
+          "id": "ldo-headroom",
+          "sources": [
+            "ldo-input",
+            "ldo-thermal",
+            "decoupling",
+            "capacitor-rating",
+            "esd",
+            "buck-inductor",
+            "reset",
+            "ground",
+            "uart",
+            "i2c-pullup"
+          ],
+          "latency_ms": 4.661798011511564,
+          "metrics": {
+            "recall@5": 1.0,
+            "recall@10": 1.0,
+            "mrr": 1.0,
+            "ndcg@10": 1.0
+          }
+        },
+        {
+          "id": "ldo-heat",
+          "sources": [
+            "reset",
+            "buck-inductor",
+            "decoupling",
+            "ldo-thermal",
+            "esd",
+            "capacitor-rating",
+            "ldo-input",
+            "ground",
+            "uart",
+            "mosfet-gate"
+          ],
+          "latency_ms": 4.5560040744021535,
+          "metrics": {
+            "recall@5": 1.0,
+            "recall@10": 1.0,
+            "mrr": 0.25,
+            "ndcg@10": 0.4306765580733931
+          }
+        },
+        {
+          "id": "buck",
+          "sources": [
+            "reset",
+            "buck-inductor",
+            "decoupling",
+            "ldo-thermal",
+            "esd",
+            "capacitor-rating",
+            "ldo-input",
+            "ground",
+            "uart",
+            "mosfet-gate"
+          ],
+          "latency_ms": 4.236739012412727,
+          "metrics": {
+            "recall@5": 1.0,
+            "recall@10": 1.0,
+            "mrr": 0.5,
+            "ndcg@10": 0.6309297535714574
+          }
+        },
+        {
+          "id": "i2c",
+          "sources": [
+            "i2c-pullup",
+            "decoupling",
+            "esd",
+            "ldo-thermal",
+            "reset",
+            "capacitor-rating",
+            "ldo-input",
+            "uart",
+            "buck-inductor",
+            "ground"
+          ],
+          "latency_ms": 4.216348985210061,
+          "metrics": {
+            "recall@5": 1.0,
+            "recall@10": 1.0,
+            "mrr": 1.0,
+            "ndcg@10": 1.0
+          }
+        },
+        {
+          "id": "capacitor",
+          "sources": [
+            "buck-inductor",
+            "reset",
+            "decoupling",
+            "ldo-thermal",
+            "esd",
+            "capacitor-rating",
+            "ldo-input",
+            "ground",
+            "uart",
+            "mosfet-gate"
+          ],
+          "latency_ms": 4.266895935870707,
+          "metrics": {
+            "recall@5": 0.0,
+            "recall@10": 1.0,
+            "mrr": 0.16666666666666666,
+            "ndcg@10": 0.3562071871080222
+          }
+        },
+        {
+          "id": "power-noise",
+          "sources": [
+            "decoupling",
+            "ldo-thermal",
+            "buck-inductor",
+            "reset",
+            "capacitor-rating",
+            "esd",
+            "ldo-input",
+            "ground",
+            "uart",
+            "mosfet-gate"
+          ],
+          "latency_ms": 4.2696400778368115,
+          "metrics": {
+            "recall@5": 1.0,
+            "recall@10": 1.0,
+            "mrr": 1.0,
+            "ndcg@10": 1.0
+          }
+        },
+        {
+          "id": "ldo-design",
+          "sources": [
+            "ldo-input",
+            "decoupling",
+            "esd",
+            "buck-inductor",
+            "reset",
+            "capacitor-rating",
+            "ldo-thermal",
+            "ground",
+            "i2c-pullup",
+            "mosfet-gate"
+          ],
+          "latency_ms": 4.183395998552442,
+          "metrics": {
+            "recall@5": 0.5,
+            "recall@10": 1.0,
+            "mrr": 1.0,
+            "ndcg@10": 0.9180385079206221
+          }
+        }
+      ]
+    }
+  ]
+}
