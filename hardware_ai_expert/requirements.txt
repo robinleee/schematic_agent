@@ -13,6 +13,17 @@ openai>=1.0
 # Vector DB
 chromadb>=0.4
 
+# Embedding model (bge-m3, 1024-dim)
+sentence-transformers>=3.2,<4.0
+
+# LlamaIndex bridge (agent_system/llama_index_bridge.py, tools/graphrag_retrieval_benchmark.py)
+llama-index-core==0.11.23
+llama-index-llms-openai==0.2.16
+llama-index-llms-ollama==0.3.6
+llama-index-graph-stores-neo4j==0.3.5
+llama-index-vector-stores-chroma==0.3.0
+llama-index-embeddings-huggingface==0.3.1
+
 # Frontend
 streamlit>=1.30
 

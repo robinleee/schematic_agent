@@ -21,6 +21,7 @@ from dataclasses import dataclass, asdict
 from enum import Enum
 
 from agent_system.datasheet_parser import ExtractedComponent, DatasheetParameter, ParamType
+from agent_system.schemas.graph import AMRParamNode
 
 logger = logging.getLogger(__name__)
 
@@ -362,19 +363,62 @@ class DatasheetHITLManager:
             self._write_yaml(self.AMR_DATA_FILE, {"components": amr_data})
 
             # Retain the decision and its evidence for audit after restart.
+            persisted_at = datetime.now().isoformat()
+            approved_batch = list(self._approved)
             for review in self._approved:
                 review.status = DatasheetReviewStatus.PERSISTED.value
-                review.persisted_at = datetime.now().isoformat()
+                review.persisted_at = persisted_at
             self._persisted.extend(self._approved)
             self._approved = []
             self._save_pending()
 
             logger.info(f"Saved {saved_count} parameters to {self.AMR_DATA_FILE}")
+            self._store_to_neo4j(approved_batch)
             return {"saved": saved_count, "message": f"已保存 {saved_count} 条参数"}
 
         except Exception as e:
             logger.error(f"Failed to save AMR data: {e}")
             return {"saved": 0, "error": f"保存失败: {e}"}
+
+    def _store_to_neo4j(self, approved: List["DatasheetParamReview"]) -> None:
+        """
+        将审批通过的参数额外写入 Neo4j（:AMRParam 节点）。
+
+        与 YAML 落盘非事务：Neo4j 写入失败只记日志，不影响已成功的 YAML 结果
+        （YAML 是单机权威源，Neo4j 是多实例场景的补充，参照 hitl_workflow.py
+        的 _mark_persisted_in_neo4j 容错模式）。
+        """
+        if not approved:
+            return
+        try:
+            from agent_system.amr_neo4j_source import Neo4jAMRSource
+
+            nodes = []
+            for review in approved:
+                value = review.modified_value if review.modified_value is not None else review.value
+                unit = review.modified_unit if review.modified_unit else review.unit
+                nodes.append(AMRParamNode(
+                    mpn=review.mpn,
+                    param_type=review.param_type,
+                    param_name=review.param_name,
+                    value=value,
+                    unit=unit,
+                    min_value=review.min_value,
+                    max_value=review.max_value,
+                    condition=review.condition,
+                    source_file=review.source_file,
+                    approved_by=review.reviewer,
+                    reviewed_at=review.reviewed_at,
+                    review_id=review.review_id,
+                ))
+
+            source = Neo4jAMRSource()
+            try:
+                source.store_params(nodes)
+            finally:
+                source.close()
+        except Exception as e:
+            logger.error(f"Failed to store AMR params to Neo4j: {e}")
 
 
 # ============================================================
