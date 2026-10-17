@@ -308,6 +308,14 @@ const ETLPage: React.FC = () => {
               </Col>
             </Row>
           )}
+          {preview.bom_issues.length > 0 && (
+            <Paragraph type="warning" style={{ marginTop: 16 }}>
+              BOM 问题 ({preview.bom_issues.length} 条)：
+              {preview.bom_issues.map((issue, i) => (
+                <div key={i}>{Object.entries(issue).map(([k, v]) => `${k}: ${v}`).join('，')}</div>
+              ))}
+            </Paragraph>
+          )}
           <Descriptions size="small" column={2} style={{ marginTop: 16 }}>
             <Descriptions.Item label="电源网络">{preview.power_nets_count ?? '不可用'}</Descriptions.Item>
             <Descriptions.Item label="地网络">{preview.ground_nets_count ?? '不可用'}</Descriptions.Item>
@@ -342,6 +350,14 @@ const ETLPage: React.FC = () => {
             </Col>
           </Row>
           <Paragraph style={{ marginTop: 16 }}>{result.message}</Paragraph>
+          {result.bom_issues.length > 0 && (
+            <Paragraph type="warning">
+              BOM 问题 ({result.bom_issues.length} 条)：
+              {result.bom_issues.map((issue, i) => (
+                <div key={i}>{Object.entries(issue).map(([k, v]) => `${k}: ${v}`).join('，')}</div>
+              ))}
+            </Paragraph>
+          )}
           {result.quality_report && (
             <Card size="small" title="质量报告">
               <Descriptions column={2} size="small">

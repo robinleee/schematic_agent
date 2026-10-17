@@ -12,6 +12,7 @@ export interface ETLPreviewResult {
   ground_nets_count: number | null;
   top_nets: string[];
   bom_enriched_components: number | null;
+  bom_issues: Record<string, unknown>[];
 }
 
 export interface ETLPreviewResponse {
@@ -50,6 +51,7 @@ export interface ETLResult {
   quality_passed: boolean;
   message: string;
   quality_report?: QualityReport;
+  bom_issues: Record<string, unknown>[];
 }
 
 export interface ETLResponse {

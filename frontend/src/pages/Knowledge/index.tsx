@@ -62,7 +62,13 @@ const KnowledgePage: React.FC = () => {
     
     setUploading(true);
     try {
-      const response = await knowledgeApi.upload(file, mpn, category, currentProject);
+      // Backend project_id=None means the shared/aggregate graph; "default"
+      // is the frontend's sentinel for that same aggregate view, so it must
+      // not be sent as a literal project_id (which would scope to a project
+      // actually named "default" instead).
+      const response = await knowledgeApi.upload(
+        file, mpn, category, currentProject === 'default' ? undefined : currentProject
+      );
       if (!response.success) throw new Error(response.message || '上传失败');
       message.success(`成功导入 ${response.data.chunk_count} 个知识切片`);
       void loadStats();
@@ -86,7 +92,7 @@ const KnowledgePage: React.FC = () => {
         mpn: searchMpn || undefined,
         query: searchQuery,
         max_results: 5,
-        project_id: currentProject,
+        project_id: currentProject === 'default' ? undefined : currentProject,
       });
       if (!response.success) throw new Error(response.message || '查询失败');
       setSearchResult(response.data);

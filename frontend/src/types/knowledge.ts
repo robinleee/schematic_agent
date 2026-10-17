@@ -44,8 +44,8 @@ export interface UploadResponse {
   data: {
     chunk_count: number;
     mpn: string;
-    file_name?: string;
-    indexed_at?: string;
+    category?: string;
+    source?: string;
   };
   message?: string;
   timestamp: string;

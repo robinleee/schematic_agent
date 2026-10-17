@@ -7,14 +7,19 @@ export const knowledgeApi = {
     file: File,
     mpn: string,
     category: string = 'general',
-    projectId: string,
+    projectId?: string,
     source?: string
   ): Promise<UploadResponse> => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('mpn', mpn);
     formData.append('category', category);
-    formData.append('project_id', projectId);
+    // Backend requires either project_id or an explicit scope=shared.
+    if (projectId) {
+      formData.append('project_id', projectId);
+    } else {
+      formData.append('scope', 'shared');
+    }
     if (source) formData.append('source', source);
 
     const response = await apiClient.post<UploadResponse>('/knowledge/upload', formData, {

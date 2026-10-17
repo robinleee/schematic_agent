@@ -48,3 +48,40 @@ export interface ExportResponse {
   message?: string;
   timestamp: string;
 }
+
+export interface DatasheetPendingReview {
+  review_id: string;
+  mpn: string;
+  param_type: string;
+  param_name: string;
+  value: number;
+  unit: string;
+  min_value?: number;
+  max_value?: number;
+  condition: string;
+  source_text: string;
+  confidence: number;
+  extraction_method: string;
+  status: string;
+  reviewer?: string;
+  review_comment?: string;
+  reviewed_at?: string;
+  created_at: string;
+  source_file: string;
+}
+
+export interface DatasheetPendingListResponse {
+  success: boolean;
+  data: DatasheetPendingReview[];
+  total: number;
+  message?: string;
+  timestamp: string;
+}
+
+export interface DatasheetPersistResponse {
+  success: boolean;
+  data: { saved: number; message?: string; error?: string };
+  message?: string;
+  timestamp: string;
+}
+
