@@ -272,7 +272,7 @@
 | 5 | 网络电压标注率提升 | 2-3d | ✅ **已完成** | Quality Guard 已按核心网络实现 100% 阈值校验 |
 | 6 | AMR 耐压覆盖率提升至 95% | 2-3d | ✅ **已完成** | commit 记录显示已到 99.8%（未连接真实 DB 复核，建议抽样确认） |
 | 7 | Self-Correction 节点 | 2-3d | ✅ **已完成** | `react_agent.py` 空结果检测+参数放宽重试已实现，有单测 |
-| 8 | LlamaIndex 评估 | 3-5d | 🟡 **半成品，待裁决（2026-10-14）** | `agent_system/llama_index_bridge.py`（571行）+ `tools/graphrag_retrieval_benchmark.py` 代码已写好但零引用、零测试，未接入 `KnowledgeRouter`。本轮已跑通 benchmark：bge-m3 vs all-MiniLM-L6-v2 真实对比，bge-m3 recall@5/mrr/ndcg@10 全部 1.0（旧模型 0.70-0.79），证实此前的 embedding 切换决策正确。但 bridge.py 本身是否继续集成或删除——与 CLAUDE.md"自研 GraphRAG，非 LlamaIndex"的既定架构方向有张力，需项目负责人裁决，详见 `docs/product/DEV_STATUS_AUDIT_2026-10-14.md` |
+| 8 | LlamaIndex 评估 | 3-5d | ✅ **已裁决（2026-10-18）：删除** | `agent_system/llama_index_bridge.py`（571行）零引用、零测试，与 CLAUDE.md"自研 GraphRAG，非 LlamaIndex"的既定架构方向有张力。benchmark 数据证实 bge-m3 决策正确（recall@5/mrr/ndcg@10 全部 1.0 vs 旧模型 0.70-0.79），但该结论与 LlamaIndex 集成本身无关——自研 `vector_indexer.py` 同样用上了 bge-m3。结论：该模块从未被引用，只有维护负担（覆盖率拖累、requirements.txt 锁定从未用上的 6 个子包），已删除；`requirements.txt` 的 llama-index 系列版本锁定随之移除。`tools/graphrag_retrieval_benchmark.py` 保留——是模型无关的检索质量评估工具，不依赖 llama-index，仍可用于未来评估其他 embedding 模型 |
 
 ### P2 — 质量与生产化
 
