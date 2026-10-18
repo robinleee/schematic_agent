@@ -53,10 +53,11 @@ async def visualize_graph(request: GraphRequest) -> GraphResponse:
         else:
             raise HTTPException(status_code=400, detail=f"Unknown mode: {request.mode}")
         
-        # Count nodes and edges from DOT content
+        # Count nodes and edges from DOT content. graph_viz builders emit
+        # undirected syntax ("--"), not "->", so match both.
         import re
         node_count = len(re.findall(r'\b\w+\s*\[', dot_content))
-        edge_count = len(re.findall(r'->', dot_content))
+        edge_count = len(re.findall(r'--|->', dot_content))
         
         graph_result = GraphResult(
             dot_content=dot_content,
