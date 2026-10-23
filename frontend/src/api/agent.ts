@@ -17,13 +17,18 @@ export interface CreateRunParams {
 
 interface StreamHandlers {
   onEvent: (event: AgentRunEvent) => void;
+  /** SSE 的 id: 行（seq），用于断线/刷新后续流去重 */
+  onId?: (seq: number) => void;
   signal?: AbortSignal;
 }
 
 const BASE = `${import.meta.env.VITE_API_URL || ''}/api/v1/agent`;
 
 /** 把 SSE 文本流切成事件（event: / data: / 空行分隔，忽略 `: comment`） */
-function createSseParser(onEvent: (event: AgentRunEvent) => void) {
+function createSseParser(
+  onEvent: (event: AgentRunEvent) => void,
+  onId?: (seq: number) => void,
+) {
   let buffer = '';
   let eventName = 'message';
   const dataLines: string[] = [];
@@ -56,7 +61,8 @@ function createSseParser(onEvent: (event: AgentRunEvent) => void) {
       } else if (line.startsWith('data:')) {
         dataLines.push(line.slice(5).trimStart());
       } else if (line.startsWith('id:')) {
-        // sequence id，前端不需要
+        const seq = Number(line.slice(3).trim());
+        if (Number.isFinite(seq) && onId) onId(seq);
       }
       index = buffer.indexOf('\n');
     }
@@ -98,9 +104,16 @@ export const agentApi = {
     return response.data as { resolved?: number };
   },
 
-  /** 订阅 SSE；返回终止函数 */
-  streamRun: async (runId: string, handlers: StreamHandlers): Promise<void> => {
-    const response = await fetch(`${BASE}/runs/${runId}/events`, {
+  /** 停止运行中的 run（Hermes 侧 hard interrupt） */
+  stopRun: async (runId: string): Promise<{ run_id?: string; status?: string }> => {
+    const response = await apiClient.post(`/agent/runs/${runId}/stop`, {}, { timeout: 30000 });
+    return response.data as { run_id?: string; status?: string };
+  },
+
+  /** 订阅 SSE；lastSeq 用于刷新后从断点续流 */
+  streamRun: async (runId: string, handlers: StreamHandlers, lastSeq = 0): Promise<void> => {
+    const query = lastSeq > 0 ? `?last_seq=${lastSeq}` : '';
+    const response = await fetch(`${BASE}/runs/${runId}/events${query}`, {
       method: 'GET',
       headers: { Accept: 'text/event-stream' },
       signal: handlers.signal,
@@ -112,7 +125,7 @@ export const agentApi = {
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
-    const feed = createSseParser(handlers.onEvent);
+    const feed = createSseParser(handlers.onEvent, handlers.onId);
     for (;;) {
       const { value, done } = await reader.read();
       if (done) break;

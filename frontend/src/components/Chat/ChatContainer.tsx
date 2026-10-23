@@ -1,7 +1,7 @@
 // Chat container component
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Space, Typography, Card, Switch, Select, Tooltip, Tag } from 'antd';
-import { ClearOutlined, ExperimentOutlined } from '@ant-design/icons';
+import { ClearOutlined, ExperimentOutlined, StopOutlined } from '@ant-design/icons';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
 import { useChatStore } from '@/stores';
@@ -74,6 +74,17 @@ const ChatContainer: React.FC = () => {
     }
   }, [currentProject]);
   const abortRef = useRef<AbortController | null>(null);
+  // 进行中的 Hermes run：停止按钮和刷新恢复都靠它
+  const activeRun = useRef<{ runId: string; messageId: string; lastSeq: number } | null>(null);
+  const activeRunKey = `schematic:hermes:activeRun:${currentProject}`;
+  const persistActiveRun = useCallback((value: { runId: string; messageId: string; lastSeq: number } | null) => {
+    try {
+      if (value) window.localStorage.setItem(activeRunKey, JSON.stringify(value));
+      else window.localStorage.removeItem(activeRunKey);
+    } catch {
+      /* 隐私模式忽略 */
+    }
+  }, [activeRunKey]);
   const finish = useCallback(() => { busy.current = false; setLoading(false); }, [setLoading]);
 
   useEffect(() => {
@@ -102,8 +113,10 @@ const ChatContainer: React.FC = () => {
     },
   });
 
-  const runHermes = useCallback(async (message: string, taskType?: string) => {
-    const assistantId = `assistant-${Date.now()}`;
+  /** 订阅一个已存在的 run 并把事件写进指定消息（新建与刷新恢复共用） */
+  const attachRun = useCallback(async (
+    runId: string, assistantId: string, startSeq = 0,
+  ) => {
     let text = '';
     let progress: string[] = [];
     let lastTool: string | undefined;
@@ -111,11 +124,6 @@ const ChatContainer: React.FC = () => {
     const patch = (extra: Partial<Message> = {}) => {
       updateMessage(assistantId, { content: text || '正在处理…', progress: [...progress], ...extra });
     };
-
-    addMessage({
-      id: assistantId, role: 'assistant', content: '正在处理…',
-      timestamp: new Date().toISOString(), reasoningTrace: [], taskType, progress: [],
-    });
 
     const applyEvent = (event: AgentRunEvent) => {
       switch (event.event) {
@@ -136,7 +144,7 @@ const ChatContainer: React.FC = () => {
         }
         case 'approval.request': {
           const approval: ApprovalState = {
-            runId: event.run_id ?? '',
+            runId: event.run_id ?? runId,
             requestId: event.request_id ?? '',
             tool: lastTool,
             command: event.command,
@@ -154,6 +162,8 @@ const ChatContainer: React.FC = () => {
           if (!text && event.output) text = event.output;
           patch({ content: text || '（本轮没有文本输出）' });
           abortRef.current = null;
+          activeRun.current = null;
+          persistActiveRun(null);
           finish();
           break;
         default:
@@ -161,15 +171,11 @@ const ChatContainer: React.FC = () => {
       }
     };
 
-    // 创建失败会抛给上层，由 handleSend 决定是否回退经典引擎
-    const run = await agentApi.createRun({
-      input: message,
-      sessionId: sessionId.current,
-      projectId: scopedProjectId,
-    });
-    const runId = run.run_id;
     const controller = new AbortController();
     abortRef.current = controller;
+    activeRun.current = { runId, messageId: assistantId, lastSeq: startSeq };
+    persistActiveRun({ runId, messageId: assistantId, lastSeq: startSeq });
+
     try {
       await agentApi.streamRun(runId, {
         signal: controller.signal,
@@ -177,14 +183,122 @@ const ChatContainer: React.FC = () => {
           if (event.event === 'approval.request' && !event.run_id) event.run_id = runId;
           applyEvent(event);
         },
-      });
+        onId: (seq) => {
+          if (!activeRun.current) return;
+          activeRun.current = { ...activeRun.current, lastSeq: seq };
+          persistActiveRun(activeRun.current);
+        },
+      }, startSeq);
     } catch (error) {
+      if (controller.signal.aborted) {
+        // 用户主动停止，状态已在 stopHermes 里写好了
+        return;
+      }
       updateMessage(assistantId, {
         content: `${text}\n\n事件流中断：${apiErrorText(error)}`.trim(),
       });
+      persistActiveRun(null);
+      activeRun.current = null;
       finish();
     }
-  }, [addMessage, updateMessage, finish, scopedProjectId]);
+  }, [updateMessage, finish, persistActiveRun]);
+
+  const runHermes = useCallback(async (message: string, taskType?: string) => {
+    const assistantId = `assistant-${Date.now()}`;
+    addMessage({
+      id: assistantId, role: 'assistant', content: '正在处理…',
+      timestamp: new Date().toISOString(), reasoningTrace: [], taskType, progress: [],
+    });
+
+    // 创建失败会抛给上层，由 handleSend 决定是否回退经典引擎
+    const run = await agentApi.createRun({
+      input: message,
+      sessionId: sessionId.current,
+      projectId: scopedProjectId,
+    });
+    await attachRun(run.run_id, assistantId);
+  }, [addMessage, attachRun, scopedProjectId]);
+
+  /** 停止：先让 Hermes 硬中断，再本地收尾（绝不把半截输出当成完成） */
+  const stopHermes = useCallback(async () => {
+    const active = activeRun.current;
+    if (!active) return;
+    try {
+      await agentApi.stopRun(active.runId);
+    } catch {
+      /* 上游可能已结束，仍按本地停止处理 */
+    }
+    abortRef.current?.abort();
+    abortRef.current = null;
+    const current = useChatStore.getState().messages.find((m) => m.id === active.messageId);
+    updateMessage(active.messageId, {
+      content: `${current?.content ?? ''}\n\n（已停止）`.trim(),
+      progress: [...(current?.progress ?? []), '用户停止'],
+    });
+    activeRun.current = null;
+    persistActiveRun(null);
+    finish();
+  }, [updateMessage, finish, persistActiveRun]);
+
+  // 刷新后恢复上次未完成的 run（只尝试一次）
+  const resumeAttempted = useRef(false);
+  useEffect(() => {
+    if (resumeAttempted.current) return;
+    let raw: string | null = null;
+    try {
+      raw = window.localStorage.getItem(activeRunKey);
+    } catch {
+      return;
+    }
+    if (!raw) return;
+    resumeAttempted.current = true;
+
+    let saved: { runId: string; messageId: string; lastSeq: number } | null = null;
+    try {
+      saved = JSON.parse(raw) as { runId: string; messageId: string; lastSeq: number };
+    } catch {
+      persistActiveRun(null);
+      return;
+    }
+    if (!saved?.runId) { persistActiveRun(null); return; }
+
+    const assistantId = `assistant-${Date.now()}`;
+    (async () => {
+      try {
+        const state = await agentApi.getRun(saved!.runId);
+        const terminal = ['completed', 'failed', 'cancelled', 'stopped'].includes(state.status);
+        if (terminal) {
+          addMessage({
+            id: assistantId, role: 'assistant',
+            content: state.output || '上次的会话已结束（没有取到输出）',
+            timestamp: new Date().toISOString(), reasoningTrace: [], progress: [],
+          });
+          persistActiveRun(null);
+          activeRun.current = null;
+          return;
+        }
+        setEngine('hermes');
+        setLoading(true);
+        busy.current = true;
+        addMessage({
+          id: assistantId, role: 'assistant', content: '正在恢复上次运行…',
+          timestamp: new Date().toISOString(), reasoningTrace: [], progress: [],
+        });
+        await attachRun(saved!.runId, assistantId, saved!.lastSeq || 0);
+      } catch (error) {
+        persistActiveRun(null);
+        activeRun.current = null;
+        addMessage({
+          id: `notice-${Date.now()}`, role: 'assistant',
+          content: `上次的会话已结束（${apiErrorText(error)}）`,
+          timestamp: new Date().toISOString(),
+        });
+        finish();
+      }
+    })();
+    // 只在挂载/切项目时跑一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRunKey]);
 
   const handleApprovalDecide = useCallback(async (
     messageId: string, requestId: string, choice: ApprovalChoice,
@@ -328,6 +442,13 @@ const ChatContainer: React.FC = () => {
             <Tag color={health.upstream ? 'green' : 'red'}>
               {health.upstream ? '网关正常' : `网关不可用${health.detail ? `：${health.detail}` : ''}`}
             </Tag>
+          )}
+          {engine === 'hermes' && isLoading && (
+            <Tooltip title="中断当前 Hermes 运行（服务端会回收工具子进程）">
+              <Button danger size="small" icon={<StopOutlined />} onClick={stopHermes}>
+                停止
+              </Button>
+            </Tooltip>
           )}
           {engine === 'legacy' && (
             <>

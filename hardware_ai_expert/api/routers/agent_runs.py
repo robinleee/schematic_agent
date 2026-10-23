@@ -197,10 +197,13 @@ async def create_run(payload: RunCreateRequest) -> Any:
 
 
 @router.get("/runs/{run_id}/events")
-async def stream_events(run_id: str) -> StreamingResponse:
+async def stream_events(run_id: str, last_seq: Optional[int] = None) -> StreamingResponse:
     run_id = _validate_run_id(run_id)
     headers = _headers()
     url = f"{_base_url()}/runs/{run_id}/events"
+    if last_seq and last_seq > 0:
+        # 刷新页面后续流：让上游只补发断点之后的事件，避免 delta 重复
+        url = f"{url}?last_seq={int(last_seq)}"
 
     client = httpx.AsyncClient(timeout=_TIMEOUT)
     try:
