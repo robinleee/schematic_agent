@@ -9,6 +9,8 @@
 
 灰度阶段：本路由与既有 `/api/v1/chat`、`/ws/chat` 并存，前端可自行选择引擎。
 """
+import asyncio
+import json
 import os
 import re
 import threading
@@ -36,6 +38,153 @@ _SESSIONS: Dict[str, Dict[str, Any]] = {}
 _SESSIONS_LOCK = threading.Lock()
 _SESSION_TTL = float(os.getenv("HERMES_SESSION_TTL", "86400"))
 _MAX_SESSIONS = 2000
+
+# ---------------------------------------------------------------- 指标 / 观测
+# 验收门要看「成功率 / P95 / 审批次数 / 回退次数」，内存计数重启即丢，
+# 所以直接追加 JSONL，读取时按窗口聚合。
+METRICS_FILE = os.getenv("HERMES_METRICS_FILE", "/data/schematic_agent/logs/agent_runs.jsonl")
+_METRICS_LOCK = threading.Lock()
+# 审批看门狗：前端 180s 自动拒绝；用户可能直接关页面，后端更晚一点兜底 deny。
+APPROVAL_TIMEOUT = float(os.getenv("HERMES_APPROVAL_TIMEOUT", "300"))
+
+# run_id → 元信息（project / session），进程内即可：只用于打点和排障。
+_RUNS: Dict[str, Dict[str, Any]] = {}
+_RUNS_LOCK = threading.Lock()
+_MAX_RUNS = 2000
+
+
+def _remember_run(run_id: str, project_id: Optional[str], conversation: str) -> None:
+    with _RUNS_LOCK:
+        if len(_RUNS) >= _MAX_RUNS:
+            for key in list(_RUNS.keys())[: _MAX_RUNS // 4]:
+                _RUNS.pop(key, None)
+        _RUNS[run_id] = {"project_id": project_id, "conversation": conversation, "created": time.time()}
+
+
+def _run_meta(run_id: str) -> Dict[str, Any]:
+    with _RUNS_LOCK:
+        return dict(_RUNS.get(run_id) or {})
+
+
+def _record_metrics(record: Dict[str, Any]) -> None:
+    """打点失败绝不能影响主链路。"""
+    try:
+        record.setdefault("ts", time.time())
+        line = json.dumps(record, ensure_ascii=False)
+        os.makedirs(os.path.dirname(METRICS_FILE) or ".", exist_ok=True)
+        with _METRICS_LOCK:
+            with open(METRICS_FILE, "a", encoding="utf-8") as fh:
+                fh.write(line + "\n")
+    except Exception:
+        pass
+
+
+def _parse_event(raw: bytes) -> Dict[str, Any]:
+    """解析单个 SSE 事件块；event: 名可能只在行首，payload 里也可能带 event。"""
+    name = ""
+    data_lines = []
+    for line in raw.decode("utf-8", "ignore").splitlines():
+        if line.startswith("event:"):
+            name = line[6:].strip()
+        elif line.startswith("data:"):
+            data_lines.append(line[5:].lstrip())
+    payload: Dict[str, Any] = {}
+    if data_lines:
+        try:
+            payload = json.loads("\n".join(data_lines))
+        except ValueError:
+            payload = {}
+    if name and not payload.get("event"):
+        payload["event"] = name
+    return payload
+
+
+class RunTrace:
+    """旁路观测：只读事件流做统计，不阻塞、不影响透传。"""
+
+    def __init__(self, run_id: str, project_id: Optional[str]) -> None:
+        self.run_id = run_id
+        self.project_id = project_id
+        self.started = time.time()
+        self.tools = 0
+        self.approvals = 0
+        self.choices = []
+        self.status = "stream_closed"
+        self.finished = False
+        self.watchdogs = {}
+
+    def consume(self, raw: bytes) -> None:
+        try:
+            event = _parse_event(raw)
+            name = event.get("event", "")
+            if name == "tool.started":
+                self.tools += 1
+            elif name == "approval.request":
+                self.approvals += 1
+                request_id = event.get("request_id")
+                if request_id and request_id not in self.watchdogs:
+                    self.watchdogs[request_id] = asyncio.ensure_future(self._auto_deny(request_id))
+            elif name == "approval.responded":
+                request_id = event.get("request_id")
+                choice = event.get("choice")
+                if choice:
+                    self.choices.append(choice)
+                task = self.watchdogs.pop(request_id, None)
+                if task and not task.done():
+                    task.cancel()
+            elif name in ("run.completed", "run.failed", "run.cancelled", "run.stopped"):
+                self.status = name.split(".", 1)[1]
+                self.finish()
+        except Exception:
+            pass
+
+    async def _auto_deny(self, request_id: str) -> None:
+        """审批无人应答时后端兜底拒绝（绝不自动放行）。
+
+        先记账再发请求：approval.responded 事件可能在我们 POST 的 await 期间到达并
+        cancel 掉本任务，如果先 POST 后记账，自动拒绝就会在指标里消失。
+        """
+        try:
+            await asyncio.sleep(APPROVAL_TIMEOUT)
+        except asyncio.CancelledError:
+            raise
+        # 到点了：无论后面的请求成功与否，都要留下「超时自动拒绝」的证据
+        self.choices.append("auto_deny")
+        _record_metrics({
+            "kind": "approval_timeout", "run_id": self.run_id,
+            "request_id": request_id, "project_id": self.project_id,
+            "timeout_s": APPROVAL_TIMEOUT,
+        })
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                await client.post(
+                    f"{_base_url()}/runs/{self.run_id}/approval",
+                    json={"choice": "deny", "request_id": request_id},
+                    headers=_headers(),
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            pass
+
+    def finish(self) -> None:
+        if self.finished:
+            return
+        self.finished = True
+        for task in self.watchdogs.values():
+            if not task.done():
+                task.cancel()
+        self.watchdogs.clear()
+        _record_metrics({
+            "kind": "run",
+            "run_id": self.run_id,
+            "project_id": self.project_id,
+            "status": self.status,
+            "duration_s": round(time.time() - self.started, 2),
+            "tools": self.tools,
+            "approvals": self.approvals,
+            "choices": self.choices,
+        })
 
 
 def _engine_enabled() -> bool:
@@ -193,7 +342,10 @@ async def create_run(payload: RunCreateRequest) -> Any:
 
     if resp.status_code >= 400:
         return JSONResponse(status_code=resp.status_code, content=_safe_json(resp))
-    return _safe_json(resp)
+    data = _safe_json(resp)
+    if isinstance(data, dict) and data.get("run_id"):
+        _remember_run(str(data["run_id"]), payload.project_id, conversation)
+    return data
 
 
 @router.get("/runs/{run_id}/events")
@@ -219,12 +371,23 @@ async def stream_events(run_id: str, last_seq: Optional[int] = None) -> Streamin
         await client.aclose()
         return JSONResponse(status_code=upstream.status_code, content=_decode_json(raw))
 
+    trace = RunTrace(run_id, _run_meta(run_id).get("project_id"))
+    buffer = b""
+
     async def relay():
+        nonlocal buffer
         try:
             async for chunk in upstream.aiter_raw():
-                if chunk:
-                    yield chunk
+                if not chunk:
+                    continue
+                buffer += chunk
+                while b"\n\n" in buffer:
+                    raw_event, buffer = buffer.split(b"\n\n", 1)
+                    trace.consume(raw_event)
+                yield chunk
         finally:
+            # 客户端断开也要落一条（status=stream_closed），否则「用户关页面」在指标里消失
+            trace.finish()
             await upstream.aclose()
             await client.aclose()
 
@@ -301,3 +464,105 @@ def _decode_json(raw: bytes) -> Any:
 
 def _safe_json(resp: httpx.Response) -> Any:
     return _decode_json(resp.content or b"{}")
+
+
+# ------------------------------------------------------------------ 打点 / 汇总
+class TelemetryEvent(BaseModel):
+    """前端侧事件（回退、渲染失败等），后端只落盘不做业务判断。"""
+
+    event: str = Field(..., max_length=64)
+    detail: Optional[str] = Field(default=None, max_length=500)
+    project_id: Optional[str] = Field(default=None, max_length=64)
+    run_id: Optional[str] = Field(default=None, max_length=80)
+
+
+@router.post("/telemetry")
+async def telemetry(payload: TelemetryEvent) -> Any:
+    _record_metrics({
+        "kind": "telemetry",
+        "event": payload.event,
+        "detail": payload.detail or "",
+        "project_id": payload.project_id,
+        "run_id": payload.run_id,
+    })
+    return {"ok": True}
+
+
+def _percentile(values: list, ratio: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    index = min(len(ordered) - 1, max(0, int(round((len(ordered) - 1) * ratio))))
+    return round(ordered[index], 2)
+
+
+@router.get("/metrics/summary")
+async def metrics_summary(days: float = 7.0) -> Any:
+    """按时间窗聚合 run 指标：成功率、P50/P95 耗时、审批与回退计数。
+
+    只读 JSONL，文件不存在就是空窗口（灰度前天然可用）。
+    """
+    since = time.time() - max(0.0, days) * 86400
+    runs = []
+    approval_timeouts = 0
+    telemetry = []
+    try:
+        if os.path.exists(METRICS_FILE):
+            with open(METRICS_FILE, "r", encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        row = json.loads(line)
+                    except ValueError:
+                        continue
+                    if float(row.get("ts") or 0) < since:
+                        continue
+                    kind = row.get("kind")
+                    if kind == "run":
+                        runs.append(row)
+                    elif kind == "approval_timeout":
+                        approval_timeouts += 1
+                    elif kind == "telemetry":
+                        telemetry.append(row)
+    except OSError:
+        pass
+
+    durations = [float(r.get("duration_s") or 0) for r in runs]
+    by_status: Dict[str, int] = {}
+    choices: Dict[str, int] = {}
+    tools_total = 0
+    approvals_total = 0
+    for row in runs:
+        status = str(row.get("status") or "unknown")
+        by_status[status] = by_status.get(status, 0) + 1
+        tools_total += int(row.get("tools") or 0)
+        approvals_total += int(row.get("approvals") or 0)
+        for choice in row.get("choices") or []:
+            choices[str(choice)] = choices.get(str(choice), 0) + 1
+
+    fallbacks: Dict[str, int] = {}
+    for row in telemetry:
+        event = str(row.get("event") or "")
+        if "fallback" in event:
+            fallbacks[event] = fallbacks.get(event, 0) + 1
+
+    total = len(runs)
+    completed = by_status.get("completed", 0)
+    return {
+        "window_days": days,
+        "runs": total,
+        "completed": completed,
+        "success_rate": round(completed / total, 4) if total else 0.0,
+        "by_status": by_status,
+        "duration_p50_s": _percentile(durations, 0.5),
+        "duration_p95_s": _percentile(durations, 0.95),
+        "tools_avg": round(tools_total / total, 2) if total else 0.0,
+        "approvals": approvals_total,
+        "approval_choices": choices,
+        "approval_timeouts": approval_timeouts,
+        "fallbacks": fallbacks,
+        "fallback_total": sum(fallbacks.values()),
+        "metrics_file": METRICS_FILE,
+    }

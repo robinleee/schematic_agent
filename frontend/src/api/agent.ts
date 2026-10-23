@@ -104,6 +104,22 @@ export const agentApi = {
     return response.data as { resolved?: number };
   },
 
+  /** 前端侧打点（回退等），失败不影响主流程 */
+  telemetry: async (payload: {
+    event: string; detail?: string; projectId?: string; runId?: string;
+  }): Promise<void> => {
+    try {
+      await apiClient.post('/agent/telemetry', {
+        event: payload.event,
+        detail: payload.detail,
+        project_id: payload.projectId,
+        run_id: payload.runId,
+      }, { timeout: 5000 });
+    } catch {
+      /* 打点失败静默 */
+    }
+  },
+
   /** 停止运行中的 run（Hermes 侧 hard interrupt） */
   stopRun: async (runId: string): Promise<{ run_id?: string; status?: string }> => {
     const response = await apiClient.post(`/agent/runs/${runId}/stop`, {}, { timeout: 30000 });

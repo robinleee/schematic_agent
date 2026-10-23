@@ -394,6 +394,12 @@ const ChatContainer: React.FC = () => {
         }
         setEngine('legacy');
         setHealth((prev) => (prev ? { ...prev, upstream: false } : prev));
+        // 回退是验收门指标，必须留下痕迹（失败静默）
+        void agentApi.telemetry({
+          event: 'hermes.fallback',
+          detail: apiErrorText(error).slice(0, 200),
+          projectId: scopedProjectId,
+        });
         addMessage({
           id: `notice-${Date.now()}`,
           role: 'assistant',
