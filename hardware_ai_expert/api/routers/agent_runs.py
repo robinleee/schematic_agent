@@ -258,6 +258,21 @@ async def submit_approval(run_id: str, payload: ApprovalRequest) -> Any:
     return _safe_json(resp)
 
 
+@router.post("/runs/{run_id}/stop")
+async def stop_run(run_id: str) -> Any:
+    """中断运行中的 run（Hermes 侧 hard interrupt，含回收子进程）。"""
+    run_id = _validate_run_id(run_id)
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(f"{_base_url()}/runs/{run_id}/stop", headers=_headers())
+    except httpx.HTTPError as exc:
+        raise _upstream_error(exc)
+
+    if resp.status_code >= 400:
+        return JSONResponse(status_code=resp.status_code, content=_safe_json(resp))
+    return _safe_json(resp)
+
+
 @router.get("/runs/{run_id}")
 async def get_run(run_id: str) -> Any:
     run_id = _validate_run_id(run_id)
