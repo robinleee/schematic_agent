@@ -43,8 +43,8 @@ export interface Message {
   timestamp: string;
   reasoningTrace?: ReasoningStep[];
   taskType?: string;
-  /** Hermes 引擎：待审批/已审批的写工具调用 */
-  approval?: ApprovalState;
+  /** Hermes 引擎：待审批/已审批的写工具调用（一个 run 可能多次触发） */
+  approvals?: ApprovalState[];
   /** 运行过程提示（工具调用等），仅 Hermes 引擎使用 */
   progress?: string[];
 }

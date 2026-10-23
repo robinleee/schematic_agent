@@ -11,7 +11,7 @@ const { Paragraph, Text } = Typography;
 
 interface MessageItemProps {
   message: Message;
-  onApprovalDecide?: (messageId: string, choice: ApprovalChoice) => void;
+  onApprovalDecide?: (messageId: string, requestId: string, choice: ApprovalChoice) => void;
 }
 
 const MessageItem: React.FC<MessageItemProps> = ({ message, onApprovalDecide }) => {
@@ -66,13 +66,14 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, onApprovalDecide }) 
               ))}
             </div>
           )}
-          {message.approval && (
+          {message.approvals?.map((approval) => (
             <ApprovalCard
-              approval={message.approval}
-              busy={message.approval.status === 'pending' && Boolean(message.approval.error)}
-              onDecide={(choice) => onApprovalDecide?.(message.id, choice)}
+              key={approval.requestId}
+              approval={approval}
+              busy={approval.status === 'pending' && Boolean(approval.error)}
+              onDecide={(choice) => onApprovalDecide?.(message.id, approval.requestId, choice)}
             />
-          )}
+          ))}
           <div style={{ marginTop: 8, textAlign: 'right' }}>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               {new Date(message.timestamp).toLocaleTimeString()}

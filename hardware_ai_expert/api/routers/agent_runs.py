@@ -11,6 +11,9 @@
 """
 import os
 import re
+import threading
+import time
+import uuid
 from typing import Any, Dict, Optional
 
 import httpx
@@ -21,10 +24,62 @@ from pydantic import BaseModel, Field
 router = APIRouter(prefix="/agent", tags=["agent"])
 
 RUN_ID_RE = re.compile(r"^run_[0-9a-f]{8,64}$")
+IDENT_RE = re.compile(r"^[\w.\-]{1,64}$")
 DEFAULT_BASE = "http://127.0.0.1:8642/p/schematic/v1"
 DEFAULT_ENV_FILE = "/data/hermes/profiles/schematic/.env"
 # 上游 SSE 可能长时间静默（模型思考），read 超时给足；连接超时要短。
 _TIMEOUT = httpx.Timeout(connect=10.0, read=600.0, write=30.0, pool=10.0)
+
+# 会话 → 项目 绑定（一会话一项目）。进程内存储：单 worker 部署足够；
+# 多 worker / 多副本部署需换成 Redis 或库表。
+_SESSIONS: Dict[str, Dict[str, Any]] = {}
+_SESSIONS_LOCK = threading.Lock()
+_SESSION_TTL = float(os.getenv("HERMES_SESSION_TTL", "86400"))
+_MAX_SESSIONS = 2000
+
+
+def _engine_enabled() -> bool:
+    return os.getenv("HERMES_ENGINE_ENABLED", "1").strip().lower() not in ("0", "false", "no", "off")
+
+
+def _prune_sessions(now: float) -> None:
+    if len(_SESSIONS) < _MAX_SESSIONS:
+        return
+    for key, item in list(_SESSIONS.items()):
+        if now - item["ts"] > _SESSION_TTL:
+            _SESSIONS.pop(key, None)
+    if len(_SESSIONS) >= _MAX_SESSIONS:  # 仍然太满：丢最旧的一半
+        for key, _ in sorted(_SESSIONS.items(), key=lambda kv: kv[1]["ts"])[: _MAX_SESSIONS // 2]:
+            _SESSIONS.pop(key, None)
+
+
+def _bind_session(session_id: str, project_id: Optional[str]) -> None:
+    """同一会话不允许跨项目；首次请求绑定，后续不一致直接拒绝。"""
+    if not session_id:
+        return
+    now = time.time()
+    with _SESSIONS_LOCK:
+        _prune_sessions(now)
+        item = _SESSIONS.get(session_id)
+        if item and now - item["ts"] <= _SESSION_TTL:
+            if item["project_id"] != project_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"会话已绑定项目 {item['project_id'] or '(全库)'}，"
+                        f"不能切换到 {project_id or '(全库)'}；请新建会话"
+                    ),
+                )
+            item["ts"] = now
+            return
+        _SESSIONS[session_id] = {"project_id": project_id, "ts": now}
+
+
+def _session_key(user_id: Optional[str], project_id: Optional[str], conversation_id: str) -> str:
+    user = user_id if user_id and IDENT_RE.match(user_id) else "web"
+    project = project_id if project_id and IDENT_RE.match(project_id) else "all"
+    conversation = conversation_id if IDENT_RE.match(conversation_id) else uuid.uuid4().hex
+    return f"{user}:{project}:{conversation}"
 
 
 def _env_file_key() -> str:
@@ -78,7 +133,8 @@ def _upstream_error(exc: httpx.HTTPError) -> HTTPException:
 
 class RunCreateRequest(BaseModel):
     input: str = Field(..., min_length=1, description="用户输入")
-    session_id: Optional[str] = Field(default=None, max_length=128)
+    session_id: Optional[str] = Field(default=None, max_length=128, description="前端会话id（conversation）")
+    user_id: Optional[str] = Field(default=None, max_length=64)
     project_id: Optional[str] = None
     model: Optional[str] = None
 
@@ -89,12 +145,43 @@ class ApprovalRequest(BaseModel):
     scope: Optional[str] = None
 
 
+@router.get("/health")
+async def agent_health() -> Dict[str, Any]:
+    """前端灰度开关依据：是否开启 + 上游网关是否可达。"""
+    enabled = _engine_enabled()
+    upstream = False
+    detail = ""
+    if enabled:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                resp = await client.get(f"{_base_url()}/models", headers=_headers())
+            upstream = resp.status_code < 400
+            detail = "" if upstream else _decode_json(resp.content or b"{}").get("error", f"HTTP {resp.status_code}")
+        except HTTPException as exc:
+            detail = str(exc.detail)
+        except httpx.HTTPError as exc:
+            detail = exc.__class__.__name__
+    return {
+        "enabled": enabled,
+        "upstream": upstream,
+        "detail": detail,
+        "bound_project": _bound_project(),
+        "base_url": _base_url(),
+    }
+
+
 @router.post("/runs")
 async def create_run(payload: RunCreateRequest) -> Any:
+    if not _engine_enabled():
+        raise HTTPException(status_code=503, detail="Hermes 引擎灰度未开启（HERMES_ENGINE_ENABLED=0）")
     _check_project(payload.project_id)
-    body: Dict[str, Any] = {"input": payload.input}
-    if payload.session_id:
-        body["session_id"] = payload.session_id
+    conversation = payload.session_id or uuid.uuid4().hex
+    _bind_session(conversation, payload.project_id)
+
+    body: Dict[str, Any] = {
+        "input": payload.input,
+        "session_id": _session_key(payload.user_id, payload.project_id, conversation),
+    }
     if payload.model:
         body["model"] = payload.model
 

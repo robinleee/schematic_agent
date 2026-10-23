@@ -1,6 +1,6 @@
 // Chat container component
-import React, { useCallback, useRef, useState } from 'react';
-import { Button, Space, Typography, Card, Switch, Select, Tooltip } from 'antd';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Button, Space, Typography, Card, Switch, Select, Tooltip, Tag } from 'antd';
 import { ClearOutlined, ExperimentOutlined } from '@ant-design/icons';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
@@ -8,7 +8,7 @@ import { useChatStore } from '@/stores';
 import { useProjectStore } from '@/stores/useProjectStore';
 import { chatApi, agentApi } from '@/api';
 import type { Message, ReasoningStep } from '@/types/chat';
-import type { AgentRunEvent, ApprovalChoice, ApprovalState } from '@/types/agent';
+import type { AgentHealth, AgentRunEvent, ApprovalChoice, ApprovalState } from '@/types/agent';
 import { useChatWebSocket } from '@/hooks/useWebSocket';
 import { apiErrorText } from '@/api/client';
 
@@ -19,6 +19,12 @@ type Engine = 'legacy' | 'hermes';
 /** 审批倒计时，超时前端自动拒绝（后端仍会等，绝不会自动放行） */
 const APPROVAL_TTL_MS = 180_000;
 
+/** Hermes 侧不可用（未开启 / 网关不通 / 代理 5xx），需要回退经典引擎 */
+function isHermesUnavailable(error: unknown): boolean {
+  const text = apiErrorText(error);
+  return /HTTP (502|503|504)|SSE 连接失败|Hermes 网关不可用|灰度未开启/.test(text);
+}
+
 const ChatContainer: React.FC = () => {
   const { messages, isLoading, setLoading, addMessage, updateLastAssistantMessage, updateMessage, clearMessages } = useChatStore();
   const currentProject = useProjectStore((state) => state.currentProject);
@@ -27,9 +33,10 @@ const ChatContainer: React.FC = () => {
   const scopedProjectId = currentProject === 'default' ? undefined : currentProject;
   const [streaming, setStreaming] = useState(false);
   const [engine, setEngine] = useState<Engine>('legacy');
+  const [health, setHealth] = useState<AgentHealth | null>(null);
   const trace = useRef<ReasoningStep[]>([]);
   const busy = useRef(false);
-  // Hermes 引擎：一个浏览器会话对应一个 Hermes session_id
+  // Hermes 引擎：一个浏览器会话对应一个 conversation（后端再拼成 user:project:conversation）
   const sessionId = useRef<string>(
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
@@ -37,6 +44,15 @@ const ChatContainer: React.FC = () => {
   );
   const abortRef = useRef<AbortController | null>(null);
   const finish = useCallback(() => { busy.current = false; setLoading(false); }, [setLoading]);
+
+  useEffect(() => {
+    let alive = true;
+    agentApi.health()
+      .then((result) => { if (alive) setHealth(result); })
+      .catch(() => { if (alive) setHealth(null); });
+    return () => { alive = false; };
+  }, []);
+
   const { connect, disconnect, send, isConnected } = useChatWebSocket({
     onStep: (step) => {
       trace.current = [...trace.current, step];
@@ -55,7 +71,7 @@ const ChatContainer: React.FC = () => {
     },
   });
 
-  const handleHermesSend = useCallback(async (message: string, taskType?: string) => {
+  const runHermes = useCallback(async (message: string, taskType?: string) => {
     const assistantId = `assistant-${Date.now()}`;
     let text = '';
     let progress: string[] = [];
@@ -70,7 +86,7 @@ const ChatContainer: React.FC = () => {
       timestamp: new Date().toISOString(), reasoningTrace: [], taskType, progress: [],
     });
 
-    const onEvent = (event: AgentRunEvent) => {
+    const applyEvent = (event: AgentRunEvent) => {
       switch (event.event) {
         case 'message.delta':
           text += event.delta ?? '';
@@ -99,7 +115,8 @@ const ChatContainer: React.FC = () => {
             deadline: Date.now() + APPROVAL_TTL_MS,
           };
           progress = [...progress, `等待审批：${lastTool ?? '写工具'}`];
-          patch({ approval });
+          const existing = useChatStore.getState().messages.find((m) => m.id === assistantId)?.approvals ?? [];
+          patch({ approvals: [...existing, approval] });
           break;
         }
         case 'run.completed':
@@ -113,75 +130,58 @@ const ChatContainer: React.FC = () => {
       }
     };
 
+    // 创建失败会抛给上层，由 handleSend 决定是否回退经典引擎
+    const run = await agentApi.createRun({
+      input: message,
+      sessionId: sessionId.current,
+      projectId: scopedProjectId,
+    });
+    const runId = run.run_id;
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const run = await agentApi.createRun({
-        input: message,
-        sessionId: sessionId.current,
-        projectId: scopedProjectId,
-      });
-      // 审批卡片需要 run_id 才能回传决定
-      const runId = run.run_id;
-      const originalOnEvent = onEvent;
-      const controller = new AbortController();
-      abortRef.current = controller;
       await agentApi.streamRun(runId, {
         signal: controller.signal,
         onEvent: (event) => {
           if (event.event === 'approval.request' && !event.run_id) event.run_id = runId;
-          originalOnEvent(event);
+          applyEvent(event);
         },
       });
     } catch (error) {
       updateMessage(assistantId, {
-        content: `${text}\n\n发生错误：${apiErrorText(error)}`.trim(),
+        content: `${text}\n\n事件流中断：${apiErrorText(error)}`.trim(),
       });
       finish();
     }
   }, [addMessage, updateMessage, finish, scopedProjectId]);
 
-  const handleApprovalDecide = useCallback(async (messageId: string, choice: ApprovalChoice) => {
+  const handleApprovalDecide = useCallback(async (
+    messageId: string, requestId: string, choice: ApprovalChoice,
+  ) => {
     const target = useChatStore.getState().messages.find((item) => item.id === messageId);
-    const approval = target?.approval;
+    const approval = target?.approvals?.find((item) => item.requestId === requestId);
     if (!approval || approval.status !== 'pending') return;
 
     const expired = Boolean(approval.deadline && Date.now() >= approval.deadline);
     const effective: ApprovalChoice = expired ? 'deny' : choice;
+    const patch = (extra: Partial<ApprovalState>) => {
+      const list = useChatStore.getState().messages
+        .find((item) => item.id === messageId)?.approvals ?? [];
+      updateMessage(messageId, {
+        approvals: list.map((item) => (item.requestId === requestId ? { ...item, ...extra } : item)),
+      });
+    };
 
-    updateMessage(messageId, { approval: { ...approval, choice: effective } });
+    patch({ choice: effective });
     try {
       await agentApi.submitApproval(approval.runId, effective, approval.requestId);
-      updateMessage(messageId, {
-        approval: {
-          ...approval,
-          choice: effective,
-          status: expired ? 'expired' : effective === 'deny' ? 'denied' : 'approved',
-        },
-      });
+      patch({ status: expired ? 'expired' : effective === 'deny' ? 'denied' : 'approved' });
     } catch (error) {
-      updateMessage(messageId, {
-        approval: { ...approval, status: 'error', error: apiErrorText(error) },
-      });
+      patch({ status: 'error', error: apiErrorText(error) });
     }
   }, [updateMessage]);
 
-  const handleSend = useCallback(async (message: string, taskType?: string) => {
-    // Add user message
-    const userMessage: Message = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: message,
-      timestamp: new Date().toISOString(),
-      taskType,
-    };
-    addMessage(userMessage);
-    setLoading(true);
-
-    if (engine === 'hermes') {
-      busy.current = true;
-      await handleHermesSend(message, taskType);
-      return;
-    }
-
+  const runLegacy = useCallback(async (message: string, taskType?: string) => {
     if (streaming) {
       trace.current = [];
       addMessage({ id: `assistant-${Date.now()}`, role: 'assistant', content: '正在推理…',
@@ -200,31 +200,70 @@ const ChatContainer: React.FC = () => {
         task_type: taskType as 'review' | 'diagnosis' | 'query' | 'auto' | undefined,
         project_id: scopedProjectId,
       });
-
-      // Add assistant message
-      const assistantMessage: Message = {
+      addMessage({
         id: `assistant-${Date.now()}`,
         role: 'assistant',
         content: response.data.report || `状态：${response.data.status}`,
         timestamp: response.timestamp,
         reasoningTrace: response.data.execution_trace,
         taskType: response.data.task_type,
-      };
-      addMessage(assistantMessage);
+      });
     } catch (error) {
       console.error('Chat error:', error);
-      const errorMessage: Message = {
+      addMessage({
         id: `error-${Date.now()}`,
         role: 'assistant',
         content: `发生错误: ${apiErrorText(error)}`,
         timestamp: new Date().toISOString(),
-      };
-      addMessage(errorMessage);
+      });
     } finally {
       setLoading(false);
     }
-  }, [addMessage, setLoading, streaming, send, updateLastAssistantMessage, finish, scopedProjectId,
-      engine, handleHermesSend]);
+  }, [addMessage, setLoading, streaming, send, updateLastAssistantMessage, finish, scopedProjectId]);
+
+  const handleSend = useCallback(async (message: string, taskType?: string) => {
+    addMessage({
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: message,
+      timestamp: new Date().toISOString(),
+      taskType,
+    });
+    setLoading(true);
+
+    if (engine === 'hermes') {
+      busy.current = true;
+      try {
+        await runHermes(message, taskType);
+        return;
+      } catch (error) {
+        if (!isHermesUnavailable(error)) {
+          addMessage({
+            id: `error-${Date.now()}`,
+            role: 'assistant',
+            content: `Hermes 引擎出错：${apiErrorText(error)}`,
+            timestamp: new Date().toISOString(),
+          });
+          finish();
+          return;
+        }
+        setEngine('legacy');
+        setHealth((prev) => (prev ? { ...prev, upstream: false } : prev));
+        addMessage({
+          id: `notice-${Date.now()}`,
+          role: 'assistant',
+          content: `Hermes 引擎不可用（${apiErrorText(error)}），已自动切回经典引擎重试。`,
+          timestamp: new Date().toISOString(),
+        });
+        setStreaming(false);
+        disconnect();
+      }
+    }
+
+    await runLegacy(message, taskType);
+  }, [addMessage, setLoading, engine, runHermes, finish, runLegacy, disconnect]);
+
+  const hermesAvailable = health ? health.enabled : false;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -237,7 +276,7 @@ const ChatContainer: React.FC = () => {
               <Select
                 size="small"
                 value={engine}
-                style={{ width: 130 }}
+                style={{ width: 150 }}
                 onChange={(value: Engine) => {
                   setEngine(value);
                   if (value === 'hermes' && streaming) { setStreaming(false); disconnect(); }
@@ -245,11 +284,20 @@ const ChatContainer: React.FC = () => {
                 disabled={isLoading}
                 options={[
                   { value: 'legacy', label: '经典引擎' },
-                  { value: 'hermes', label: 'Hermes 引擎' },
+                  {
+                    value: 'hermes',
+                    label: hermesAvailable ? 'Hermes 引擎' : 'Hermes（未开启）',
+                    disabled: !hermesAvailable,
+                  },
                 ]}
               />
             </Space>
           </Tooltip>
+          {engine === 'hermes' && health && (
+            <Tag color={health.upstream ? 'green' : 'red'}>
+              {health.upstream ? '网关正常' : `网关不可用${health.detail ? `：${health.detail}` : ''}`}
+            </Tag>
+          )}
           {engine === 'legacy' && (
             <>
               <span>流式对话 {streaming && (isConnected ? '已连接' : '连接中')}</span>

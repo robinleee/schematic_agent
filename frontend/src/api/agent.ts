@@ -1,6 +1,7 @@
 // Hermes agent run API（HTTP + SSE）
 import apiClient from './client';
 import type {
+  AgentHealth,
   AgentRunCreateResponse,
   AgentRunEvent,
   AgentRunState,
@@ -63,6 +64,11 @@ function createSseParser(onEvent: (event: AgentRunEvent) => void) {
 }
 
 export const agentApi = {
+  /** 灰度开关 + 网关可达性 */
+  health: async (): Promise<AgentHealth> => {
+    const response = await apiClient.get<AgentHealth>('/agent/health', { timeout: 8000 });
+    return response.data;
+  },
   createRun: async (params: CreateRunParams): Promise<AgentRunCreateResponse> => {
     const body: Record<string, unknown> = { input: params.input };
     if (params.sessionId) body.session_id = params.sessionId;

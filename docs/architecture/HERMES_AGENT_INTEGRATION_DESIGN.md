@@ -114,13 +114,17 @@ Hermes Agent 已具备：
 
 ### 5.1 会话键
 
+Hermes `POST /runs` 请求体字段 `session_id`：
+
 ```
-X-Hermes-Session-Id: {user_id}:{project_id}:{conversation_id}
+{user_id}:{project_id}:{conversation_id}
 ```
 
-- 由 FastAPI 生成与维护，Hermes 不解析语义
-- 一个 conversation 只对应一个 project；切换项目必须新开 conversation
-- 会话过期与清理沿用 Hermes `session_store_max_age_days`，FastAPI 侧维护映射表
+- 由 FastAPI 组合（`api/routers/agent_runs.py::_session_key`），Hermes 不解析语义
+- `user_id` 缺省 `web`；`project_id` 缺省 `all`（全库）；非法字符按 uuid 重新生成
+- 一个 conversation 只对应一个 project：FastAPI 维护 `conversation → project` 绑定表，不一致返回 **409**（`HERMES_SESSION_TTL`，默认 24h）
+- 绑定表是**进程内**存储（单 worker 部署成立）；多 worker / 多副本需换 Redis 或库表
+- 清理沿用 Hermes `session_store_max_age_days`，FastAPI 侧仅做 TTL 淘汰（上限 2000 条）
 
 ### 5.2 项目上下文注入
 
@@ -130,8 +134,9 @@ X-Hermes-Session-Id: {user_id}:{project_id}:{conversation_id}
 
 ### 5.3 MCP 传输
 
-- 生产：HTTP（便于多会话共享与健康检查）
-- 开发：stdio（便于本地调试）
+- **当前实现：stdio** — profile 配置 `.venv-mcp/bin/python -m mcp_server.server`，由 Hermes 网关作为子进程管理
+  - 改 MCP 代码后子进程不会自动重载：需重启网关（`echo caros | sudo -S systemctl restart hermes-gateway-cfa4b284`）或杀掉子进程
+- 生产拟改 HTTP（多会话共享 + 健康检查），**尚未实施**
 - 每个 Hermes profile 配置独立 server 条目，`trust: untrusted`（强制写工具审批）
 
 ### 5.4 工具返回
@@ -153,7 +158,7 @@ LLM 可见 `summary` 与必要的 `data`；完整数据留在服务端，避免�
 
 ---
 
-## 6. 工具面设计（8 个）
+## 6. 工具面设计（6 只读 + 2 写门控）
 
 | 工具 | 能力 | readOnlyHint | 底层实现 |
 |---|---|---|---|
@@ -172,6 +177,11 @@ LLM 可见 `summary` 与必要的 `data`；完整数据留在服务端，避免�
 - `diagnose_fault` 内部可串行多步，减少往返
 - `query_graph` 保留为通用逃生口，避免能力被封死
 - 工具数量控制在 8，降低模型选择噪声
+
+> **实施说明（2026-10-23）**：
+> 1. 2 个写工具仅当 `SCHEMATIC_ENABLE_WRITE_TOOLS=1` 时注册，默认只暴露 6 个只读工具（实测 `=0` 时注册数为 6）；
+> 2. `search_knowledge` 实走 FastAPI `/api/v1/knowledge/search`（HTTP 能力复用），未在 MCP 进程内直连 ChromaDB / GraphRAG；
+> 3. 工具异常统一转成 `[scope-denied]`/错误文本返回，避免 MCP SDK 把堆栈折叠成无信息错误。
 
 ---
 
@@ -244,7 +254,7 @@ compression:
 |---|---|---|
 | **P0** | 抽 MCP Server：工具聚合封装、`readOnlyHint` 注解、项目校验 | 独立进程跑通只读工具，现网零改动 |
 | **P1** | 建独立 Hermes profile，接 MCP，打通审批链路 | 写工具审批端到端可用 |
-| **P2** | FastAPI 引入 `AgentEngine`，Hermes 灰度 10% → 50% → 100% | 灰度期无回退触发 |
+| **P2** | FastAPI 引入 `AgentEngine`，Hermes 灰度 10% → 50% → 100%（**进行中**：代理 + 审批卡片 + 会话绑定 + 灰度开关/自动回退已就绪） | 灰度期无回退触发 |
 | **P3** | 双跑对比评测 | 通过验收门 |
 | **P4** | 移除 `AgentOrchestrator` / `ReActAgent` | 验收通过且稳定 2 周 |
 
@@ -355,3 +365,91 @@ hardware_ai_expert/mcp_server/
 **审批链路已验证**：`POST /v1/runs` → SSE `/v1/runs/{id}/events` 收到 `approval.request`（含 `request_id`、`choices`）→ `POST /v1/runs/{id}/approval` → 工具执行/拦截。拒绝与批准两条路径均实测。
 
 **工具集**：只读 6 个默认注册；写工具 2 个需 `SCHEMATIC_ENABLE_WRITE_TOOLS=1`，且因无 `readOnlyHint=true` 而强制走审批（未知 annotation 视为写能力，fail-safe）。
+
+---
+
+## 15. P1 实施结果（2026-10-23）
+
+### 15.1 交付清单
+
+| 层 | 交付物 | 状态 |
+|---|---|---|
+| MCP | `hardware_ai_expert/mcp_server/`（6 只读 + 2 写门控）、`.venv-mcp`（py3.12） | ✅ 已合入 `work/legacy-tasks-20260704` |
+| 领域修复 | `hitl_workflow.py`：`load_pending` + 项目作用域 + 不再谎报成功 | ✅ `a925cda` |
+| Hermes | 独立 profile `schematic`、MCP 注入、共享监听器镜像 `/p/schematic/v1` | ✅ 本机（`127.0.0.1:8642`） |
+| 后端 | `api/routers/agent_runs.py`：运行代理 + SSE 透传 + 审批转发 + 会话绑定 + 灰度/健康 | ✅ `d858d59` 起 |
+| 前端 | `types/agent.ts`、`api/agent.ts`、`ApprovalCard.tsx`、`ChatContainer` 引擎切换 | ✅ 构建通过、浏览器 E2E 通过 |
+
+### 15.2 接口契约（产品侧）
+
+前端**不直连** Hermes，一律走 FastAPI，网关密钥只留服务端。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/api/v1/agent/runs` | 创建 run；body：`input` / `session_id?` / `user_id?` / `project_id?` / `model?` |
+| GET | `/api/v1/agent/runs/{run_id}/events` | SSE 事件流（原样透传，`X-Accel-Buffering: no`） |
+| POST | `/api/v1/agent/runs/{run_id}/approval` | body：`choice`（`once`/`session`/`always`/`deny`）/ `request_id` |
+| GET | `/api/v1/agent/runs/{run_id}` | 查询状态与最终 `output` |
+| GET | `/api/v1/agent/health` | `{enabled, upstream, detail, bound_project, base_url}` |
+
+环境变量：
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `HERMES_API_BASE` | `http://127.0.0.1:8642/p/schematic/v1` | 网关镜像基址 |
+| `HERMES_API_KEY` | 空 → 回落读 profile `.env` 的 `API_SERVER_KEY` | 服务端鉴权 |
+| `HERMES_BOUND_PROJECT` | `legacy` | 部署级项目白名单，不一致即 409 |
+| `HERMES_ENGINE_ENABLED` | `1` | 灰度总开关；`0` 时 `/runs` 返回 503、前端置灰 |
+| `HERMES_SESSION_TTL` | `86400` | 会话→项目绑定 TTL（秒） |
+
+### 15.3 事件契约（实测）
+
+`message.delta{delta}` / `tool.started{tool,preview}` / `tool.completed{tool,duration,error}` / `reasoning.available{text}` / `approval.request{...}` / `approval.responded{choice,request_id,resolved}` / `run.completed{output,...}`
+
+`approval.request` **实际字段**（重要偏差）：
+
+```
+{command, description, pattern_key: "mcp_elicitation", pattern_keys: [...],
+ request_id, choices: ["once","session","always","deny"], event, run_id, timestamp}
+```
+
+**没有 `tool` 字段** —— 前端只能用前一条 `tool.started.tool` 配对工具名（当前实现即如此）。如果未来 Hermes 增加该字段，应优先使用。
+
+### 15.4 审批时序与超时
+
+```
+前端 ──POST /runs──────────────▶ FastAPI ──POST /runs──▶ Hermes
+前端 ◀─SSE approval.request──── FastAPI ◀──SSE────────── Hermes   （tool.started 后）
+     └─ 渲染审批卡片（工具名 + 倒计时 180s）
+用户点「仅本次允许」 → POST /runs/{id}/approval{choice:once,request_id}
+Hermes 收到 → approval.responded{resolved:1} → 工具真执行
+deny / 超时 → 工具不执行，模型收到 “user did not approve … NOT run”
+```
+
+- 前端超时（180s）自动提交 `deny`，卡片标记 `expired`；**任何情况下都不会自动放行**
+- 后端 SSE `read` 超时 600s，避免模型思考期被误断
+- 非交互调用（`hermes -q --oneshot`）由 Hermes 自动拒绝（fail-closed）
+
+### 15.5 灰度与回退
+
+- 前端 Chat 头部引擎切换：`经典引擎`（默认，现有 ReAct/WS 链路）/ `Hermes 引擎`
+- `GET /agent/health` 决定 Hermes 选项是否可用；网关不可用时按钮置灰并显示原因
+- 自动回退：`/runs` 返回 502/503/504、SSE 建连失败、`灰度未开启` → 前端插一条提示消息并**立即改走经典引擎重试**，无需用户干预
+- 回退不影响既有链路：`/api/v1/chat`、`/ws/chat` 代码零改动
+
+### 15.6 与设计的偏差（需知）
+
+| 设计 | 实际 | 原因 |
+|---|---|---|
+| 会话键放 `X-Hermes-Session-Id` 头 | 放 `POST /runs` body 的 `session_id` | Hermes 该 API 只认 body 字段 |
+| 8 工具全部注册 | 6 只读 + 2 写（门控） | 写能力默认关闭，最小权限 |
+| MCP 生产走 HTTP | 当前 stdio | HTTP 传输层尚未实现，stdio 已满足单机部署 |
+| `search_knowledge` 直连 GraphRAG | 走 FastAPI HTTP 能力 | 复用现网实现，避免在 MCP 进程重建客户端 |
+| 审批卡片「后端超时收敛」 | 前端 180s 超时 + 后端透传 | 后端不做超时裁决，避免与 Hermes 会话状态竞争 |
+
+### 15.7 已知风险（待处理）
+
+1. **Hermes 工具面过宽**：`schematic` profile 目前仍带 `terminal` / 文件系统等内置工具，实测模型会 SSH 回宿主机核查（已观察到 `terminal` 调用 2s）。生产前应 `agent.enabled_toolsets` 收敛到 `mcp` 最小集，否则等于把宿主机 shell 交给模型。
+2. **会话绑定表在进程内**：uvicorn 多 worker / 多副本会失效，需 Redis。
+3. ~~审批卡片与消息合并~~：已改为 `approvals: ApprovalState[]`，按 `request_id` 渲染多张卡片并各自结算（2026-10-23 修复）。
+4. 设计文档第 9 节模型配置仍写旧值，需按 `schematic` profile 实际的 `DeepSeek-V4.1-Flash` 配置更新。

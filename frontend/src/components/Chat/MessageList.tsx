@@ -8,7 +8,7 @@ import MessageItem from './MessageItem';
 interface MessageListProps {
   messages: Message[];
   isLoading?: boolean;
-  onApprovalDecide?: (messageId: string, choice: ApprovalChoice) => void;
+  onApprovalDecide?: (messageId: string, requestId: string, choice: ApprovalChoice) => void;
 }
 
 const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, onApprovalDecide }) => {

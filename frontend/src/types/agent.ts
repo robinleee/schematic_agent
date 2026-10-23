@@ -59,6 +59,14 @@ export interface AgentRunState {
   completed?: boolean;
 }
 
+export interface AgentHealth {
+  enabled: boolean;
+  upstream: boolean;
+  detail?: string;
+  bound_project?: string | null;
+  base_url?: string;
+}
+
 export const APPROVAL_LABELS: Record<ApprovalChoice, string> = {
   once: '仅本次允许',
   session: '本会话内允许',
