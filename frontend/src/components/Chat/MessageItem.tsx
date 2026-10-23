@@ -3,15 +3,18 @@ import React from 'react';
 import { Avatar, Card, Typography, Tag } from 'antd';
 import { UserOutlined, RobotOutlined } from '@ant-design/icons';
 import type { Message } from '@/types/chat';
+import type { ApprovalChoice } from '@/types/agent';
 import ReasoningChain from './ReasoningChain';
+import ApprovalCard from './ApprovalCard';
 
-const { Paragraph } = Typography;
+const { Paragraph, Text } = Typography;
 
 interface MessageItemProps {
   message: Message;
+  onApprovalDecide?: (messageId: string, choice: ApprovalChoice) => void;
 }
 
-const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
+const MessageItem: React.FC<MessageItemProps> = ({ message, onApprovalDecide }) => {
   const isUser = message.role === 'user';
 
   return (
@@ -53,6 +56,22 @@ const MessageItem: React.FC<MessageItemProps> = ({ message }) => {
           </Paragraph>
           {message.reasoningTrace && message.reasoningTrace.length > 0 && (
             <ReasoningChain steps={message.reasoningTrace} />
+          )}
+          {message.progress && message.progress.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              {message.progress.slice(-4).map((item, index) => (
+                <div key={`${item}-${index}`}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>{item}</Text>
+                </div>
+              ))}
+            </div>
+          )}
+          {message.approval && (
+            <ApprovalCard
+              approval={message.approval}
+              busy={message.approval.status === 'pending' && Boolean(message.approval.error)}
+              onDecide={(choice) => onApprovalDecide?.(message.id, choice)}
+            />
           )}
           <div style={{ marginTop: 8, textAlign: 'right' }}>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>

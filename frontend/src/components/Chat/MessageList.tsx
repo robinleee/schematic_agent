@@ -2,14 +2,16 @@
 import React, { useEffect, useRef } from 'react';
 import { Empty, Spin } from 'antd';
 import type { Message } from '@/types/chat';
+import type { ApprovalChoice } from '@/types/agent';
 import MessageItem from './MessageItem';
 
 interface MessageListProps {
   messages: Message[];
   isLoading?: boolean;
+  onApprovalDecide?: (messageId: string, choice: ApprovalChoice) => void;
 }
 
-const MessageList: React.FC<MessageListProps> = ({ messages, isLoading }) => {
+const MessageList: React.FC<MessageListProps> = ({ messages, isLoading, onApprovalDecide }) => {
   const listEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -28,7 +30,7 @@ const MessageList: React.FC<MessageListProps> = ({ messages, isLoading }) => {
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '16px 0' }}>
       {messages.map((msg) => (
-        <MessageItem key={msg.id} message={msg} />
+        <MessageItem key={msg.id} message={msg} onApprovalDecide={onApprovalDecide} />
       ))}
       {isLoading && (
         <div style={{ textAlign: 'center', padding: 16 }}>

@@ -1,4 +1,5 @@
 // Chat types
+import type { ApprovalState } from './agent';
 export type TaskType = 'review' | 'diagnosis' | 'query' | 'auto';
 
 export interface ReasoningStep {
@@ -42,4 +43,8 @@ export interface Message {
   timestamp: string;
   reasoningTrace?: ReasoningStep[];
   taskType?: string;
+  /** Hermes 引擎：待审批/已审批的写工具调用 */
+  approval?: ApprovalState;
+  /** 运行过程提示（工具调用等），仅 Hermes 引擎使用 */
+  progress?: string[];
 }

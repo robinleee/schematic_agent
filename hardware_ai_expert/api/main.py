@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from .routers import chat, review, hitl, knowledge, etl, graph, system
+from .routers import chat, review, hitl, knowledge, etl, graph, system, agent_runs
 from .websocket.chat_ws import handle_chat_websocket
 from .schemas.base import BaseResponse
 from .security import SecurityBoundary, settings
@@ -50,6 +50,7 @@ app.include_router(knowledge.router, prefix="/api/v1")
 app.include_router(etl.router, prefix="/api/v1")
 app.include_router(graph.router, prefix="/api/v1")
 app.include_router(system.router, prefix="/api/v1")
+app.include_router(agent_runs.router, prefix="/api/v1")
 
 
 # WebSocket endpoint

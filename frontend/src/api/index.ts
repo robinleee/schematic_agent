@@ -1,6 +1,7 @@
 // Re-export all API modules
 export { default as apiClient } from './client';
 export { default as chatApi } from './chat';
+export { default as agentApi } from './agent';
 export { default as reviewApi } from './review';
 export { default as hitlApi } from './hitl';
 export { default as knowledgeApi } from './knowledge';

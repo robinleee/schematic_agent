@@ -8,6 +8,7 @@ interface ChatState {
   currentTaskType: 'review' | 'diagnosis' | 'query' | null;
   addMessage: (message: Message) => void;
   updateLastAssistantMessage: (content: string, trace?: ReasoningStep[]) => void;
+  updateMessage: (id: string, patch: Partial<Message>) => void;
   setLoading: (loading: boolean) => void;
   setTaskType: (type: 'review' | 'diagnosis' | 'query' | null) => void;
   clearMessages: () => void;
@@ -34,6 +35,12 @@ export const useChatStore = create<ChatState>((set) => ({
       }
       return { messages };
     }),
+  updateMessage: (id, patch) =>
+    set((state) => ({
+      messages: state.messages.map((message) =>
+        message.id === id ? { ...message, ...patch } : message,
+      ),
+    })),
   setLoading: (loading) => set({ isLoading: loading }),
   setTaskType: (type) => set({ currentTaskType: type }),
   clearMessages: () => set({ messages: [] }),
