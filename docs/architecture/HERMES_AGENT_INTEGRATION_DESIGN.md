@@ -453,3 +453,34 @@ deny / 超时 → 工具不执行，模型收到 “user did not approve … NOT
 2. **会话绑定表在进程内**：uvicorn 多 worker / 多副本会失效，需 Redis。
 3. ~~审批卡片与消息合并~~：已改为 `approvals: ApprovalState[]`，按 `request_id` 渲染多张卡片并各自结算（2026-10-23 修复）。
 4. 设计文档第 9 节模型配置仍写旧值，需按 `schematic` profile 实际的 `DeepSeek-V4.1-Flash` 配置更新。
+
+### 15.8 指标口径与旧引擎基线（2026-10-24）
+
+验收门「P95 ≤ 旧引擎 1.5×」「成功率 ≥ 旧引擎」需要参照物，因此**经典引擎也打同一份点**：
+
+| 引擎 | 打点位置 | `engine` | `source` | `status` 取值 |
+|---|---|---|---|---|
+| Hermes | `RunTrace.finish()`（SSE 旁路） | `hermes` | `sse` | `completed` / `failed` / `cancelled` / `stopped` / `stream_closed` |
+| 经典（HTTP） | `POST /chat` 成功/超时/异常 | `legacy` | `http` | `success` / `timeout` / `error` |
+| 经典（WS） | `run_agent_streaming` 成功/异常 | `legacy` | `ws` | `success` / `error` |
+
+落盘仍为 `logs/agent_runs.jsonl`（可用 `HERMES_METRICS_FILE` 覆盖），单行 schema：
+
+```json
+{"kind":"run","engine":"legacy","source":"http","status":"success","duration_s":17.47,
+ "tools":0,"approvals":0,"choices":[],"project_id":null,"ts":1792790496.8}
+```
+
+`GET /api/v1/agent/metrics/summary?days=N` 新增两段（原有字段保持兼容）：
+
+- `by_engine.{legacy|hermes}`：`runs / completed / success_rate / duration_p50_s / duration_p95_s / tools_avg / approvals`
+- `acceptance`：`comparable`（两引擎都有样本）、`legacy_p95_s`、`hermes_p95_s`、`p95_ratio`、`p95_within_1_5x`、`success_rate_not_worse`
+
+口径说明：
+
+- 历史 Hermes 行没有 `engine` 字段，但带 `run_id`，聚合时按 `hermes` 归类（避免基线被污染）
+- 成功率把 `success`（经典）与 `completed`（Hermes）都算成功；`stream_closed` 表示 SSE 断开未见终态事件，不计成功
+- **样本量**：`acceptance` 只在两引擎都 ≥1 条时给出，样本 <20 时只做趋势参考，不作结论
+- 对比要同负载：简单问答与带工具的诊断任务基线不同，跨类混算会让 ratio 失真
+
+**首份基线（2026-10-24 05:2x，简单问答 4 连测）**：`legacy` p50 11.38s / p95 17.47s，成功率 4/4；同一时刻 `hermes` 仅 2 条历史样本（含一次回退演练残留），p95 23.81s → `p95_ratio 1.36`（≤1.5 达标），成功率不可比。**需在真实任务上补采 ≥20 条再定论。**

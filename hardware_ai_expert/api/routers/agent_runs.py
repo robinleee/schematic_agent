@@ -79,6 +79,40 @@ def _record_metrics(record: Dict[str, Any]) -> None:
         pass
 
 
+def record_engine_run(
+    engine: str,
+    status: str,
+    duration_s: float,
+    *,
+    tools: int = 0,
+    approvals: int = 0,
+    choices: Optional[list] = None,
+    project_id: Optional[str] = None,
+    run_id: Optional[str] = None,
+    source: Optional[str] = None,
+) -> None:
+    """记录一次 run 级指标（经典引擎 / Hermes 共用同一 schema）。
+
+    经典引擎（`/chat`、`/ws/chat`）也落盘，灰度验收门「P95 ≤ 1.5× 旧引擎」
+    才有参照物；打点永远不抛异常。
+    """
+    record: Dict[str, Any] = {
+        "kind": "run",
+        "engine": engine,
+        "status": status,
+        "duration_s": round(float(duration_s), 2),
+        "tools": int(tools or 0),
+        "approvals": int(approvals or 0),
+        "choices": list(choices or []),
+        "project_id": project_id,
+    }
+    if run_id:
+        record["run_id"] = run_id
+    if source:
+        record["source"] = source
+    _record_metrics(record)
+
+
 def _parse_event(raw: bytes) -> Dict[str, Any]:
     """解析单个 SSE 事件块；event: 名可能只在行首，payload 里也可能带 event。"""
     name = ""
@@ -177,6 +211,8 @@ class RunTrace:
         self.watchdogs.clear()
         _record_metrics({
             "kind": "run",
+            "engine": "hermes",
+            "source": "sse",
             "run_id": self.run_id,
             "project_id": self.project_id,
             "status": self.status,
@@ -529,6 +565,14 @@ async def metrics_summary(days: float = 7.0) -> Any:
     except OSError:
         pass
 
+    def _is_ok(status: Any) -> bool:
+        # 经典引擎用 success/error/timeout，Hermes 用 completed/failed/stopped…
+        return str(status) in ("completed", "success")
+
+    def _engine_of(row: Dict[str, Any]) -> str:
+        # 早期 Hermes 记录没有 engine 字段，但有 run_id，按 hermes 归类
+        return str(row.get("engine") or ("hermes" if row.get("run_id") else "unknown"))
+
     durations = [float(r.get("duration_s") or 0) for r in runs]
     by_status: Dict[str, int] = {}
     choices: Dict[str, int] = {}
@@ -548,14 +592,49 @@ async def metrics_summary(days: float = 7.0) -> Any:
         if "fallback" in event:
             fallbacks[event] = fallbacks.get(event, 0) + 1
 
+    grouped: Dict[str, list] = {}
+    for row in runs:
+        grouped.setdefault(_engine_of(row), []).append(row)
+
+    by_engine: Dict[str, Dict[str, Any]] = {}
+    for engine, rows in sorted(grouped.items()):
+        eng_durations = [float(r.get("duration_s") or 0) for r in rows]
+        eng_completed = sum(1 for r in rows if _is_ok(r.get("status")))
+        by_engine[engine] = {
+            "runs": len(rows),
+            "completed": eng_completed,
+            "success_rate": round(eng_completed / len(rows), 4) if rows else 0.0,
+            "duration_p50_s": _percentile(eng_durations, 0.5),
+            "duration_p95_s": _percentile(eng_durations, 0.95),
+            "tools_avg": round(sum(int(r.get("tools") or 0) for r in rows) / len(rows), 2) if rows else 0.0,
+            "approvals": sum(int(r.get("approvals") or 0) for r in rows),
+        }
+
+    # 灰度验收门：Hermes 相对经典引擎（legacy）的 P95 与成功率
+    legacy, hermes = by_engine.get("legacy") or {}, by_engine.get("hermes") or {}
+    acceptance: Dict[str, Any] = {"comparable": bool(legacy.get("runs") and hermes.get("runs"))}
+    if acceptance["comparable"]:
+        legacy_p95 = float(legacy.get("duration_p95_s") or 0)
+        hermes_p95 = float(hermes.get("duration_p95_s") or 0)
+        acceptance.update({
+            "legacy_p95_s": legacy_p95,
+            "hermes_p95_s": hermes_p95,
+            "p95_ratio": round(hermes_p95 / legacy_p95, 2) if legacy_p95 else None,
+            "p95_within_1_5x": bool(legacy_p95) and hermes_p95 <= 1.5 * legacy_p95,
+            "success_rate_not_worse": float(hermes.get("success_rate") or 0)
+            >= float(legacy.get("success_rate") or 0),
+        })
+
     total = len(runs)
-    completed = by_status.get("completed", 0)
+    completed = sum(1 for r in runs if _is_ok(r.get("status")))
     return {
         "window_days": days,
         "runs": total,
         "completed": completed,
         "success_rate": round(completed / total, 4) if total else 0.0,
         "by_status": by_status,
+        "by_engine": by_engine,
+        "acceptance": acceptance,
         "duration_p50_s": _percentile(durations, 0.5),
         "duration_p95_s": _percentile(durations, 0.95),
         "tools_avg": round(tools_total / total, 2) if total else 0.0,

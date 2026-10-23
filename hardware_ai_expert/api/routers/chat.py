@@ -34,9 +34,9 @@ async def chat(request: ChatRequest) -> ChatResponse:
     Execute chat and return complete result (non-streaming).
     For streaming, use WebSocket /ws/chat
     """
+    started = time.monotonic()
+    task_type = request.task_type.value if request.task_type else "auto"
     try:
-        started = time.monotonic()
-        task_type = request.task_type.value if request.task_type else "auto"
         # ReActAgent.run() is synchronous and can take minutes with a thinking
         # model. Keep it out of the event loop so health/review endpoints remain
         # responsive while this request is in progress.
@@ -67,8 +67,15 @@ async def chat(request: ChatRequest) -> ChatResponse:
             timestamp=datetime.now().isoformat()
         )
         from .system import record_agent_query
+        duration_s = time.monotonic() - started
         record_agent_query(chat_result.task_type, chat_result.tool_call_count,
-                           int((time.monotonic() - started) * 1000), chat_result.status)
+                           int(duration_s * 1000), chat_result.status)
+        from .agent_runs import record_engine_run
+        record_engine_run(
+            "legacy", chat_result.status, duration_s,
+            tools=chat_result.tool_call_count,
+            project_id=request.project_id, source="http",
+        )
         return ChatResponse(
             success=True,
             data=chat_result,
@@ -76,12 +83,20 @@ async def chat(request: ChatRequest) -> ChatResponse:
         )
     except asyncio.TimeoutError as e:
         from .system import record_agent_query
-        record_agent_query(task_type, 0, int((time.monotonic() - started) * 1000), "timeout")
+        duration_s = time.monotonic() - started
+        record_agent_query(task_type, 0, int(duration_s * 1000), "timeout")
+        from .agent_runs import record_engine_run
+        record_engine_run("legacy", "timeout", duration_s,
+                          project_id=request.project_id, source="http")
         raise HTTPException(
             status_code=504,
             detail=f"Agent execution timed out after {CHAT_AGENT_TIMEOUT_SECONDS:.0f}s",
         ) from e
     except Exception as e:
         from .system import record_agent_query
-        record_agent_query(task_type, 0, int((time.monotonic() - started) * 1000), "error")
+        duration_s = time.monotonic() - started
+        record_agent_query(task_type, 0, int(duration_s * 1000), "error")
+        from .agent_runs import record_engine_run
+        record_engine_run("legacy", "error", duration_s,
+                          project_id=getattr(request, "project_id", None), source="http")
         raise HTTPException(status_code=500, detail=str(e))

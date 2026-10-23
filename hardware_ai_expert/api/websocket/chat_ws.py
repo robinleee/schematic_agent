@@ -103,10 +103,17 @@ async def run_agent_streaming(websocket: WebSocket, message: str, task_type: str
         for pending in pending_steps:
             await asyncio.wrap_future(pending)
         from ..routers.system import record_agent_query
+        duration_s = time.monotonic() - started
         record_agent_query(result.get("task_type", task_type),
                            result.get("tool_call_count", 0),
-                           int((time.monotonic() - started) * 1000),
+                           int(duration_s * 1000),
                            result.get("status", "success"), source="ws")
+        from ..routers.agent_runs import record_engine_run
+        record_engine_run(
+            "legacy", result.get("status", "success"), duration_s,
+            tools=result.get("tool_call_count", 0),
+            project_id=project_id, source="ws",
+        )
         
         # Send final result
         await manager.send_json(websocket, {
@@ -125,8 +132,12 @@ async def run_agent_streaming(websocket: WebSocket, message: str, task_type: str
         
     except Exception as e:
         from ..routers.system import record_agent_query
-        record_agent_query(task_type, 0, int((time.monotonic() - started) * 1000),
+        duration_s = time.monotonic() - started
+        record_agent_query(task_type, 0, int(duration_s * 1000),
                            "error", source="ws")
+        from ..routers.agent_runs import record_engine_run
+        record_engine_run("legacy", "error", duration_s,
+                          project_id=project_id, source="ws")
         await manager.send_json(websocket, {
             "type": "error",
             "payload": {"error": str(e)}
