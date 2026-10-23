@@ -37,11 +37,42 @@ const ChatContainer: React.FC = () => {
   const trace = useRef<ReasoningStep[]>([]);
   const busy = useRef(false);
   // Hermes 引擎：一个浏览器会话对应一个 conversation（后端再拼成 user:project:conversation）
-  const sessionId = useRef<string>(
+  // 按项目持久化，刷新页面不会换会话，否则 Hermes 侧记忆会断。
+  const sessionId = useRef<string>('');
+  const sessionStorageKey = `schematic:hermes:session:${currentProject}`;
+
+  const newConversationId = () =>
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
-      : `web-${Date.now()}`,
-  );
+      : `web-${Date.now()}`;
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(sessionStorageKey);
+      if (stored) {
+        sessionId.current = stored;
+        return;
+      }
+      const created = newConversationId();
+      window.localStorage.setItem(sessionStorageKey, created);
+      sessionId.current = created;
+    } catch {
+      sessionId.current = newConversationId();
+    }
+  }, [sessionStorageKey]);
+
+  /** 清空对话 = 换新会话（旧会话的记忆不再串到新话题） */
+  const rotateSession = useCallback(() => {
+    const created = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `web-${Date.now()}`;
+    sessionId.current = created;
+    try {
+      window.localStorage.setItem(`schematic:hermes:session:${currentProject}`, created);
+    } catch {
+      /* 隐私模式下写不了 localStorage，退化为内存会话 */
+    }
+  }, [currentProject]);
   const abortRef = useRef<AbortController | null>(null);
   const finish = useCallback(() => { busy.current = false; setLoading(false); }, [setLoading]);
 
@@ -307,7 +338,7 @@ const ChatContainer: React.FC = () => {
               }} disabled={isLoading} />
             </>
           )}
-          <Button icon={<ClearOutlined />} onClick={clearMessages}>
+          <Button icon={<ClearOutlined />} onClick={() => { clearMessages(); rotateSession(); }}>
             清空对话
           </Button>
         </Space>

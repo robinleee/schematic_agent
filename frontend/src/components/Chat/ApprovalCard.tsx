@@ -20,6 +20,14 @@ interface ApprovalCardProps {
 
 const DANGER_CHOICES: ApprovalChoice[] = ['deny'];
 
+/**
+ * 验收门要求「写工具审批触发率 100%、漏放 0」。
+ * session / always 会让同一 pattern 的后续调用免审批，与验收门直接冲突，
+ * 因此 UI 默认只开放 once / deny；确需放开时改这里并同步验收口径。
+ */
+const ALLOW_PERSISTENT_APPROVAL = false;
+const FALLBACK_CHOICES: ApprovalChoice[] = ['once', 'deny'];
+
 const ApprovalCard: React.FC<ApprovalCardProps> = ({ approval, onDecide, busy }) => {
   const pending = approval.status === 'pending';
   const [now, setNow] = useState(() => Date.now());
@@ -38,6 +46,13 @@ const ApprovalCard: React.FC<ApprovalCardProps> = ({ approval, onDecide, busy })
   useEffect(() => {
     if (pending && remaining === 0) onDecide('deny');
   }, [pending, remaining, onDecide]);
+
+  const choices = useMemo<ApprovalChoice[]>(() => {
+    const source = approval.choices?.length ? approval.choices : FALLBACK_CHOICES;
+    if (ALLOW_PERSISTENT_APPROVAL) return source;
+    const limited = source.filter((choice) => FALLBACK_CHOICES.includes(choice));
+    return limited.length ? limited : FALLBACK_CHOICES;
+  }, [approval.choices]);
 
   const decisionTag = () => {
     if (approval.status === 'approved') {
@@ -97,7 +112,7 @@ const ApprovalCard: React.FC<ApprovalCardProps> = ({ approval, onDecide, busy })
 
         {pending && (
           <Space wrap>
-            {approval.choices.map((choice) => (
+            {choices.map((choice) => (
               <Button
                 key={choice}
                 size="small"
