@@ -39,6 +39,8 @@ INSTRUCTIONS = """schematic_agent 硬件原理图专家能力。
 1. 所有工具都作用于当前会话绑定的项目，无需传 project_id。
 2. 先调用 project_overview 了解项目规模，再按需深入。
 3. 结构类问题用 query_graph，连通性用 trace_signal，故障定位用 diagnose_fault。
+   一次要多个对象就用 refdes_list / net_name_list；查一个器件周围的电路用
+   query_type="neighborhood"（一次拿到它的网络 + 网络上的器件），不要逐网络遍历。
 4. 芯片规格与设计规范用 search_knowledge；规则合规结论只能来自 run_review。
 5. 不要臆测器件、网络或电压；工具未返回的事实应视为未知。
 """

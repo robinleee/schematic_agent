@@ -19,9 +19,12 @@ if str(HARDWARE_DIR) not in sys.path:
     sys.path.insert(0, str(HARDWARE_DIR))
 
 from agent_system import graph_tools  # noqa: E402
+from mcp_server import query_engine  # noqa: E402
 from mcp_server.project_guard import ProjectScopeError, resolve_project  # noqa: E402
 
 MAX_RESULT_CHARS = int(os.getenv("SCHEMATIC_MCP_MAX_RESULT_CHARS", "6000"))
+# JSON 结果单独给预算：批量/子图结果按块裁剪，不走字符串硬截断（否则 JSON 断裂）。
+MAX_JSON_CHARS = int(os.getenv("SCHEMATIC_MCP_MAX_JSON_CHARS", "16000"))
 
 WRITE_TOOLS_ENABLED = os.getenv("SCHEMATIC_ENABLE_WRITE_TOOLS", "0").lower() in (
     "1",
@@ -77,6 +80,11 @@ def _format(pid: str, tool: str, body: str) -> str:
     return f"[project={pid} | tool={tool}{suffix}]\n{text}"
 
 
+def _format_json(pid: str, tool: str, payload: dict) -> str:
+    """结构化结果的统一返回：项目标签 + 紧凑 JSON（已在引擎侧按预算裁剪）。"""
+    return f"[project={pid} | tool={tool}]\n{query_engine.pack(payload)}"
+
+
 def _error(pid: str, tool: str, exc: Exception) -> str:
     return f"[project={pid} | tool={tool} | error] {type(exc).__name__}: {exc}"
 
@@ -117,33 +125,74 @@ def query_graph(
         "net_components",
         "i2c_devices",
         "power_tree",
+        "neighborhood",
     ],
     refdes: str = "",
     net_name: str = "",
     root_refdes: str = "",
     voltage: str = "",
+    refdes_list: Optional[list[str]] = None,
+    net_name_list: Optional[list[str]] = None,
+    depth: int = 2,
+    max_nets: int = 40,
+    max_pins: int = 300,
     project_id: str = "",
 ) -> str:
-    """按对象查询图谱结构。
+    """按对象查询图谱结构。批量参数优先于单值参数。
 
-    - component_nets: 某器件连接了哪些网络（需要 refdes）
-    - net_components: 某网络连接了哪些器件（需要 net_name）
-    - i2c_devices: 列出所有 I2C 设备
-    - power_tree: 电源树（可选 root_refdes 或 voltage 过滤）
+    - component_nets: 器件的引脚-网络。refdes_list=[...] 一次查多个（推荐）。
+    - net_components: 网络上的器件。net_name_list=[...] 一次查多个（推荐）。
+    - neighborhood: 以 refdes 为中心的子图（自身引脚-网络 + 这些网络上的其它器件
+      + 器件属性 mpn/part_type/voltage）。depth 1-3（默认 2），max_nets/max_pins 控制体量。
+      诊断「某个器件/某路电源异常」优先用它，一次调用代替逐网络遍历。
+    - i2c_devices / power_tree: 同旧行为。
+
+    新增路径返回紧凑 JSON；truncated=true 表示结果被裁剪，stats 给出真实总量。
     """
     pid, denied = _guard("query_graph", project_id)
     if denied:
         return denied
     try:
-        if query_type == "component_nets":
+        if query_type == "neighborhood":
             if not refdes:
-                raise ValueError("component_nets 需要 refdes")
-            body = _invoke(graph_tools.get_component_nets, {"refdes": refdes})
-        elif query_type == "net_components":
-            if not net_name:
-                raise ValueError("net_components 需要 net_name")
-            body = _invoke(graph_tools.get_net_components, {"net_name": net_name})
-        elif query_type == "i2c_devices":
+                raise ValueError("neighborhood 需要 refdes")
+            payload = query_engine.neighborhood(
+                refdes=refdes.strip(),
+                depth=depth,
+                max_nets=max_nets,
+                max_pins=max_pins,
+                char_budget=MAX_JSON_CHARS,
+            )
+            return _format_json(pid, "query_graph", payload)
+
+        if query_type == "component_nets":
+            wanted, clipped = query_engine.norm_list(
+                ([refdes] if refdes else []) + list(refdes_list or [])
+            )
+            if not wanted:
+                raise ValueError("component_nets 需要 refdes 或 refdes_list")
+            if len(wanted) == 1 and not refdes_list:
+                # 旧单值路径：返回格式完全不变
+                body = _invoke(graph_tools.get_component_nets, {"refdes": wanted[0]})
+                return _format(pid, "query_graph", body)
+            payload = query_engine.bulk_component_nets(wanted)
+            payload["input_truncated"] = clipped
+            return _format_json(pid, "query_graph", payload)
+
+        if query_type == "net_components":
+            wanted, clipped = query_engine.norm_list(
+                ([net_name] if net_name else []) + list(net_name_list or [])
+            )
+            if not wanted:
+                raise ValueError("net_components 需要 net_name 或 net_name_list")
+            if len(wanted) == 1 and not net_name_list:
+                body = _invoke(graph_tools.get_net_components, {"net_name": wanted[0]})
+                return _format(pid, "query_graph", body)
+            payload = query_engine.bulk_net_components(wanted)
+            payload["input_truncated"] = clipped
+            return _format_json(pid, "query_graph", payload)
+
+        if query_type == "i2c_devices":
             body = _invoke(graph_tools.get_i2c_devices, {})
         else:
             args = {}

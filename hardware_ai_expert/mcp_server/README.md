@@ -25,13 +25,39 @@ stdio 传输。环境变量：
 | 工具 | 说明 | readOnlyHint |
 |---|---|---|
 | `project_overview` | 项目规模、器件类型分布、电源域 | true |
-| `query_graph` | component_nets / net_components / i2c_devices / power_tree | true |
+| `query_graph` | component_nets / net_components / i2c_devices / power_tree / neighborhood | true |
 | `trace_signal` | path / pin / pair / discover | true |
 | `diagnose_fault` | power_chain / root_cause / power_sequence / common_cause / common_cause_graph / risk_score | true |
 | `run_review` | 规则审查引擎全量跑批，返回违规统计 | true |
 | `search_knowledge` | GraphRAG 四级路由，走现有 `/api/v1/knowledge/search` | true |
 | `import_netlist` | ETL 导入（默认不注册） | false |
 | `submit_hitl_decision` | 领域 HITL 审批（默认不注册） | false |
+
+## query_graph 的批量与子图（2026-10-27）
+
+单对象查询在故障诊断里要逐网络手工遍历（U20187 需 1+19 次调用），
+而实测每次工具往返 ≈3.6s（`logs/agent_runs.jsonl` 拟合：duration ≈ 4.8s + 3.6s×tools）。
+因此 `query_graph` 增加三条低轮次路径，旧参数行为完全不变：
+
+| 用法 | 入参 | 说明 |
+|---|---|---|
+| 批量器件 | `refdes_list: string[]` | 一次返回多个器件的引脚-网络，每个器件结构与单值版一致 |
+| 批量网络 | `net_name_list: string[]` | 一次返回多个网络的器件；>100 器件的网络按 PartType 聚合（同旧策略） |
+| 子图 | `query_type="neighborhood"` + `refdes`、`depth`(1-3，默认 2)、`max_nets`(默认 40)、`max_pins`(默认 300) | 器件自身引脚-网络 → 这些网络上的其它器件（refdes/part_type/mpn/value/voltage）→ depth=3 追加邻居的其它网络 |
+
+约定：
+
+- 新路径返回**紧凑 JSON**（首行 `[project=.. | tool=..]`，第二行起为单行 JSON）。
+- 单值路径（`refdes=` / `net_name=` 各一个）**仍返回原文本格式**，逐字符不变。
+- 任何裁剪都会置 `truncated: true`，并在 `stats` 给出真实总量（`pin_total` / `net_total`
+  / `peers_total` / `by_type` 分布），模型据此知道「没返回 ≠ 不存在」。
+- 体量上限：`SCHEMATIC_MCP_MAX_JSON_CHARS`（默认 16000）；超出时先删邻居明细，
+  再删网络明细，始终保证 JSON 合法（不做字符串硬截断）。
+- 批量最多 50 个对象（`input_truncated: true` 表示被截）。
+
+实测（legacy / U20187）：旧方式 20 次调用 8697B；`neighborhood` 1 次调用 11673B，
+19/19 网络、19/19 引脚、53/59 具名邻居（其余 6 个在 `by_type` 里仍可见）。
+对比脚本：`scripts/mcp_query_bench_u20187.py`。
 
 ## 项目隔离
 
