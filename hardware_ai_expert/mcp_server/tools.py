@@ -141,6 +141,8 @@ def query_graph(
     """按对象查询图谱结构。批量参数优先于单值参数。
 
     - component_nets: 器件的引脚-网络。refdes_list=[...] 一次查多个（推荐）。
+      只想要引脚-网络表时用它；若还要看同网络的其它器件，直接用 neighborhood，
+      不要「component_nets + neighborhood」对同一个器件各调一次。
     - net_components: 网络上的器件。net_name_list=[...] 一次查多个（推荐）。
     - neighborhood: 以 refdes 为中心的子图（自身引脚-网络 + 这些网络上的其它器件
       + 器件属性 mpn/part_type/voltage）。depth 1-3（默认 2），max_nets/max_pins 控制体量。
@@ -338,7 +340,9 @@ def diagnose_fault(
 def run_review(rule_ids: Optional[list[str]] = None, project_id: str = "") -> str:
     """执行规则审查引擎，返回违规统计与典型条目。
 
-    rule_ids 为空则运行全部启用规则。审查结果只读，不修改数据。
+    ⚠️ 一次调用就返回**全部启用规则**的统计和每类违规，足以回答“项目有哪些设计
+    规则问题”。要看某几条规则的明细才传 rule_ids，**不要按 rule_id 逐条循环调用**
+    （一次全量审查约 4s，逐条重跑 24 次会白烧两分钟）。结果只读，不修改数据。
     """
     pid, denied = _guard("run_review", project_id)
     if denied:
@@ -347,8 +351,12 @@ def run_review(rule_ids: Optional[list[str]] = None, project_id: str = "") -> st
         from agent_system.review_engine import ReviewRuleEngine  # 延迟导入
 
         driver = graph_tools._get_driver()
-        engine = ReviewRuleEngine(driver, project_id=pid)
-        violations = engine.run_rules(rule_ids=rule_ids, enabled_only=True)
+        # 全量审查结果带 TTL 缓存：模型常见行为是按 rule_id 反复调用，
+        # 每次都重跑引擎。缓存后子集查询只做内存过滤（同一项目 180s 内复用）。
+        violations = _run_review_cached(ReviewRuleEngine, driver, pid)
+        if rule_ids:
+            wanted = {str(r).strip() for r in rule_ids if str(r).strip()}
+            violations = [v for v in violations if getattr(v, "rule_id", "") in wanted]
 
         by_severity: dict[str, int] = {}
         by_rule: dict[str, int] = {}
@@ -360,8 +368,8 @@ def run_review(rule_ids: Optional[list[str]] = None, project_id: str = "") -> st
         lines.append(
             "按严重度：" + ", ".join(f"{k}:{v}" for k, v in sorted(by_severity.items()))
         )
-        top_rules = sorted(by_rule.items(), key=lambda kv: -kv[1])[:8]
-        lines.append("按规则：" + ", ".join(f"{k}:{v}" for k, v in top_rules))
+        all_rules = sorted(by_rule.items(), key=lambda kv: (-kv[1], kv[0]))
+        lines.append("按规则：" + ", ".join(f"{k}:{v}" for k, v in all_rules))
 
         for item in violations[:10]:
             lines.append(
@@ -371,6 +379,24 @@ def run_review(rule_ids: Optional[list[str]] = None, project_id: str = "") -> st
         return _format(pid, "run_review", "\n".join(lines))
     except Exception as exc:  # noqa: BLE001
         return _error(pid, "run_review", exc)
+
+
+_REVIEW_CACHE: dict[str, tuple[float, list]] = {}
+_REVIEW_TTL_S = 180.0
+
+
+def _run_review_cached(engine_cls, driver, project_id: str) -> list:
+    """全量审查结果缓存（TTL 180s），避免模型按 rule_id 反复触发全量重跑。"""
+    import time as _time
+
+    now = _time.time()
+    hit = _REVIEW_CACHE.get(project_id)
+    if hit and now - hit[0] < _REVIEW_TTL_S:
+        return hit[1]
+    engine = engine_cls(driver, project_id=project_id)
+    violations = engine.run_rules(rule_ids=None, enabled_only=True)
+    _REVIEW_CACHE[project_id] = (now, violations)
+    return violations
 
 
 def search_knowledge(query: str, mpn: str = "", project_id: str = "") -> str:

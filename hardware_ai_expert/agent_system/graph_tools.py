@@ -738,6 +738,43 @@ def get_power_tree(root_refdes: str = None, voltage: str = None) -> str:
 # Tool 8: 差分对追踪 (预留接口)
 # ============================================================
 
+def _powered_by_ancestors(refdes: str, max_depth: int = 8) -> list:
+    """沿 POWERED_BY 逐跳向上，返回 [(ancestor, voltage, net)]（按层序去重）。
+
+    逐跳而非 ``*1..10``：变长路径会把每条路径的节点/关系全部物化，图稍大就退化。
+    """
+    import time as _time
+
+    started = _time.time()
+    seen = {refdes}
+    ordered: list = []
+    frontier = [refdes]
+    for _ in range(max(1, max_depth)):
+        if not frontier:
+            break
+        rows = _run_cypher(
+            """
+            MATCH (c:Component)-[r:POWERED_BY]->(p:Component)
+            WHERE c.RefDes IN $refs
+            RETURN c.RefDes AS src, p.RefDes AS parent,
+                   r.voltage AS voltage, r.net AS net
+            """,
+            {"refs": frontier},
+        )
+        nxt = []
+        for row in rows:
+            parent = row.get("parent")
+            if not parent or parent in seen:
+                continue
+            seen.add(parent)
+            nxt.append(parent)
+            ordered.append((parent, row.get("voltage"), row.get("net")))
+        frontier = nxt
+        if _time.time() - started > 8:  # 兜底：单器件最多 8s
+            break
+    return ordered
+
+
 @tool
 def find_common_cause(refdes_list: str) -> str:
     """
@@ -777,31 +814,11 @@ def find_common_cause(refdes_list: str) -> str:
             direct_records = _run_cypher(direct_query, {"refdes": refdes})
             redundancy[refdes] = len(direct_records) if direct_records else 0
 
-            # 完整电源路径（BFS 沿 POWERED_BY 向上遍历）
-            path_query = """
-            MATCH path = (c:Component {RefDes: $refdes})-[:POWERED_BY*1..10]->(anc:Component)
-            RETURN [n IN nodes(path)[1..] | n.RefDes] AS ancestors,
-                   [r IN relationships(path) | {voltage: r.voltage, net: r.net}] AS edges
-            """
-            path_records = _run_cypher(path_query, {"refdes": refdes})
-
-            # 收集所有上游节点（去重）
-            ancestors_set = set()
-            ancestors_info = []  # (ancestor, voltage, net)
-            for rec in path_records:
-                ancs = rec['ancestors']
-                edges = rec['edges']
-                for i, anc in enumerate(ancs):
-                    if anc not in ancestors_set:
-                        ancestors_set.add(anc)
-                        edge = edges[i] if i < len(edges) else {}
-                        ancestors_info.append((
-                            anc,
-                            edge.get('voltage'),
-                            edge.get('net')
-                        ))
-
-            power_paths[refdes] = ancestors_info
+            # 完整电源路径：逐跳 BFS（原来用 [:POWERED_BY*1..10] 一次性枚举
+            # 全部路径，Neo4j 要把每条路径的 nodes/relationships 都物化，
+            # 实测单个器件就能卡住 20s+，5 个器件直接 180s。逐跳查询走
+            # RefDes 索引，深度 8 也就 8 条 Cypher。）
+            power_paths[refdes] = _powered_by_ancestors(refdes, max_depth=MAX_DEPTH)
 
         # ── Phase 2: 找到共同上游节点 ──
         # 统计每个上游节点被多少故障器件共享
@@ -1755,35 +1772,22 @@ def get_common_cause_graph(refdes_list: str) -> str:
 
         pid = get_current_project()
 
-        # 查询每个器件的电源上游路径
-        cypher = """
-        MATCH path = (c:Component {RefDes: $refdes})-[:POWERED_BY*1..5]->(upstream:Component)
-        WHERE c.project_id = $project_id OR c.project_id IS NULL
-        WITH c, nodes(path) AS ns, relationships(path) AS rs
-        UNWIND range(0, size(ns)-1) AS i
-        WITH c, ns[i] AS node, CASE WHEN i < size(rs) THEN rs[i] ELSE null END AS rel
-        RETURN DISTINCT c.RefDes AS source_refdes,
-               node.RefDes AS upstream_refdes,
-               node.PartType AS upstream_type,
-               node.Model AS upstream_model
-        """
-
+        # 查询每个器件的电源上游路径（逐跳 BFS；`*1..5` 会物化所有路径，图大就卡）
         all_upstream = {}  # refdes -> set of upstream refdes
         node_info = {}     # refdes -> {type, model}
 
         for refdes in refdes_items:
-            with _get_driver().session() as session:
-                records = session.run(cypher, {"refdes": refdes, "project_id": pid})
-                upstream_set = set()
-                for r in records:
-                    upstream_ref = r["upstream_refdes"]
-                    if upstream_ref:
-                        upstream_set.add(upstream_ref)
-                        node_info[upstream_ref] = {
-                            "type": r["upstream_type"],
-                            "model": r["upstream_model"],
-                        }
-                all_upstream[refdes] = upstream_set
+            upstream_set = set()
+            for anc, _volt, _net in _powered_by_ancestors(refdes, max_depth=5):
+                upstream_set.add(anc)
+                rows = _run_cypher(
+                    "MATCH (c:Component {RefDes: $rd}) "
+                    "RETURN c.PartType AS pt, c.Model AS model LIMIT 1",
+                    {"rd": anc},
+                )
+                if rows:
+                    node_info[anc] = {"type": rows[0].get("pt"), "model": rows[0].get("model")}
+            all_upstream[refdes] = upstream_set
 
             # 记录源器件信息
             cypher_self = """
@@ -2165,18 +2169,10 @@ def common_cause_risk_score(refdes_list: str) -> str:
 
         pid = get_current_project()
 
-        # 查询每个器件的上游
-        cypher = """
-        MATCH (c:Component {RefDes: $refdes})-[:POWERED_BY*1..5]->(upstream:Component)
-        WHERE c.project_id = $project_id OR c.project_id IS NULL
-        RETURN collect(DISTINCT upstream.RefDes) AS upstream_refs
-        """
-
+        # 查询每个器件的上游（逐跳 BFS，避免变长路径全量物化）
         all_upstream = {}
         for refdes in refdes_items:
-            with _get_driver().session() as session:
-                rec = session.run(cypher, {"refdes": refdes, "project_id": pid}).single()
-                all_upstream[refdes] = set(rec["upstream_refs"]) if rec and rec["upstream_refs"] else set()
+            all_upstream[refdes] = {a for a, _v, _n in _powered_by_ancestors(refdes, max_depth=5)}
 
         # 计算指标
         total_upstreams = set()

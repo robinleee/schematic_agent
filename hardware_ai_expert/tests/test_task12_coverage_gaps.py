@@ -76,17 +76,17 @@ def test_common_cause_report_identifies_shared_single_point(monkeypatch):
             "U2": [{"parent": "U1", "voltage": "3.3", "net": "VDD_3V3"}],
             "U3": [{"parent": "U1", "voltage": "3.3", "net": "VDD_3V3"}],
         },
-        "path": {
-            "U2": [{"ancestors": ["U1"], "edges": [{"voltage": "3.3", "net": "VDD_3V3"}]}],
-            "U3": [{"ancestors": ["U1"], "edges": [{"voltage": "3.3", "net": "VDD_3V3"}]}],
-        },
     }
 
     def run(query, params=None):
         if "RETURN p.RefDes AS parent" in query:
             return responses["direct"][params["refdes"]]
-        if "RETURN [n IN nodes(path)" in query:
-            return responses["path"][params["refdes"]]
+        if "c.RefDes IN $refs" in query:  # 逐跳 BFS 的批量上游查询
+            refs = params.get("refs") or []
+            rows = []
+            for rd in refs:
+                rows += [dict(row, src=rd) for row in responses["direct"].get(rd, [])]
+            return rows
         return [{"refdes": "U1", "pt": "PMIC", "model": "PMIC-X"}]
 
     monkeypatch.setattr(graph_tools, "_run_cypher", run)
