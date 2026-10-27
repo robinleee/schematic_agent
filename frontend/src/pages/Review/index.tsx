@@ -1,19 +1,13 @@
 // Review page
 import React, { useState, useEffect } from 'react';
 import {
-  Card,
   Button,
   Select,
   Table,
   Tag,
   Typography,
-  Space,
-  Statistic,
-  Row,
-  Col,
   Switch,
   Spin,
-  Empty,
   message,
 } from 'antd';
 import { PlayCircleOutlined } from '@ant-design/icons';
@@ -21,8 +15,9 @@ import { reviewApi } from '@/api';
 import { apiErrorText } from '@/api/client';
 import { useProjectStore } from '@/stores/useProjectStore';
 import type { RuleInfo, Violation, Severity } from '@/types/review';
+import PageHeader from '@/components/common/PageHeader';
 
-const { Title, Paragraph } = Typography;
+const { Paragraph } = Typography;
 
 const ReviewPage: React.FC = () => {
   const currentProject = useProjectStore((state) => state.currentProject);
@@ -143,77 +138,91 @@ const ReviewPage: React.FC = () => {
 
   if (rulesLoading) {
     return (
-      <div style={{ textAlign: 'center', padding: 50 }}>
-        <Spin size="large" />
+      <div className="page">
+        <PageHeader title="原理图审查" description="按规则库对当前项目图谱执行设计检查。" />
+        <div className="surface" style={{ display: 'flex', justifyContent: 'center', padding: 80 }}>
+          <Spin size="large" />
+        </div>
       </div>
     );
   }
 
   return (
-    <div>
-      <Title level={4}>原理图审查</Title>
+    <div className="page">
+      <PageHeader
+        title="原理图审查"
+        description={`按规则库对项目「${currentProject}」的器件-网络图谱执行设计检查，结果按严重程度归类。`}
+      />
 
-      <Card style={{ marginBottom: 16 }}>
-        <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-          <Space>
+      <section className="surface">
+        <div className="toolbar">
+          <div className="field" style={{ flex: '1 1 320px', maxWidth: 520 }}>
+            <span className="field-label">检查规则（留空为全部）</span>
             <Select
               mode="multiple"
-              placeholder="选择规则（留空为全部）"
+              placeholder="选择规则"
               value={selectedRules}
               onChange={setSelectedRules}
-              style={{ minWidth: 300 }}
+              maxTagCount="responsive"
               options={rules.map((r) => ({ value: r.id, label: r.name }))}
             />
-            <span>
-              仅启用规则:
-              <Switch
-                checked={enabledOnly}
-                onChange={setEnabledOnly}
-                style={{ marginLeft: 8 }}
-              />
-            </span>
-          </Space>
+          </div>
+          <div className="field">
+            <span className="field-label">仅启用规则</span>
+            <Switch checked={enabledOnly} onChange={setEnabledOnly} />
+          </div>
+          <div className="toolbar-spacer" />
           <Button
             type="primary"
             icon={<PlayCircleOutlined />}
             onClick={runReview}
             loading={loading}
           >
-            执行审查（项目：{currentProject}）
+            执行审查
           </Button>
-        </Space>
-      </Card>
+        </div>
+      </section>
 
       {summary && (
-        <Card style={{ marginBottom: 16 }}>
-          <Row gutter={24}>
-            <Col span={6}>
-              <Statistic title="总计" value={summary.total} />
-            </Col>
-            <Col span={6}>
-              <Statistic title="错误" value={summary.errors} valueStyle={{ color: '#cf1322' }} />
-            </Col>
-            <Col span={6}>
-              <Statistic title="警告" value={summary.warnings} valueStyle={{ color: '#fa8c16' }} />
-            </Col>
-            <Col span={6}>
-              <Statistic title="信息" value={summary.infos} valueStyle={{ color: '#1890ff' }} />
-            </Col>
-          </Row>
-        </Card>
+        <div className="hx-summary-grid">
+          <div className="metric-card">
+            <div className="metric-label">总计</div>
+            <div className="metric-value">{summary.total}</div>
+            <div className="metric-meta">本轮全部违规项</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-label">错误</div>
+            <div className="metric-value" data-tone="error">{summary.errors}</div>
+            <div className="metric-meta">必须修复</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-label">警告</div>
+            <div className="metric-value" data-tone="warning">{summary.warnings}</div>
+            <div className="metric-meta">建议复核</div>
+          </div>
+          <div className="metric-card">
+            <div className="metric-label">信息</div>
+            <div className="metric-value">{summary.infos}</div>
+            <div className="metric-meta">提示项</div>
+          </div>
+        </div>
       )}
 
-      <Card title="违规列表">
+      <section className="surface">
+        <div className="surface-head">
+          <span className="surface-title">违规列表</span>
+          <span className="surface-sub">{violations.length} 条</span>
+        </div>
         {violations.length > 0 ? (
           <Table
             columns={columns}
             dataSource={violations}
             rowKey={(record) => `${record.rule_id}-${record.refdes}`}
-            pagination={{ pageSize: 10 }}
+            pagination={{ pageSize: 10, showSizeChanger: false }}
             expandable={{
               expandedRowRender: (record) => (
                 <div>
-                  <Paragraph>
+                  <Paragraph style={{ margin: 0 }}>
                     <strong>建议修复:</strong> {record.suggested_fix || '无'}
                   </Paragraph>
                 </div>
@@ -221,9 +230,12 @@ const ReviewPage: React.FC = () => {
             }}
           />
         ) : (
-          <Empty description="点击「执行审查」开始审查" />
+          <div className="empty-state">
+            <div className="empty-state-icon"><PlayCircleOutlined /></div>
+            <div className="empty-state-text">点击「执行审查」开始检查当前项目</div>
+          </div>
         )}
-      </Card>
+      </section>
     </div>
   );
 };

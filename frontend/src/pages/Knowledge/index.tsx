@@ -9,27 +9,24 @@ import {
   Select,
   message,
   Typography,
-  Space,
-  Statistic,
-  Row,
-  Col,
-  Empty,
   Tag,
+  Space,
 } from 'antd';
 import {
   UploadOutlined,
   SearchOutlined,
   DatabaseOutlined,
   FileTextOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import { knowledgeApi } from '@/api';
 import { apiErrorText } from '@/api/client';
 import type { SearchResult, KnowledgeStats } from '@/types/knowledge';
 import { useProjectStore } from '@/stores/useProjectStore';
+import PageHeader from '@/components/common/PageHeader';
 
-const { Title, Paragraph, Text } = Typography;
+const { Paragraph, Text } = Typography;
 const { Dragger } = Upload;
-const { TabPane } = Tabs;
 
 const KnowledgePage: React.FC = () => {
   const currentProject = useProjectStore((state) => state.currentProject);
@@ -112,123 +109,166 @@ const KnowledgePage: React.FC = () => {
   };
 
   return (
-    <div>
-      <Title level={4}>知识库管理</Title>
+    <div className="page">
+      <PageHeader
+        title="知识库"
+        description="Datasheet 与应用笔记按器件型号（MPN）归档，供对话与审查按 Tier 分层检索。"
+        extra={<Tag bordered={false} className="hx-project-tag">{currentProject}</Tag>}
+      />
 
-      <Tabs defaultActiveKey="upload">
-        <TabPane tab="文档上传" key="upload" icon={<UploadOutlined />}>
-          <Card>
-            <Space direction="vertical" style={{ width: '100%' }} size="large">
-              <Row gutter={16}>
-                <Col span={8}>
-                  <Text>器件型号 (MPN):</Text>
-                  <Input
-                    placeholder="例如: MT25QU256ABA8E12"
-                    value={mpn}
-                    onChange={(e) => setMpn(e.target.value)}
-                    style={{ marginTop: 8 }}
-                  />
-                </Col>
-                <Col span={8}>
-                  <Text>分类:</Text>
-                  <Select
-                    value={category}
-                    onChange={setCategory}
-                    style={{ width: '100%', marginTop: 8 }}
-                    options={[
-                      { value: 'datasheet', label: '数据手册' },
-                      { value: 'design_guide', label: '设计指南' },
-                      { value: 'application_note', label: '应用笔记' },
-                      { value: 'general', label: '通用知识' },
-                    ]}
-                  />
-                </Col>
-              </Row>
+      <section className="surface hx-tabs-surface">
+        <Tabs defaultActiveKey="upload" items={[
+          {
+            key: 'upload',
+            label: (
+              <span>
+                <UploadOutlined /> 文档上传
+              </span>
+            ),
+            children: (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div className="toolbar">
+                  <div className="field" style={{ flex: '1 1 260px', maxWidth: 360 }}>
+                    <span className="field-label">器件型号 (MPN)</span>
+                    <Input
+                      placeholder="例如：MT25QU256ABA8E12"
+                      value={mpn}
+                      onChange={(e) => setMpn(e.target.value)}
+                    />
+                  </div>
+                  <div className="field" style={{ flex: '1 1 200px', maxWidth: 240 }}>
+                    <span className="field-label">分类</span>
+                    <Select
+                      value={category}
+                      onChange={setCategory}
+                      options={[
+                        { value: 'datasheet', label: '数据手册' },
+                        { value: 'design_guide', label: '设计指南' },
+                        { value: 'application_note', label: '应用笔记' },
+                        { value: 'general', label: '通用知识' },
+                      ]}
+                    />
+                  </div>
+                </div>
 
-              <Dragger {...uploadProps} disabled={uploading}>
-                <p className="ant-upload-drag-icon">
-                  <FileTextOutlined />
-                </p>
-                <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
-                <p className="ant-upload-hint">支持 PDF、TXT 格式</p>
-              </Dragger>
-            </Space>
-          </Card>
-        </TabPane>
-
-        <TabPane tab="知识检索测试" key="search" icon={<SearchOutlined />}>
-          <Card>
-            <Space direction="vertical" style={{ width: '100%' }} size="large">
-              <Row gutter={16}>
-                <Col span={8}>
-                  <Text>器件型号 (可选):</Text>
-                  <Input
-                    placeholder="例如: MT25QU256ABA8E12"
-                    value={searchMpn}
-                    onChange={(e) => setSearchMpn(e.target.value)}
-                    style={{ marginTop: 8 }}
-                  />
-                </Col>
-                <Col span={12}>
-                  <Text>查询内容:</Text>
-                  <Input
-                    placeholder="输入查询内容"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    style={{ marginTop: 8 }}
-                  />
-                </Col>
-                <Col span={4}>
+                <Dragger {...uploadProps} disabled={uploading}>
+                  <p className="ant-upload-drag-icon">
+                    <FileTextOutlined />
+                  </p>
+                  <p className="ant-upload-text">点击或拖拽文件到此区域上传</p>
+                  <p className="ant-upload-hint">支持 PDF、TXT 格式，上传后自动切片入库</p>
+                </Dragger>
+              </div>
+            ),
+          },
+          {
+            key: 'search',
+            label: (
+              <span>
+                <SearchOutlined /> 知识检索测试
+              </span>
+            ),
+            children: (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div className="toolbar">
+                  <div className="field" style={{ flex: '0 1 240px' }}>
+                    <span className="field-label">器件型号（可选）</span>
+                    <Input
+                      placeholder="例如：MT25QU256ABA8E12"
+                      value={searchMpn}
+                      onChange={(e) => setSearchMpn(e.target.value)}
+                    />
+                  </div>
+                  <div className="field" style={{ flex: '1 1 320px' }}>
+                    <span className="field-label">查询内容</span>
+                    <Input
+                      placeholder="输入查询内容"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onPressEnter={handleSearch}
+                    />
+                  </div>
                   <Button
                     type="primary"
                     icon={<SearchOutlined />}
                     onClick={handleSearch}
                     loading={searching}
-                    style={{ marginTop: 28 }}
                   >
                     搜索
                   </Button>
-                </Col>
-              </Row>
+                </div>
 
-              {searchResult ? (
-                <Card size="small" title="检索结果">
-                  <Paragraph>
-                    <Tag color="blue">{searchResult.tier}</Tag>
-                    <Tag>状态: {searchResult.status}</Tag>
-                    <Tag>置信度: {(searchResult.confidence * 100).toFixed(0)}%</Tag>
-                    {searchResult.source && <Tag>来源: {searchResult.source}</Tag>}
-                  </Paragraph>
-                  <Paragraph style={{ whiteSpace: 'pre-wrap', maxHeight: 300, overflow: 'auto' }}>
-                    {searchResult.content || '未找到匹配内容'}
-                  </Paragraph>
-                </Card>
-              ) : (
-                <Empty description="输入查询内容进行检索测试" />
-              )}
-            </Space>
-          </Card>
-        </TabPane>
-
-        <TabPane tab="知识库统计" key="stats" icon={<DatabaseOutlined />}>
-          <Card>
-            <Button onClick={loadStats} style={{ marginBottom: 12 }}>刷新统计</Button>
-            {statsError && <Paragraph type="danger">统计不可用：{statsError}</Paragraph>}
-            <Row gutter={24}>
-              <Col span={8}>
-                <Statistic title="Tier1 切片数" value={stats?.tier1_chunks ?? '不可用'} />
-              </Col>
-              <Col span={8}>
-                <Statistic title="Tier2 启用" value={stats ? (stats.tier2_enabled ? '是' : '否') : '不可用'} />
-              </Col>
-              <Col span={8}>
-                <Statistic title="Tier3 启用" value={stats ? (stats.tier3_enabled ? '是' : '否') : '不可用'} />
-              </Col>
-            </Row>
-            {stats && <Paragraph>来源分布：{Object.entries(stats.source_distribution).map(([source, count]) => `${source}: ${count}`).join('；') || '暂无数据'}</Paragraph>}
-          </Card>
-        </TabPane>
-      </Tabs>
+                {searchResult ? (
+                  <Card size="small" title="检索结果">
+                    <Paragraph>
+                      <Tag color="blue">{searchResult.tier}</Tag>
+                      <Tag>状态: {searchResult.status}</Tag>
+                      <Tag>置信度: {(searchResult.confidence * 100).toFixed(0)}%</Tag>
+                      {searchResult.source && <Tag>来源: {searchResult.source}</Tag>}
+                    </Paragraph>
+                    <Paragraph style={{ whiteSpace: 'pre-wrap', maxHeight: 300, overflow: 'auto', margin: 0 }}>
+                      {searchResult.content || '未找到匹配内容'}
+                    </Paragraph>
+                  </Card>
+                ) : (
+                  <div className="empty-state">
+                    <div className="empty-state-icon"><SearchOutlined /></div>
+                    <div className="empty-state-text">输入查询内容进行检索测试</div>
+                  </div>
+                )}
+              </div>
+            ),
+          },
+          {
+            key: 'stats',
+            label: (
+              <span>
+                <DatabaseOutlined /> 知识库统计
+              </span>
+            ),
+            children: (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div className="toolbar">
+                  <div className="toolbar-spacer" />
+                  <Button icon={<ReloadOutlined />} onClick={loadStats}>
+                    刷新统计
+                  </Button>
+                </div>
+                {statsError && <Paragraph type="danger" style={{ margin: 0 }}>统计不可用：{statsError}</Paragraph>}
+                <div className="metric-grid">
+                  <div className="metric-card">
+                    <div className="metric-label">Tier1 切片数</div>
+                    <div className="metric-value" data-tone={stats?.tier1_chunks == null ? 'muted' : undefined}>
+                      {stats?.tier1_chunks == null ? '—' : stats.tier1_chunks.toLocaleString('en-US')}
+                    </div>
+                    <div className="metric-meta">向量库切片总量</div>
+                  </div>
+                  <div className="metric-card">
+                    <div className="metric-label">Tier2 启用</div>
+                    <div className="metric-value">{stats ? (stats.tier2_enabled ? '是' : '否') : '—'}</div>
+                    <div className="metric-meta">精排检索层</div>
+                  </div>
+                  <div className="metric-card">
+                    <div className="metric-label">Tier3 启用</div>
+                    <div className="metric-value">{stats ? (stats.tier3_enabled ? '是' : '否') : '—'}</div>
+                    <div className="metric-meta">图谱增强层</div>
+                  </div>
+                </div>
+                <Space direction="vertical" size={4}>
+                  <Text className="hx-muted">来源分布</Text>
+                  <Text>
+                    {stats
+                      ? Object.entries(stats.source_distribution)
+                          .map(([source, count]) => `${source}: ${count}`)
+                          .join('；') || '暂无数据'
+                      : '暂无数据'}
+                  </Text>
+                </Space>
+              </div>
+            ),
+          },
+        ]} />
+      </section>
     </div>
   );
 };

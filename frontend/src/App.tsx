@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from 'react-query';
-import { ConfigProvider } from 'antd';
+import { ConfigProvider, Spin } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { AppLayout } from '@/components/Layout';
+import { buildTheme } from '@/theme/tokens';
+import { useThemeStore } from '@/stores';
 
 // Lazy load pages
 const Chat = React.lazy(() => import('@/pages/Chat'));
@@ -27,17 +29,21 @@ const queryClient = new QueryClient({
 // Loading fallback
 const LoadingFallback: React.FC = () => (
   <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-    <div style={{ textAlign: 'center' }}>
-      <div className="ant-spin ant-spin-lg" />
-      <p style={{ marginTop: 16, color: '#666' }}>加载中...</p>
-    </div>
+    <Spin size="large" />
   </div>
 );
 
 const App: React.FC = () => {
+  const theme = useThemeStore((state) => state.theme);
+
+  // 让 global.css 的 CSS 变量跟随 antd 的明暗算法
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
   return (
     <QueryClientProvider client={queryClient}>
-      <ConfigProvider locale={zhCN}>
+      <ConfigProvider locale={zhCN} theme={buildTheme(theme === 'dark')}>
         <BrowserRouter>
           <React.Suspense fallback={<LoadingFallback />}>
             <Routes>

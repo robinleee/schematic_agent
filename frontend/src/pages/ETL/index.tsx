@@ -8,9 +8,6 @@ import {
   message,
   Typography,
   Space,
-  Statistic,
-  Row,
-  Col,
   Modal,
   Input,
   Alert,
@@ -28,8 +25,9 @@ import { etlApi } from '@/api';
 import { apiErrorText } from '@/api/client';
 import { useProjectStore } from '@/stores/useProjectStore';
 import type { ETLPreviewResult, ETLResult } from '@/types/etl';
+import PageHeader from '@/components/common/PageHeader';
 
-const { Title, Paragraph, Text } = Typography;
+const { Paragraph, Text } = Typography;
 
 const ETLPage: React.FC = () => {
   const { projects, setProjects, currentProject, setCurrentProject } = useProjectStore();
@@ -194,122 +192,137 @@ const ETLPage: React.FC = () => {
   });
 
   return (
-    <div>
-      <Title level={4}>ETL 导入</Title>
-      {errorText && <Alert type="error" showIcon message={errorText} style={{ marginBottom: 16 }} />}
-      <Alert type="info" showIcon message={`ETL 异步执行；任务 ID：${jobId || '尚未提交'}。仅成功终态代表完成，运行中进度为阶段指示。`} style={{ marginBottom: 16 }} />
+    <div className="page">
+      <PageHeader
+        title="ETL 导入"
+        description="上传 PSTX 网表并解析为器件-引脚-网络图谱；导入为异步任务，仅成功终态代表完成。"
+      />
 
-      <Card style={{ marginBottom: 16 }}>
-        <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-          <Space>
-            <Text>当前项目:</Text>
+      {errorText && <Alert type="error" showIcon message={errorText} />}
+      <Alert
+        type="info"
+        showIcon
+        message={`任务 ID：${jobId || '尚未提交'}。进度百分比是阶段指示，不代表数据已可查。`}
+      />
+
+      <section className="surface">
+        <div className="toolbar">
+          <div className="field" style={{ flex: '0 1 260px' }}>
+            <span className="field-label">当前项目</span>
             <Select
               value={currentProject}
               onChange={setCurrentProject}
-              style={{ width: 200 }}
               options={projects.map((p) => ({ value: p, label: p }))}
             />
-            <Button icon={<PlusOutlined />} onClick={() => setCreateModal(true)}>
-              新建项目
-            </Button>
-            <Button
-              icon={<DeleteOutlined />}
-              danger
-              onClick={() => Modal.confirm({
-                title: `确认删除项目 ${currentProject}？`,
-                content: '此操作会删除项目数据，无法撤销。',
-                okText: '删除', okType: 'danger', onOk: handleDeleteProject,
-              })}
-              disabled={currentProject === 'default'}
-            >
-              删除项目
-            </Button>
-          </Space>
-        </Space>
-      </Card>
+          </div>
+          <Button icon={<PlusOutlined />} onClick={() => setCreateModal(true)}>
+            新建项目
+          </Button>
+          <Button
+            icon={<DeleteOutlined />}
+            danger
+            onClick={() => Modal.confirm({
+              title: `确认删除项目 ${currentProject}？`,
+              content: '此操作会删除项目数据，无法撤销。',
+              okText: '删除', okType: 'danger', onOk: handleDeleteProject,
+            })}
+            disabled={currentProject === 'default'}
+          >
+            删除项目
+          </Button>
+        </div>
+      </section>
 
-      <Card title="文件上传" style={{ marginBottom: 16 }}>
-        <Row gutter={16}>
-          <Col span={6}>
-            <Text>网表文件 - 必需</Text>
+      <section className="surface">
+        <div className="surface-head">
+          <span className="surface-title">文件上传</span>
+          <span className="surface-sub">pstxnet / pstxprt / pstchip 必需，BOM 可选</span>
+        </div>
+
+        <div className="hx-upload-grid">
+          <div className="field">
+            <span className="field-label">网表文件 · 必需</span>
             <Upload {...fileUploadProps('pstxnet')}>
               <Button icon={<UploadOutlined />}>选择文件</Button>
             </Upload>
-          </Col>
-          <Col span={6}>
-            <Text>器件文件 - 必需</Text>
+          </div>
+          <div className="field">
+            <span className="field-label">器件文件 · 必需</span>
             <Upload {...fileUploadProps('pstxprt')}>
               <Button icon={<UploadOutlined />}>选择文件</Button>
             </Upload>
-          </Col>
-          <Col span={6}>
-            <Text>芯片库文件 - 必需</Text>
+          </div>
+          <div className="field">
+            <span className="field-label">芯片库文件 · 必需</span>
             <Upload {...fileUploadProps('pstchip')}>
               <Button icon={<UploadOutlined />}>选择文件</Button>
             </Upload>
-          </Col>
-          <Col span={6}>
-            <Text>BOM 文件 - 可选</Text>
+          </div>
+          <div className="field">
+            <span className="field-label">BOM 文件 · 可选</span>
             <Upload {...fileUploadProps('bom')}>
               <Button icon={<UploadOutlined />}>选择文件</Button>
             </Upload>
-          </Col>
-        </Row>
-
-        <div style={{ marginTop: 16 }}>
-          <Space>
-            <Button
-              icon={<EyeOutlined />}
-              onClick={handlePreview}
-              loading={previewLoading}
-            >
-              预览
-            </Button>
-            <Button
-              type="primary"
-              icon={<PlayCircleOutlined />}
-              onClick={() => Modal.confirm({
-                title: `确认导入到 ${currentProject}？`,
-                content: '导入可能替换目标项目现有数据，请先确认备份及预览结果。',
-                okText: '确认导入', onOk: handleImport,
-              })}
-              loading={loading}
-            >
-              执行导入
-            </Button>
-          </Space>
+          </div>
         </div>
-      </Card>
+
+        <div className="toolbar" style={{ marginTop: 16 }}>
+          <div className="toolbar-spacer" />
+          <Button
+            icon={<EyeOutlined />}
+            onClick={handlePreview}
+            loading={previewLoading}
+          >
+            预览
+          </Button>
+          <Button
+            type="primary"
+            icon={<PlayCircleOutlined />}
+            onClick={() => Modal.confirm({
+              title: `确认导入到 ${currentProject}？`,
+              content: '导入可能替换目标项目现有数据，请先确认备份及预览结果。',
+              okText: '确认导入', onOk: handleImport,
+            })}
+            loading={loading}
+          >
+            执行导入
+          </Button>
+        </div>
+      </section>
 
       {preview && (
-        <Card title="预览结果" style={{ marginBottom: 16 }}>
-          <Row gutter={24}>
-            <Col span={6}>
-              <Statistic title="器件数量" value={preview.components_count ?? '不可用'} />
-            </Col>
-            <Col span={6}>
-              <Statistic title="拓扑数量" value={preview.topology_count ?? '不可用'} />
-            </Col>
-            <Col span={6}>
-              <Statistic title="唯一网络" value={preview.unique_nets ?? '不可用'} />
-            </Col>
-            <Col span={6}>
-              <Statistic
-                title="PartType 覆盖率"
-                value={preview.parttype_coverage ?? '不可用'}
-                suffix={preview.parttype_coverage == null ? undefined : '%'}
-              />
-            </Col>
-          </Row>
+        <section className="surface">
+          <div className="surface-head">
+            <span className="surface-title">预览结果</span>
+            <span className="surface-sub">仅解析统计，未写入图谱</span>
+          </div>
+          <div className="metric-grid">
+            <div className="metric-card">
+              <div className="metric-label">器件数量</div>
+              <div className="metric-value">{preview.components_count ?? '—'}</div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-label">拓扑数量</div>
+              <div className="metric-value">{preview.topology_count ?? '—'}</div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-label">唯一网络</div>
+              <div className="metric-value">{preview.unique_nets ?? '—'}</div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-label">PartType 覆盖率</div>
+              <div className="metric-value">
+                {preview.parttype_coverage == null ? '—' : `${preview.parttype_coverage}%`}
+              </div>
+            </div>
+          </div>
           {preview.bom_enriched_components != null && (
-            <Row gutter={24} style={{ marginTop: 16 }}>
-              <Col span={6}>
-                <Statistic title="BOM 关联器件" value={preview.bom_enriched_components} />
-              </Col>
-            </Row>
+            <Paragraph style={{ marginTop: 12, marginBottom: 0 }}>
+              BOM 关联器件：<Text strong>{preview.bom_enriched_components}</Text>
+            </Paragraph>
           )}
           {preview.bom_issues.length > 0 && (
-            <Paragraph type="warning" style={{ marginTop: 16 }}>
+            <Paragraph type="warning" style={{ marginTop: 12, marginBottom: 0 }}>
               BOM 问题 ({preview.bom_issues.length} 条)：
               {preview.bom_issues.map((issue, i) => (
                 <div key={i}>{Object.entries(issue).map(([k, v]) => `${k}: ${v}`).join('，')}</div>
@@ -322,36 +335,40 @@ const ETLPage: React.FC = () => {
             <Descriptions.Item label="类型分布">{Object.entries(preview.parttype_distribution).map(([key, value]) => `${key}: ${value}`).join('；') || '暂无数据'}</Descriptions.Item>
             <Descriptions.Item label="主要网络">{preview.top_nets.join('；') || '暂无数据'}</Descriptions.Item>
           </Descriptions>
-        </Card>
+        </section>
       )}
 
       {result && (
-        <Card title="导入结果">
-          <Row gutter={24}>
-            <Col span={6}>
-              <Statistic title="器件数量" value={result.components_count ?? '不可用'} />
-            </Col>
-            <Col span={6}>
-              <Statistic title="拓扑数量" value={result.topology_count ?? '不可用'} />
-            </Col>
-            <Col span={6}>
-              <Statistic
-                title="PartType 覆盖率"
-                value={result.parttype_coverage ?? '不可用'}
-                suffix={result.parttype_coverage == null ? undefined : '%'}
-              />
-            </Col>
-            <Col span={6}>
-              <Statistic
-                title="质量检查"
-                value={result.quality_passed ? '通过' : '未通过'}
-                valueStyle={{ color: result.quality_passed ? '#52c41a' : '#ff4d4f' }}
-              />
-            </Col>
-          </Row>
-          <Paragraph style={{ marginTop: 16 }}>{result.message}</Paragraph>
+        <section className="surface">
+          <div className="surface-head">
+            <span className="surface-title">导入结果</span>
+            <span className="surface-sub">{result.quality_passed ? '质量检查通过' : '质量检查未通过'}</span>
+          </div>
+          <div className="metric-grid">
+            <div className="metric-card">
+              <div className="metric-label">器件数量</div>
+              <div className="metric-value">{result.components_count ?? '—'}</div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-label">拓扑数量</div>
+              <div className="metric-value">{result.topology_count ?? '—'}</div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-label">PartType 覆盖率</div>
+              <div className="metric-value">
+                {result.parttype_coverage == null ? '—' : `${result.parttype_coverage}%`}
+              </div>
+            </div>
+            <div className="metric-card">
+              <div className="metric-label">质量检查</div>
+              <div className="metric-value" data-tone={result.quality_passed ? 'success' : 'error'}>
+                {result.quality_passed ? '通过' : '未通过'}
+              </div>
+            </div>
+          </div>
+          <Paragraph style={{ marginTop: 12, marginBottom: 0 }}>{result.message}</Paragraph>
           {result.bom_issues.length > 0 && (
-            <Paragraph type="warning">
+            <Paragraph type="warning" style={{ marginTop: 12, marginBottom: 0 }}>
               BOM 问题 ({result.bom_issues.length} 条)：
               {result.bom_issues.map((issue, i) => (
                 <div key={i}>{Object.entries(issue).map(([k, v]) => `${k}: ${v}`).join('，')}</div>
@@ -359,7 +376,7 @@ const ETLPage: React.FC = () => {
             </Paragraph>
           )}
           {result.quality_report && (
-            <Card size="small" title="质量报告">
+            <Card size="small" title="质量报告" style={{ marginTop: 16 }}>
               <Descriptions column={2} size="small">
                 <Descriptions.Item label="状态">{result.quality_report.passed ? '通过' : '未通过'}</Descriptions.Item>
                 <Descriptions.Item label="器件">{result.quality_report.components ?? '不可用'}</Descriptions.Item>
@@ -370,9 +387,14 @@ const ETLPage: React.FC = () => {
               {result.quality_report.details && <pre style={{ whiteSpace: 'pre-wrap', maxHeight: 300, overflow: 'auto' }}>{JSON.stringify(result.quality_report.details, null, 2)}</pre>}
             </Card>
           )}
-        </Card>
+        </section>
       )}
-      <Card size="small" title="查询任务状态" style={{ marginTop: 16 }}>
+
+      <section className="surface">
+        <div className="surface-head">
+          <span className="surface-title">查询任务状态</span>
+          <span className="surface-sub">{progressError || '输入 job_id 查询异步任务'}</span>
+        </div>
         <Space>
           <Input.Search placeholder="输入 job_id" enterButton="查询" onSearch={async (jobId) => {
             if (!jobId.trim()) return;
@@ -388,9 +410,8 @@ const ETLPage: React.FC = () => {
               setProgressError(`进度不可用：${apiErrorText(error)}`);
             }
           }} />
-          <Text>{progressError}</Text>
         </Space>
-      </Card>
+      </section>
 
       <Modal
         title="新建项目"

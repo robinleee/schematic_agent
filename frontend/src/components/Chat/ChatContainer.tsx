@@ -1,7 +1,7 @@
 // Chat container component
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Space, Typography, Card, Switch, Select, Tooltip, Tag } from 'antd';
-import { ClearOutlined, ExperimentOutlined, StopOutlined } from '@ant-design/icons';
+import { Button, Segmented, Switch, Tooltip, Tag } from 'antd';
+import { ClearOutlined, StopOutlined } from '@ant-design/icons';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
 import { useChatStore } from '@/stores';
@@ -11,8 +11,6 @@ import type { Message, ReasoningStep } from '@/types/chat';
 import type { AgentHealth, AgentRunEvent, ApprovalChoice, ApprovalState } from '@/types/agent';
 import { useChatWebSocket } from '@/hooks/useWebSocket';
 import { apiErrorText } from '@/api/client';
-
-const { Title } = Typography;
 
 type Engine = 'legacy' | 'hermes';
 
@@ -33,6 +31,8 @@ const ChatContainer: React.FC = () => {
   const scopedProjectId = currentProject === 'default' ? undefined : currentProject;
   const [streaming, setStreaming] = useState(false);
   const [engine, setEngine] = useState<Engine>('legacy');
+  // 输入框草稿提升到容器层：点击示例问题可直接回填
+  const [draft, setDraft] = useState('');
   const [health, setHealth] = useState<AgentHealth | null>(null);
   const trace = useRef<ReasoningStep[]>([]);
   const busy = useRef(false);
@@ -417,38 +417,45 @@ const ChatContainer: React.FC = () => {
   const hermesAvailable = health ? health.enabled : false;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>智能对话（项目：{currentProject}）</Title>
-        <Space>
+    <div className="page">
+      <section className="surface hx-chat-toolbar">
+        <div className="hx-chat-title">
+          <span className="hx-chat-title-text">对话</span>
+          <Tag bordered={false} className="hx-project-tag">
+            {currentProject}
+          </Tag>
+        </div>
+
+        <div className="hx-chat-controls">
           <Tooltip title="Hermes 为灰度引擎：支持 MCP 工具审批与流式事件；经典引擎为现有 ReAct 链路">
-            <Space size={4}>
-              <ExperimentOutlined />
-              <Select
-                size="small"
-                value={engine}
-                style={{ width: 150 }}
-                onChange={(value: Engine) => {
-                  setEngine(value);
-                  if (value === 'hermes' && streaming) { setStreaming(false); disconnect(); }
-                }}
-                disabled={isLoading}
-                options={[
-                  { value: 'legacy', label: '经典引擎' },
-                  {
-                    value: 'hermes',
-                    label: hermesAvailable ? 'Hermes 引擎' : 'Hermes（未开启）',
-                    disabled: !hermesAvailable,
-                  },
-                ]}
-              />
-            </Space>
+            <Segmented
+              value={engine}
+              onChange={(value) => {
+                const next = value as Engine;
+                setEngine(next);
+                if (next === 'hermes' && streaming) {
+                  setStreaming(false);
+                  disconnect();
+                }
+              }}
+              disabled={isLoading}
+              options={[
+                { value: 'legacy', label: '经典' },
+                {
+                  value: 'hermes',
+                  label: hermesAvailable ? 'Hermes' : 'Hermes 未开启',
+                  disabled: !hermesAvailable,
+                },
+              ]}
+            />
           </Tooltip>
+
           {engine === 'hermes' && health && (
-            <Tag color={health.upstream ? 'green' : 'red'}>
+            <Tag color={health.upstream ? 'green' : 'red'} style={{ marginInlineEnd: 0 }}>
               {health.upstream ? '网关正常' : `网关不可用${health.detail ? `：${health.detail}` : ''}`}
             </Tag>
           )}
+
           {engine === 'hermes' && isLoading && (
             <Tooltip title="中断当前 Hermes 运行（服务端会回收工具子进程）">
               <Button danger size="small" icon={<StopOutlined />} onClick={stopHermes}>
@@ -456,27 +463,58 @@ const ChatContainer: React.FC = () => {
               </Button>
             </Tooltip>
           )}
-          {engine === 'legacy' && (
-            <>
-              <span>流式对话 {streaming && (isConnected ? '已连接' : '连接中')}</span>
-              <Switch checked={streaming} onChange={(checked) => {
-                setStreaming(checked);
-                if (checked) connect(); else disconnect();
-              }} disabled={isLoading} />
-            </>
-          )}
-          <Button icon={<ClearOutlined />} onClick={() => { clearMessages(); rotateSession(); }}>
-            清空对话
-          </Button>
-        </Space>
-      </div>
 
-      <Card style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 16 }}>
-        <MessageList messages={messages} isLoading={isLoading} onApprovalDecide={handleApprovalDecide} />
-        <div style={{ marginTop: 16 }}>
-          <ChatInput onSend={handleSend} disabled={isLoading} />
+          {engine === 'legacy' && (
+            <span className="hx-chat-stream">
+              <span className="hx-field-inline-label">流式</span>
+              {streaming && (
+                <span className="hx-muted">{isConnected ? '已连接' : '连接中'}</span>
+              )}
+              <Switch
+                size="small"
+                checked={streaming}
+                onChange={(checked) => {
+                  setStreaming(checked);
+                  if (checked) connect();
+                  else disconnect();
+                }}
+                disabled={isLoading}
+              />
+            </span>
+          )}
+
+          <Tooltip title="清空对话（会开启新的 Hermes 会话）">
+            <Button
+              className="hx-icon-btn"
+              type="text"
+              aria-label="清空对话"
+              icon={<ClearOutlined />}
+              onClick={() => {
+                clearMessages();
+                rotateSession();
+                setDraft('');
+              }}
+            />
+          </Tooltip>
         </div>
-      </Card>
+      </section>
+
+      <section className="surface hx-chat-surface">
+        <MessageList
+          messages={messages}
+          isLoading={isLoading}
+          onApprovalDecide={handleApprovalDecide}
+          onPickExample={setDraft}
+        />
+        <div className="hx-composer">
+          <ChatInput
+            onSend={handleSend}
+            disabled={isLoading}
+            value={draft}
+            onChange={setDraft}
+          />
+        </div>
+      </section>
     </div>
   );
 };

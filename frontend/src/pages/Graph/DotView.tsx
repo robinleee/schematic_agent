@@ -26,9 +26,9 @@ export default function DotView({ graph }: { graph: DotGraph }) {
   }, [graph]);
 
   return (
-    <div style={{ height: 500, overflow: 'auto' }}>
+    <div className="hx-svg-wrap">
       <svg role="img" aria-label={`图谱：${graph.nodes.length} 个节点，${graph.edges.length} 条边`}
-        viewBox={layout.bounds} style={{ width: '100%', height: '100%', minWidth: 600, background: '#fafafa' }}>
+        viewBox={layout.bounds} style={{ width: '100%', height: '100%', minWidth: 600, background: 'var(--hx-surface-alt)' }}>
         {graph.directed && <defs>
           <marker id="graph-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4"
             orient="auto" markerUnits="userSpaceOnUse">

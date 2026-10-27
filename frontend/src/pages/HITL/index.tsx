@@ -1,7 +1,6 @@
 // HITL approval page
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Card,
   Table,
   Button,
   Tag,
@@ -10,9 +9,6 @@ import {
   Input,
   message,
   Typography,
-  Statistic,
-  Row,
-  Col,
   Tabs,
 } from 'antd';
 import {
@@ -25,10 +21,10 @@ import {
 import { hitlApi } from '@/api';
 import type { PendingReview, ReviewStatus, DatasheetPendingReview } from '@/types/hitl';
 import { apiErrorText } from '@/api/client';
+import PageHeader from '@/components/common/PageHeader';
 
-const { Title, Paragraph } = Typography;
+const { Paragraph } = Typography;
 const { TextArea } = Input;
-const { TabPane } = Tabs;
 const errorText = apiErrorText;
 
 const HITLPage: React.FC = () => {
@@ -159,6 +155,32 @@ const HITLPage: React.FC = () => {
     }
   };
 
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return 'processing';
+      case 'approved':
+        return 'success';
+      case 'rejected':
+        return 'error';
+      default:
+        return 'default';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return '待审批';
+      case 'approved':
+        return '已批准';
+      case 'rejected':
+        return '已拒绝';
+      default:
+        return status;
+    }
+  };
+
   const datasheetColumns = [
     { title: '状态', dataIndex: 'status', key: 'status', width: 100,
       render: (status: string) => (
@@ -188,7 +210,7 @@ const HITLPage: React.FC = () => {
               })}>拒绝</Button>
           </Space>
         ) : (
-          <span style={{ color: '#999' }}>已处理</span>
+          <span className="hx-muted">已处理</span>
         )
       ),
     },
@@ -202,32 +224,6 @@ const HITLPage: React.FC = () => {
   const datasheetPendingCount = datasheetReviews.filter((r) => r.status === 'pending').length;
   const datasheetApprovedCount = datasheetReviews.filter((r) => r.status === 'approved').length;
   const datasheetRejectedCount = datasheetReviews.filter((r) => r.status === 'rejected').length;
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 'processing';
-      case 'approved':
-        return 'success';
-      case 'rejected':
-        return 'error';
-      default:
-        return 'default';
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return '待审批';
-      case 'approved':
-        return '已批准';
-      case 'rejected':
-        return '已拒绝';
-      default:
-        return status;
-    }
-  };
 
   const columns = [
     {
@@ -314,7 +310,7 @@ const HITLPage: React.FC = () => {
             </Button>
           </Space>
         ) : (
-          <span style={{ color: '#999' }}>已处理</span>
+          <span className="hx-muted">已处理</span>
         )
       ),
     },
@@ -330,188 +326,206 @@ const HITLPage: React.FC = () => {
   const approvedCount = pendingReviews.filter((r) => r.status === 'approved').length;
   const rejectedCount = pendingReviews.filter((r) => r.status === 'rejected').length;
 
+  const rulesTab = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="hx-summary-grid">
+        <div className="metric-card">
+          <div className="metric-label">待审批</div>
+          <div className="metric-value" data-tone={pendingCount > 0 ? 'warning' : undefined}>{pendingCount}</div>
+          <div className="metric-meta">等待人工确认的规则命中</div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-label">已批准</div>
+          <div className="metric-value" data-tone="success">{approvedCount}</div>
+          <div className="metric-meta">已沉淀为正式规则</div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-label">已拒绝</div>
+          <div className="metric-value" data-tone="error">{rejectedCount}</div>
+          <div className="metric-meta">误报 / 不适用</div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-label">总计</div>
+          <div className="metric-value">{total}</div>
+          <div className="metric-meta">当前筛选结果</div>
+        </div>
+      </div>
+
+      <div className="surface">
+        <div className="toolbar" style={{ marginBottom: 12 }}>
+          <Button icon={<ReloadOutlined />} onClick={loadPendingReviews}>
+            刷新
+          </Button>
+          {selectedRowKeys.length > 0 && (
+            <>
+              <Button
+                type="primary"
+                icon={<CheckCircleOutlined />}
+                onClick={() => {
+                  setCommentModal({
+                    visible: true,
+                    action: 'approve',
+                    reviewIds: selectedRowKeys as string[],
+                  });
+                }}
+              >
+                批量批准 ({selectedRowKeys.length})
+              </Button>
+              <Button
+                danger
+                icon={<CloseCircleOutlined />}
+                onClick={() => {
+                  setCommentModal({
+                    visible: true,
+                    action: 'reject',
+                    reviewIds: selectedRowKeys as string[],
+                  });
+                }}
+              >
+                批量拒绝 ({selectedRowKeys.length})
+              </Button>
+            </>
+          )}
+          <div className="toolbar-spacer" />
+          <Button icon={<ExportOutlined />} onClick={handleExport}>
+            保存已批准规则
+          </Button>
+        </div>
+
+        <Table
+          columns={columns}
+          dataSource={pendingReviews}
+          rowKey="review_id"
+          loading={loading}
+          rowSelection={rowSelection}
+          pagination={{ pageSize: 20, total }}
+          expandable={{
+            expandedRowRender: (record) => (
+              <div>
+                <Paragraph>
+                  <strong>期望值:</strong> {record.expected || '-'}
+                </Paragraph>
+                <Paragraph>
+                  <strong>实际值:</strong> {record.actual || '-'}
+                </Paragraph>
+                <Paragraph>
+                  <strong>建议修复:</strong> {record.suggested_fix || '-'}
+                </Paragraph>
+                {record.review_comment && (
+                  <Paragraph>
+                    <strong>审批备注:</strong> {record.review_comment}
+                  </Paragraph>
+                )}
+              </div>
+            ),
+          }}
+        />
+      </div>
+    </div>
+  );
+
+  const datasheetTab = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="hx-summary-grid">
+        <div className="metric-card">
+          <div className="metric-label">待审批</div>
+          <div className="metric-value" data-tone={datasheetPendingCount > 0 ? 'warning' : undefined}>{datasheetPendingCount}</div>
+          <div className="metric-meta">从 Datasheet 抽取的参数</div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-label">已批准</div>
+          <div className="metric-value" data-tone="success">{datasheetApprovedCount}</div>
+          <div className="metric-meta">可持久化到 amr_data.yaml</div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-label">已拒绝</div>
+          <div className="metric-value" data-tone="error">{datasheetRejectedCount}</div>
+          <div className="metric-meta">抽取错误 / 不适用</div>
+        </div>
+        <div className="metric-card">
+          <div className="metric-label">总计</div>
+          <div className="metric-value">{datasheetReviews.length}</div>
+          <div className="metric-meta">全部参数记录</div>
+        </div>
+      </div>
+
+      <div className="surface">
+        <div className="toolbar" style={{ marginBottom: 12 }}>
+          <Button icon={<ReloadOutlined />} onClick={loadDatasheetPending}>
+            刷新
+          </Button>
+          {datasheetSelectedKeys.length > 0 && (
+            <>
+              <Button
+                type="primary"
+                icon={<CheckCircleOutlined />}
+                onClick={() => setDatasheetCommentModal({
+                  visible: true, action: 'approve', reviewIds: datasheetSelectedKeys as string[],
+                })}
+              >
+                批量批准 ({datasheetSelectedKeys.length})
+              </Button>
+              <Button
+                danger
+                icon={<CloseCircleOutlined />}
+                onClick={() => setDatasheetCommentModal({
+                  visible: true, action: 'reject', reviewIds: datasheetSelectedKeys as string[],
+                })}
+              >
+                批量拒绝 ({datasheetSelectedKeys.length})
+              </Button>
+            </>
+          )}
+          <div className="toolbar-spacer" />
+          <Button icon={<SaveOutlined />} onClick={handleDatasheetPersist}>
+            持久化已批准参数
+          </Button>
+        </div>
+
+        <Table
+          columns={datasheetColumns}
+          dataSource={datasheetReviews}
+          rowKey="review_id"
+          loading={datasheetLoading}
+          rowSelection={datasheetRowSelection}
+          pagination={{ pageSize: 20 }}
+          expandable={{
+            expandedRowRender: (record) => (
+              <div>
+                <Paragraph><strong>原文片段:</strong> {record.source_text || '-'}</Paragraph>
+                <Paragraph><strong>适用条件:</strong> {record.condition || '-'}</Paragraph>
+                {(record.min_value !== undefined || record.max_value !== undefined) && (
+                  <Paragraph>
+                    <strong>范围:</strong> {record.min_value ?? '-'} ~ {record.max_value ?? '-'} {record.unit}
+                  </Paragraph>
+                )}
+                {record.review_comment && (
+                  <Paragraph><strong>审批备注:</strong> {record.review_comment}</Paragraph>
+                )}
+              </div>
+            ),
+          }}
+        />
+      </div>
+    </div>
+  );
+
   return (
-    <div>
-      <Title level={4}>HITL 审批</Title>
+    <div className="page">
+      <PageHeader
+        title="HITL 审批"
+        description="人工复核审查规则命中与 Datasheet 抽取参数；批准后的规则与参数才会沉淀进知识库。"
+      />
 
-      <Tabs defaultActiveKey="rules">
-        <TabPane tab="审查规则沉淀" key="rules">
-          <Card style={{ marginBottom: 16 }}>
-            <Row gutter={24}>
-              <Col span={6}>
-                <Statistic title="待审批" value={pendingCount} />
-              </Col>
-              <Col span={6}>
-                <Statistic title="已批准" value={approvedCount} valueStyle={{ color: '#52c41a' }} />
-              </Col>
-              <Col span={6}>
-                <Statistic title="已拒绝" value={rejectedCount} valueStyle={{ color: '#ff4d4f' }} />
-              </Col>
-              <Col span={6}>
-                <Statistic title="总计" value={total} />
-              </Col>
-            </Row>
-          </Card>
-
-          <Card>
-            <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
-              <Space>
-                <Button
-                  icon={<ReloadOutlined />}
-                  onClick={loadPendingReviews}
-                >
-                  刷新
-                </Button>
-                {selectedRowKeys.length > 0 && (
-                  <>
-                    <Button
-                      type="primary"
-                      icon={<CheckCircleOutlined />}
-                      onClick={() => {
-                        setCommentModal({
-                          visible: true,
-                          action: 'approve',
-                          reviewIds: selectedRowKeys as string[],
-                        });
-                      }}
-                    >
-                      批量批准 ({selectedRowKeys.length})
-                    </Button>
-                    <Button
-                      danger
-                      icon={<CloseCircleOutlined />}
-                      onClick={() => {
-                        setCommentModal({
-                          visible: true,
-                          action: 'reject',
-                          reviewIds: selectedRowKeys as string[],
-                        });
-                      }}
-                    >
-                      批量拒绝 ({selectedRowKeys.length})
-                    </Button>
-                  </>
-                )}
-              </Space>
-              <Space>
-                <Button icon={<ExportOutlined />} onClick={handleExport}>
-                  保存已批准规则
-                </Button>
-              </Space>
-            </div>
-
-            <Table
-              columns={columns}
-              dataSource={pendingReviews}
-              rowKey="review_id"
-              loading={loading}
-              rowSelection={rowSelection}
-              pagination={{ pageSize: 20, total }}
-              expandable={{
-                expandedRowRender: (record) => (
-                  <div>
-                    <Paragraph>
-                      <strong>期望值:</strong> {record.expected || '-'}
-                    </Paragraph>
-                    <Paragraph>
-                      <strong>实际值:</strong> {record.actual || '-'}
-                    </Paragraph>
-                    <Paragraph>
-                      <strong>建议修复:</strong> {record.suggested_fix || '-'}
-                    </Paragraph>
-                    {record.review_comment && (
-                      <Paragraph>
-                        <strong>审批备注:</strong> {record.review_comment}
-                      </Paragraph>
-                    )}
-                  </div>
-                ),
-              }}
-            />
-          </Card>
-        </TabPane>
-
-        <TabPane tab="Datasheet 参数沉淀" key="datasheet">
-          <Card style={{ marginBottom: 16 }}>
-            <Row gutter={24}>
-              <Col span={6}>
-                <Statistic title="待审批" value={datasheetPendingCount} />
-              </Col>
-              <Col span={6}>
-                <Statistic title="已批准" value={datasheetApprovedCount} valueStyle={{ color: '#52c41a' }} />
-              </Col>
-              <Col span={6}>
-                <Statistic title="已拒绝" value={datasheetRejectedCount} valueStyle={{ color: '#ff4d4f' }} />
-              </Col>
-              <Col span={6}>
-                <Statistic title="总计" value={datasheetReviews.length} />
-              </Col>
-            </Row>
-          </Card>
-
-          <Card>
-            <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
-              <Space>
-                <Button icon={<ReloadOutlined />} onClick={loadDatasheetPending}>
-                  刷新
-                </Button>
-                {datasheetSelectedKeys.length > 0 && (
-                  <>
-                    <Button
-                      type="primary"
-                      icon={<CheckCircleOutlined />}
-                      onClick={() => setDatasheetCommentModal({
-                        visible: true, action: 'approve', reviewIds: datasheetSelectedKeys as string[],
-                      })}
-                    >
-                      批量批准 ({datasheetSelectedKeys.length})
-                    </Button>
-                    <Button
-                      danger
-                      icon={<CloseCircleOutlined />}
-                      onClick={() => setDatasheetCommentModal({
-                        visible: true, action: 'reject', reviewIds: datasheetSelectedKeys as string[],
-                      })}
-                    >
-                      批量拒绝 ({datasheetSelectedKeys.length})
-                    </Button>
-                  </>
-                )}
-              </Space>
-              <Space>
-                <Button icon={<SaveOutlined />} onClick={handleDatasheetPersist}>
-                  持久化已批准参数
-                </Button>
-              </Space>
-            </div>
-
-            <Table
-              columns={datasheetColumns}
-              dataSource={datasheetReviews}
-              rowKey="review_id"
-              loading={datasheetLoading}
-              rowSelection={datasheetRowSelection}
-              pagination={{ pageSize: 20 }}
-              expandable={{
-                expandedRowRender: (record) => (
-                  <div>
-                    <Paragraph><strong>原文片段:</strong> {record.source_text || '-'}</Paragraph>
-                    <Paragraph><strong>适用条件:</strong> {record.condition || '-'}</Paragraph>
-                    {(record.min_value !== undefined || record.max_value !== undefined) && (
-                      <Paragraph>
-                        <strong>范围:</strong> {record.min_value ?? '-'} ~ {record.max_value ?? '-'} {record.unit}
-                      </Paragraph>
-                    )}
-                    {record.review_comment && (
-                      <Paragraph><strong>审批备注:</strong> {record.review_comment}</Paragraph>
-                    )}
-                  </div>
-                ),
-              }}
-            />
-          </Card>
-        </TabPane>
-      </Tabs>
+      <section className="surface hx-tabs-surface">
+        <Tabs
+          defaultActiveKey="rules"
+          items={[
+            { key: 'rules', label: '审查规则沉淀', children: rulesTab },
+            { key: 'datasheet', label: 'Datasheet 参数沉淀', children: datasheetTab },
+          ]}
+        />
+      </section>
 
       <Modal
         title={commentModal.action === 'approve' ? '批准确认' : '拒绝确认'}

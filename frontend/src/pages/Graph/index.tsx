@@ -1,27 +1,23 @@
 // Graph visualization page
 import React, { useState } from 'react';
 import {
-  Card,
   Select,
   InputNumber,
   Input,
   Button,
-  Space,
   Typography,
   message,
-  Empty,
   Spin,
 } from 'antd';
-import {
-  PlayCircleOutlined,
-} from '@ant-design/icons';
+import { PlayCircleOutlined } from '@ant-design/icons';
 import { graphApi } from '@/api';
 import { apiErrorText } from '@/api/client';
 import type { VizMode, Direction } from '@/types/graph';
 import DotView from './DotView';
 import { parseDot, type DotGraph } from './dot';
+import PageHeader from '@/components/common/PageHeader';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 const GraphPage: React.FC = () => {
   const [mode, setMode] = useState<VizMode>('component');
@@ -73,96 +69,123 @@ const GraphPage: React.FC = () => {
   ];
 
   return (
-    <div>
-      <Title level={4}>图谱可视化</Title>
+    <div className="page">
+      <PageHeader
+        title="图谱可视化"
+        description="从图数据库按模式抽取器件-网络子图，用于连通性核对、电源链路追踪与故障溯源。"
+      />
 
-      <Card style={{ marginBottom: 16 }}>
-        <Space wrap style={{ width: '100%' }}>
-          <Space>
-            <Text>可视化模式:</Text>
+      <section className="surface">
+        <div className="toolbar">
+          <div className="field">
+            <span className="field-label">可视化模式</span>
             <Select
               value={mode}
               onChange={setMode}
-              style={{ width: 150 }}
+              style={{ width: 156 }}
               options={modeOptions}
             />
-          </Space>
+          </div>
 
-          <Space>
-            <Text>起始器件:</Text>
+          <div className="field">
+            <span className="field-label">
+              起始器件{mode !== 'power_tree' ? <span style={{ color: 'var(--hx-error)' }}> *</span> : null}
+            </span>
             <Input
-              placeholder="例如: U30004"
+              placeholder="例如：U30004"
               value={refdes}
               onChange={(e) => setRefdes(e.target.value)}
-              style={{ width: 150 }}
+              onPressEnter={handleVisualize}
+              style={{ width: 180 }}
             />
-          </Space>
+          </div>
 
-          <Space>
-            <Text>深度:</Text>
+          <div className="field">
+            <span className="field-label">深度</span>
             <InputNumber
               min={1}
               max={5}
               value={depth}
               onChange={(v) => setDepth(v || 2)}
+              style={{ width: 88 }}
             />
-          </Space>
+          </div>
 
-          <Space>
-            <Text>方向:</Text>
+          <div className="field">
+            <span className="field-label">方向</span>
             <Select
               value={direction}
               onChange={setDirection}
-              style={{ width: 120 }}
+              style={{ width: 110 }}
               options={[
                 { value: 'upstream', label: '上游' },
                 { value: 'downstream', label: '下游' },
                 { value: 'both', label: '双向' },
               ]}
             />
-          </Space>
+          </div>
 
           {mode === 'power_tree' && (
-            <Space>
-              <Text>电压:</Text>
+            <div className="field">
+              <span className="field-label">电压</span>
               <Input
-                placeholder="例如: 3.3V"
+                placeholder="例如：3.3V"
                 value={voltage}
                 onChange={(e) => setVoltage(e.target.value)}
-                style={{ width: 100 }}
+                onPressEnter={handleVisualize}
+                style={{ width: 120 }}
               />
-            </Space>
+            </div>
           )}
+
+          <div className="toolbar-spacer" />
 
           <Button
             type="primary"
             icon={<PlayCircleOutlined />}
             onClick={handleVisualize}
             loading={loading}
+            disabled={mode !== 'power_tree' && !refdes.trim()}
+            title={mode !== 'power_tree' && !refdes.trim() ? '请先填写起始器件' : undefined}
           >
             生成图谱
           </Button>
-        </Space>
-      </Card>
+        </div>
+      </section>
 
-      <Card
-        title="图谱"
-        extra={
-          <Space>
-            <Text>节点: {graph?.nodes.length || 0} | 边: {graph?.edges.length || 0}</Text>
-          </Space>
-        }
-      >
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: 100 }}>
-            <Spin size="large" />
-          </div>
-        ) : graph ? (
-          <DotView graph={graph} />
-        ) : (
-          <Empty description={status} />
-        )}
-      </Card>
+      <section className="surface hx-graph-canvas">
+        <div className="hx-graph-head">
+          <span className="surface-title">图谱</span>
+          <span className="hx-mono hx-muted">
+            节点 {graph?.nodes.length || 0} · 边 {graph?.edges.length || 0}
+          </span>
+        </div>
+        <div className="hx-graph-body">
+          {loading ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Spin size="large" />
+            </div>
+          ) : graph ? (
+            <DotView graph={graph} />
+          ) : (
+            <div className="empty-state">
+              <div className="empty-state-icon">
+                <PlayCircleOutlined />
+              </div>
+              <div className="empty-state-text">{status}</div>
+              <div className="empty-state-hint">
+                提示：组件关系模式需要填写起始器件；电源树模式可只给电压
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {graph && (
+        <Text className="hx-muted">
+          画布可滚动查看全部节点；节点颜色来自 DOT 样式，鼠标悬停可看完整标签。
+        </Text>
+      )}
     </div>
   );
 };
