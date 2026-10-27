@@ -415,8 +415,12 @@ def render_markdown(rows: List[Dict[str, Any]], meta: Dict[str, Any]) -> str:
         lines += ["", f"**p95 比值（hermes / legacy）**：{ratio}（验收门 ≤1.5）"]
 
     gate = compute_gate(legacy, hermes)
-    lines += ["", "## 验收门", "", f"**结论：{gate['verdict']}**", "",
-              "| 检查项 | 结果 | 依据 |", "|---|---|---|"]
+    lines += ["", "## 验收门", "", f"**结论：{gate['verdict']}**", ""]
+    if not gate.get("checks"):
+        # 单引擎跑（--only）只做回归观察，没有可比对象，不能硬套验收门
+        lines.append(f"原因：{gate.get('reason', '缺少对照引擎')}")
+        return "\n".join(lines) + "\n"
+    lines += ["| 检查项 | 结果 | 依据 |", "|---|---|---|"]
     c = gate["checks"]
     lines.append(f"| 样本量 ≥{c['samples']['required']}/引擎 | {'PASS' if c['samples']['pass'] else 'PENDING'} | "
                  f"legacy {c['samples']['legacy_runs']} / hermes {c['samples']['hermes_runs']} |")
@@ -515,12 +519,12 @@ def main() -> int:
         print(f"[bench] 已写 {args.out_md}")
     if args.out_json:
         os.makedirs(os.path.dirname(args.out_json) or ".", exist_ok=True)
-        with open(args.out_json, "w", encoding="utf-8") as fh:
-            summary = {e: summarize(rows, e) for e in engines}
+        summary = {e: summarize(rows, e) for e in engines}
         summary["gate"] = compute_gate(summary.get("legacy", summarize([], "legacy")),
                                        summary.get("hermes", summarize([], "hermes")))
-        json.dump({"meta": meta, "rows": rows, "summary": summary},
-                  fh, ensure_ascii=False, indent=2)
+        with open(args.out_json, "w", encoding="utf-8") as fh:
+            json.dump({"meta": meta, "rows": rows, "summary": summary},
+                      fh, ensure_ascii=False, indent=2)
         print(f"[bench] 已写 {args.out_json}")
 
     return 0 if all(r["status"] not in ("exception",) for r in rows) else 2

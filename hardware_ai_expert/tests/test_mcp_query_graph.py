@@ -350,3 +350,30 @@ def test_fit_budget_trims_peers_but_keeps_valid_json():
     assert out["truncated"] is True
     assert len(query_engine.pack(out)) <= 3000
     json.loads(query_engine.pack(out))  # 仍是合法 JSON
+
+
+def test_neighborhood_bulk_merges_multiple_refdes():
+    payload = query_engine.neighborhood_bulk(["U20187"], depth=1, char_budget=8000)
+    assert payload["query_type"] == "neighborhood_bulk"
+    assert payload["requested"] == 1
+    assert payload["returned"] == 1
+    assert "U20187" in payload["items"]
+    assert payload["items"]["U20187"]["query_type"] == "neighborhood"
+
+
+def test_neighborhood_accepts_refdes_list_and_root_alias(bound_project, monkeypatch):
+    rows = {
+        "MATCH (c:Component)": [{"refdes": "U1", "part_type": "IC", "model": "M", "value": "V"}],
+        "CONNECTS_TO": CENTER_NETS,
+        "peers": PEER_ROWS,
+    }
+    monkeypatch.setattr(gt, "_run_cypher", _router(rows))
+
+    single = tools.query_graph(query_type="neighborhood", refdes="U1", depth=1)
+    alias = tools.query_graph(query_type="neighborhood", root_refdes="U1", depth=1)
+    assert "U1" in single and "U1" in alias, (single[:120], alias[:120])
+
+    bulk = tools.query_graph(
+        query_type="neighborhood", refdes_list=["U1", "U2"], depth=1
+    )
+    assert "neighborhood_bulk" in bulk, bulk[:200]

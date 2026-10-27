@@ -145,6 +145,10 @@ def query_graph(
     - neighborhood: 以 refdes 为中心的子图（自身引脚-网络 + 这些网络上的其它器件
       + 器件属性 mpn/part_type/voltage）。depth 1-3（默认 2），max_nets/max_pins 控制体量。
       诊断「某个器件/某路电源异常」优先用它，一次调用代替逐网络遍历。
+      refdes_list=[...] 可一次查多个器件的邻域（depth 建议 1），用于批量核对
+      同一网络上的电阻/电容，避免逐个器件单独调用。
+      ⚠️ 诊断标准姿势（2 次调用够了）：先 neighborhood(refdes=中心器件, depth=2)，
+      再对返回里需要细看的器件一次性 neighborhood(refdes_list=[...], depth=1)。
     - i2c_devices / power_tree: 同旧行为。
 
     新增路径返回紧凑 JSON；truncated=true 表示结果被裁剪，stats 给出真实总量。
@@ -154,15 +158,30 @@ def query_graph(
         return denied
     try:
         if query_type == "neighborhood":
-            if not refdes:
-                raise ValueError("neighborhood 需要 refdes")
-            payload = query_engine.neighborhood(
-                refdes=refdes.strip(),
-                depth=depth,
-                max_nets=max_nets,
-                max_pins=max_pins,
-                char_budget=MAX_JSON_CHARS,
+            centers, clipped = query_engine.norm_list(
+                ([refdes] if refdes else [])
+                + ([root_refdes] if root_refdes and not refdes else [])
+                + list(refdes_list or [])
             )
+            if not centers:
+                raise ValueError("neighborhood 需要 refdes 或 refdes_list")
+            if len(centers) > 1 or refdes_list:
+                payload = query_engine.neighborhood_bulk(
+                    refdes_list=centers,
+                    depth=depth,
+                    max_nets=max_nets,
+                    max_pins=max_pins,
+                    char_budget=MAX_JSON_CHARS,
+                )
+                payload["input_truncated"] = clipped
+            else:
+                payload = query_engine.neighborhood(
+                    refdes=centers[0],
+                    depth=depth,
+                    max_nets=max_nets,
+                    max_pins=max_pins,
+                    char_budget=MAX_JSON_CHARS,
+                )
             return _format_json(pid, "query_graph", payload)
 
         if query_type == "component_nets":

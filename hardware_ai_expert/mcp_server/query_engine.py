@@ -291,6 +291,49 @@ def bulk_net_components(net_name_list: list[str], threshold: int = 100) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def neighborhood_bulk(
+    refdes_list: list[str],
+    depth: int = 1,
+    max_nets: int = 20,
+    max_pins: int = 200,
+    char_budget: int = 16000,
+) -> dict:
+    """多个器件的邻域子图，一次调用返回。
+
+    诊断场景里「一个网络上的 8 个电阻各自查一次」是最大的轮次浪费，LLM 每轮
+    往返 ~6s。这里把 N 个器件的邻域合并成一次返回，char_budget 按器件数均分，
+    单个器件超出只裁剪自己。
+    """
+    wanted, clipped = norm_list(refdes_list)
+    depth = clamp_int(depth, 1, 3, 1)
+    max_nets = clamp_int(max_nets, 1, 80, 20)
+    max_pins = clamp_int(max_pins, 1, 600, 200)
+    per = max(1200, char_budget // max(1, len(wanted)))
+
+    items = {}
+    any_truncated = False
+    for refdes in wanted:
+        item = neighborhood(
+            refdes=refdes,
+            depth=depth,
+            max_nets=max_nets,
+            max_pins=max_pins,
+            char_budget=per,
+        )
+        items[refdes] = item
+        any_truncated = any_truncated or bool(item.get("truncated"))
+
+    return {
+        "query_type": "neighborhood_bulk",
+        "depth": depth,
+        "requested": len(wanted),
+        "returned": len(items),
+        "items": items,
+        "truncated": any_truncated,
+        "input_truncated": clipped,
+    }
+
+
 def neighborhood(
     refdes: str,
     depth: int = 2,
