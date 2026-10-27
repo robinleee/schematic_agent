@@ -435,6 +435,7 @@ class ReActAgent:
                 action="final_answer",
                 final_answer="## 处理失败\n\nLLM 决策调用失败，请检查模型服务状态。",
                 is_final=True,
+                is_error=True,
             )
 
         # 校验 action
@@ -734,6 +735,7 @@ class ReActAgent:
         trace: list[ReActTraceStep] = []
         tool_call_count = 0
         error_message = None
+        failure_status = "timeout"
         final_report = ""
 
         force_final_next = False
@@ -744,6 +746,13 @@ class ReActAgent:
             force_final_next = False
 
             decision = self._llm_decide(user_input, history, system_prompt, force_final=force_final)
+
+            if decision.is_error:
+                # 决策阶段就失败（Ollama 异常 / JSON 解析两轮都失败）：不能当成功上报
+                error_message = decision.thought or "LLM 决策失败"
+                failure_status = "error"
+                final_report = decision.final_answer or "## 处理失败\n\nLLM 决策调用失败。"
+                break
 
             if decision.is_final or decision.action == "final_answer":
                 final_report = decision.final_answer or "## 处理完成\n\nLLM 未输出结论。"
@@ -783,7 +792,7 @@ class ReActAgent:
             final_report = f"## 分析超时\n\n{error_message}\n\n## 已收集信息\n\n" + self._summarize_trace(trace)
 
         return {
-            "status": "success" if not error_message else "timeout",
+            "status": "success" if not error_message else failure_status,
             "task_type": task_type,
             "report": final_report,
             "error": error_message,

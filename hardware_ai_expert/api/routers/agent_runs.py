@@ -542,6 +542,8 @@ async def metrics_summary(days: float = 7.0) -> Any:
     runs = []
     approval_timeouts = 0
     telemetry = []
+    skipped_no_ts = 0
+    skipped_out_of_window = 0
     try:
         if os.path.exists(METRICS_FILE):
             with open(METRICS_FILE, "r", encoding="utf-8") as fh:
@@ -553,7 +555,12 @@ async def metrics_summary(days: float = 7.0) -> Any:
                         row = json.loads(line)
                     except ValueError:
                         continue
+                    # 早期手工写入的行可能没有 ts：不算失败，但要能被看见
+                    if row.get("ts") is None:
+                        skipped_no_ts += 1
+                        continue
                     if float(row.get("ts") or 0) < since:
+                        skipped_out_of_window += 1
                         continue
                     kind = row.get("kind")
                     if kind == "run":
@@ -598,21 +605,41 @@ async def metrics_summary(days: float = 7.0) -> Any:
 
     by_engine: Dict[str, Dict[str, Any]] = {}
     for engine, rows in sorted(grouped.items()):
-        eng_durations = [float(r.get("duration_s") or 0) for r in rows]
         eng_completed = sum(1 for r in rows if _is_ok(r.get("status")))
+        # 延迟只统计成功的 run：失败/客户端断开的耗时不代表引擎性能
+        eng_durations = [float(r.get("duration_s") or 0) for r in rows if _is_ok(r.get("status"))]
+        eng_all_durations = [float(r.get("duration_s") or 0) for r in rows]
+        eng_status: Dict[str, int] = {}
+        for row in rows:
+            status_key = str(row.get("status") or "unknown")
+            eng_status[status_key] = eng_status.get(status_key, 0) + 1
         by_engine[engine] = {
             "runs": len(rows),
             "completed": eng_completed,
             "success_rate": round(eng_completed / len(rows), 4) if rows else 0.0,
             "duration_p50_s": _percentile(eng_durations, 0.5),
             "duration_p95_s": _percentile(eng_durations, 0.95),
+            "duration_p50_all_s": _percentile(eng_all_durations, 0.5),
+            "duration_p95_all_s": _percentile(eng_all_durations, 0.95),
+            "by_status": eng_status,
+            # 客户端主动断开（含刷新页面）单独归类：不是引擎故障，也不能算成功
+            "stream_closed": eng_status.get("stream_closed", 0),
+            "failed": eng_status.get("failed", 0) + eng_status.get("error", 0) + eng_status.get("timeout", 0),
             "tools_avg": round(sum(int(r.get("tools") or 0) for r in rows) / len(rows), 2) if rows else 0.0,
             "approvals": sum(int(r.get("approvals") or 0) for r in rows),
         }
 
     # 灰度验收门：Hermes 相对经典引擎（legacy）的 P95 与成功率
     legacy, hermes = by_engine.get("legacy") or {}, by_engine.get("hermes") or {}
-    acceptance: Dict[str, Any] = {"comparable": bool(legacy.get("runs") and hermes.get("runs"))}
+    acceptance: Dict[str, Any] = {
+        "comparable": bool(legacy.get("runs") and hermes.get("runs")),
+        "min_samples": 20,
+        "legacy_runs": legacy.get("runs", 0),
+        "hermes_runs": hermes.get("runs", 0),
+        # 线上流量是混合负载，样本量不足时只做趋势参考，不据此放量
+        "sample_sufficient": (legacy.get("runs", 0) >= 20 and hermes.get("runs", 0) >= 20),
+        "latency_basis": "successful_runs_only",
+    }
     if acceptance["comparable"]:
         legacy_p95 = float(legacy.get("duration_p95_s") or 0)
         hermes_p95 = float(hermes.get("duration_p95_s") or 0)
@@ -635,6 +662,8 @@ async def metrics_summary(days: float = 7.0) -> Any:
         "by_status": by_status,
         "by_engine": by_engine,
         "acceptance": acceptance,
+        "skipped_no_ts": skipped_no_ts,
+        "skipped_out_of_window": skipped_out_of_window,
         "duration_p50_s": _percentile(durations, 0.5),
         "duration_p95_s": _percentile(durations, 0.95),
         "tools_avg": round(tools_total / total, 2) if total else 0.0,
