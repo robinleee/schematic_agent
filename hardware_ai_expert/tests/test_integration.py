@@ -590,7 +590,8 @@ class TestNewToolsPipeline:
                 [],
                 # common cause query
                 [],
-            ]
+                # 内联证据：器件网络 / 上游链展开 / 分压查询（均为空即可）
+            ] + [[] for _ in range(30)]
             result = trace_fault_root.invoke({"refdes": "L1", "symptom": "无输出"})
             assert "L1" in result
             assert "根因排查" in result

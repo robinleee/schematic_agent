@@ -300,8 +300,11 @@ def diagnose_fault(
 ) -> str:
     """故障诊断与电源分析。
 
+    - root_cause: 故障根因反向溯源（refdes + symptom）。**自包含**：一次返回上游
+      POWERED_BY 链；关系缺失时用网络连通性还原上游链（串联器件 + 上游网络器件
+      清单）；并解析反馈分压（上/下臂阻值、分压比、反推 Vref 与是否自洽）、输出
+      网络负载与可疑度排序。诊断类问题用它开局就够，不必再手工拼拓扑。
     - power_chain: 沿供电关系追踪电源链（refdes + direction + max_depth）
-    - root_cause: 故障根因反向溯源（refdes + symptom）
     - power_sequence: 上电时序分析（refdes）
     - common_cause: 共因失效定位（refdes_list，逗号分隔）
     - common_cause_graph: 共因失效关系图（refdes_list）
