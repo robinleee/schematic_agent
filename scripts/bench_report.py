@@ -24,7 +24,19 @@ from typing import Any, Dict, List, Optional
 
 MIN_CHARS = {"qa": 40}
 MIN_CHARS_DEFAULT = 80
-FAIL_MARKERS = ("处理失败", "调用失败", "模型服务", "Traceback", "Error:", "执行失败", "内部错误")
+FAIL_MARKERS = (
+    "处理失败",
+    "处理异常",
+    "调用失败",
+    "模型服务",
+    "Traceback",
+    "Error:",
+    "执行失败",
+    "内部错误",
+    "分析异常",
+    "分析超时",
+    "无效工具",
+)
 OK_STATUS = {"legacy": {"success"}, "hermes": {"completed"}}
 MIN_SAMPLES = 20
 

@@ -93,6 +93,34 @@ TASKS: List[Dict[str, Any]] = [
 ]
 
 
+# 失败标记：后端在 Agent 内部失败时仍可能返回 200 + success=true，正文是
+# 「## 处理异常 / ## 处理失败」这类占位。判分必须看正文，不能只看状态码。
+FAIL_MARKERS = (
+    "## 处理失败",
+    "## 处理异常",
+    "## 分析异常",
+    "## 分析超时",
+    "LLM 决策调用失败",
+    "LLM 选择了无效工具",
+    "Traceback (most recent call last)",
+)
+MIN_CHARS_BY_CATEGORY = {"qa": 40}
+MIN_CHARS_DEFAULT = 80
+
+
+def assess_report(text: str, category: str) -> tuple[bool, str]:
+    """正文可用性判定：返回 (是否可用, 不可用原因)。"""
+    body = (text or "").strip()
+    floor = MIN_CHARS_BY_CATEGORY.get(category, MIN_CHARS_DEFAULT)
+    if len(body) < floor:
+        return False, f"正文过短（{len(body)} < {floor} 字）"
+    head = body[:400]
+    for marker in FAIL_MARKERS:
+        if marker in head:
+            return False, f"正文为失败占位（命中「{marker}」）"
+    return True, ""
+
+
 def now_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
@@ -143,7 +171,14 @@ def run_legacy(client: httpx.Client, base: str, task: Dict[str, Any], project_id
     report = data.get("report") or ""
     status = data.get("status") or ("success" if payload.get("success") else "error")
     tools = int(data.get("tool_call_count") or 0)
-    ok = bool(payload.get("success")) and status == "success" and len(report.strip()) >= 20
+    usable, why = assess_report(report, task["category"])
+    ok = bool(payload.get("success")) and status == "success" and usable
+    if ok:
+        error = None
+    elif why:
+        error = why
+    else:
+        error = str(payload.get("message") or f"status={status}, success={payload.get('success')}")
     return {
         "engine": "legacy",
         "task_id": task["id"],
@@ -156,7 +191,7 @@ def run_legacy(client: httpx.Client, base: str, task: Dict[str, Any], project_id
         "tool_expect_ok": tools >= task["expect_tools"],
         "chars": len(report),
         "approvals": 0,
-        "error": None if ok else (payload.get("message") or f"report 长度 {len(report)}"),
+        "error": error,
         "run_id": None,
         "sample": report[:400],
     }
@@ -275,7 +310,12 @@ def run_hermes(
 
     elapsed = time.monotonic() - started
     text = "".join(text_parts)
-    ok = status == "completed" and len(text.strip()) >= 20
+    usable, why = assess_report(text, task["category"])
+    ok = status == "completed" and usable
+    if ok:
+        error = None
+    elif not error:
+        error = why or f"status={status}"
     return {
         "engine": "hermes",
         "task_id": task["id"],
@@ -288,7 +328,7 @@ def run_hermes(
         "tool_expect_ok": tools >= task["expect_tools"],
         "chars": len(text),
         "approvals": approvals,
-        "error": error if not ok else None,
+        "error": error,
         "run_id": run_id,
         "sample": text[:400],
     }

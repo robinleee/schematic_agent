@@ -447,10 +447,22 @@ class ReActAgent:
             is_final = True
             result.setdefault("final_answer", self._generate_fallback_report(history))
 
+        is_error = False
         if action not in self.tool_map and action != "final_answer":
+            # LLM 给出了不存在的工具名：这是决策失败，必须让上层记为 error。
+            # 历史实现只把正文换成「## 处理异常」，status 仍是 success，
+            # 导致基线与验收门把失败算成成功（C2 只回 21 字却计入成功率）。
+            invalid_tool = str(action)
             action = "final_answer"
             is_final = True
-            result.setdefault("final_answer", "## 处理异常\n\nLLM 选择了无效工具。")
+            if not (result.get("final_answer") or "").strip():
+                result["final_answer"] = "## 处理异常\n\nLLM 选择了无效工具。"
+                is_error = True
+            if is_error:
+                prior_thought = (result.get("thought") or "").strip()
+                result["thought"] = f"LLM 选择了无效工具：{invalid_tool}" + (
+                    f"（{prior_thought}）" if prior_thought else ""
+                )
 
         return ReActDecision(
             thought=result.get("thought", ""),
@@ -458,6 +470,7 @@ class ReActAgent:
             action_input=result.get("action_input", {}),
             final_answer=result.get("final_answer"),
             is_final=is_final,
+            is_error=is_error,
         )
 
     @staticmethod
