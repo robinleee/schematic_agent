@@ -12,9 +12,10 @@ React + FastAPI 是主线：在仓库根目录执行 `cd frontend && npm run bui
 
 1. `product/PRD_V5.1.md` — 当前产品需求基线，包含技术选型回写、指标口径、非功能需求与安全要求。
 2. `architecture/TECHNICAL_IMPLEMENTATION_PLAN.md` — 当前技术实现方案 V2.0，按代码事实描述系统架构、模块状态与路线图。
-3. `product/TODO_DEVELOPMENT_TASKS.md` — 当前待完成开发任务清单，可按完成状态动态更新。
-4. `product/PRD_GAP_ANALYSIS_V2.md` — 最新 gap 分析，作为剩余待办与风险排序的参考。
-5. `../CLAUDE.md` — 给 AI 编码助手的工作指南与代码库快速索引。
+3. `product/REMAINING_WORK_2026-11-12.md` — **当前待办总览（2026-11-12 实测核查）**，按 P0/P1/P2 排序，含验收标准与建议排期。
+4. `product/TODO_DEVELOPMENT_TASKS.md` — 历史任务清单，完成状态以 REMAINING_WORK 为准。
+5. `product/PRD_GAP_ANALYSIS_V2.md` — gap 分析，作为剩余待办与风险排序的参考。
+6. `../CLAUDE.md` — 给 AI 编码助手的工作指南与代码库快速索引。
 
 ## 文档分区
 
@@ -26,6 +27,7 @@ React + FastAPI 是主线：在仓库根目录执行 `cd frontend && npm run bui
 - `TODO_DEVELOPMENT_TASKS.md` — 当前待完成开发任务清单，可动态更新状态。
 - `PRD_GAP_ANALYSIS_V2.md` — 最新 gap 分析。
 - `DELIVERY_CLOSURE_TASK_LIST.md` — 交付阻塞项与最终验收清单。
+- `REMAINING_WORK_2026-11-12.md` — 最新待办总览（实测基线：418 tests passed / 覆盖率 46% / 分支领先 master 42 commits）。
 
 ### architecture/
 
@@ -65,5 +67,5 @@ React + FastAPI 是主线：在仓库根目录执行 `cd frontend && npm run bui
 
 - 新的活文档优先放入 `docs/` 对应分区。
 - 过期文档移动到 `archive/`，不要留在根目录。
-- 当前基线只认三份活文档：`product/PRD_V5.1.md`、`architecture/TECHNICAL_IMPLEMENTATION_PLAN.md`、`product/PRD_GAP_ANALYSIS_V2.md`；任务跟踪使用 `product/TODO_DEVELOPMENT_TASKS.md`。
+- 当前基线只认三份活文档：`product/PRD_V5.1.md`、`architecture/TECHNICAL_IMPLEMENTATION_PLAN.md`、`product/PRD_GAP_ANALYSIS_V2.md`；任务跟踪以 `product/REMAINING_WORK_2026-11-12.md` 为准，`product/TODO_DEVELOPMENT_TASKS.md` 为历史清单。
 - 文档内引用路径变更时，同步更新 `CLAUDE.md` 与本导航页。
