@@ -117,12 +117,19 @@
 - **背景**：Community Edition 不支持 DB 级只读用户，需评估是升级 Enterprise / 还是接受现状
 - **验收**：明确结论并写入文档；若实施，Agent 查询路径使用只读凭据
 - **预估**：0.5 天（决策为主）
+- **✅ 2026-11-24**：不升级 Enterprise、不靠账号。实测 Community 版中 `graph_reader` 等账号没有角色、实际可写；
+  改为 `NEO4J_READ_ONLY=true` 时以 `READ_ACCESS` 会话执行查询，写语句由服务端拒绝（已实测）。详见 `docs/ops/NEO4J_READONLY.md`。
 
 #### P1-4 核心数据指标真实复核
 - **现状**：AMR 耐压覆盖率 99.8% 来自 commit message，未连真实库抽样；电压标注率、核心网络识别率同样陈旧（口径为单项目 12,688 器件时代）。
 - **动作**：基于当前 25,376 器件多项目数据跑 `scripts/check_data_quality.py`，抽样 100 个电容核对降额判定；输出报告到 `tools/benchmark_reports/`
 - **验收**：三项指标有真实数字 + 抽样明细；差异 >2% 时定位原因
 - **预估**：1 天
+- **✅ 2026-11-24**：报告 `hardware_ai_expert/tools/benchmark_reports/data_quality_review_2026-11-24.md`。要点：
+  - AMR 电容耐压「99.8%」属实，但其中 14.3% 是封装+容值经验表推断；只算真实数据（`amr_data.yaml`）为 **85.6%**。
+  - 节点上存储的 `voltage_rating` 属性：legacy 80.9%，beet7_acceptance **0%**。
+  - 核心网络连通 100%，核心网络电压已标注 91.1% / 89.7%；全网电压标注率 20.7% / 19.4%。
+  - 抽样 100 颗：3 颗疑似 `amr_data.yaml` 耐压记错（10V 挂 12V 轨）；1 颗差分检测电容被按最高网络电压误判，AMR 应改用两端电压差。
 
 ---
 
@@ -132,23 +139,37 @@
 - 现状：Octopart / Mouser 接口是 stub；无厂商资料/凭据。
 - 动作：补可配置适配器 + mock 契约测试，文档明确标注"非真实集成"
 - 预估：1～2 天
+- **✅ 2026-11-24 核实已具备**：`knowledge_router.InternalPLMRetriever` 已是可配置适配器（`PLM_ENDPOINT` / `PLM_TOKEN` / 五个 `PLM_*_FIELD` 字段映射，未配置时 fail-closed），
+  `tests/test_task11_plm_fallback.py` 7 个 mock 契约测试覆盖命中缓存、未命中、超时/失败、配置缺失、降级到公网且只发 MPN。
+  **非真实集成**：没有 PLM 接口地址和凭据，接入真实系统时只需配置环境变量并补一次 live 验收。
+  `PublicMPNRetriever`（Octopart/Mouser stub）已被 `tier3_retriever.py` 取代，可随 P2-4 一并清理。
 
 #### P2-2 Tier3 搜索后端接入
 - 现状：`tier3_retriever.py` 用 9 个供应商模板直连；SearXNG / Firecrawl 未接。
 - 动作：评估是否值得接（当前模板已覆盖主流原厂），不接就明确标注能力边界
 - 预估：1 天（评估） / 2～3 天（实施）
+- **结论（2026-11-24）：暂不接入**。理由：① 通用搜索需要把 MPN 发给第三方元搜索/爬取服务，扩大了外发面；
+  ② 9 个原厂模板已覆盖主流料号，缺口是小众型号，靠 HITL Datasheet 沉淀补齐更可控。
+  能力边界：Tier3 只能命中模板内厂商的公开产品页/PDF，且默认 `TIER3_ENABLED=false`。
 
 #### P2-3 vLLM 决策
 - 现状：阻塞点是驱动只提供 CUDA 12.1/12.2，装不上近期 vLLM 要求的 CUDA 12.6+ wheel（**不是**硬件/驱动不兼容）。
 - 选项：① 升级驱动 + CUDA 12.6；② 退回 vLLM 0.2.x + CUDA 11.8；③ 继续用 Ollama（51.9 tok/s）
 - 建议：先量化"51.9 tok/s 是否真的不够"，再决定是否动基础设施
 - 预估：决策 0.5 天
+- **结论（2026-11-24）：继续用 Ollama**。当前是单机少量用户，延迟主要来自 Agent 的工具轮次和长输出，
+  不是单流吞吐；vLLM 的收益集中在并发吞吐，换来的是驱动/CUDA 升级的停机风险。并发用户超过 2～3 个、或排队成为瓶颈时再评估。
 
 #### P2-4 Legacy 代码收口
 - 范围：`web_ui/`（Streamlit）、`agent_core.py`、`storage_dispatcher.py`、`parsers/`
 - 动作：确认无用户路径依赖后，删除 / 移到 `archive/` / 显式标注 Legacy
 - 收益：直接抬高覆盖率分母质量，减少维护与误判
 - 预估：1 天（含依赖检查）
+- **依赖检查（2026-11-24）**：`agent_core` / `agent_orchestrator` / `llm_intent_router` / `storage_dispatcher` /
+  `kb_persistence` / `datasheet_processor` / `parsers/` 只被 `web_ui/`（Streamlit）引用；
+  `fix_p0_issues` 等 8 个模块是无人 import 的一次性脚本。二者已在 `.coveragerc` 中排除，覆盖率口径与既有的 `web_ui/` 排除一致。
+  **不能直接删 `web_ui/`**：`/api/v1/graph/visualize` 仍从 `web_ui/sub_pages/graph_viz.py` 引用 DOT 生成函数，
+  需要先把这些函数迁到 `agent_system/` 再归档 Streamlit。删除/归档留待确认后执行。
 
 #### P2-5 工具与文档补录
 - `scripts/trace_engine.py` 提交入库（SSE 事件序列抓取，排查轮次/工具冗余）
@@ -168,6 +189,10 @@
 - **现状**：未启动，System 页面显示 `degraded`，容易让使用者误判系统故障。
 - **动作**：二选一 —— 补 systemd 单元真正跑起来；或从健康检查中移除并明确"Tier2 已由 Neo4j 向量索引替代"
 - **预估**：0.5 天
+- **✅ 2026-11-24**：选择让它常驻。原因：`KnowledgeRouter` 连不上服务端时会静默回退到另一份本地库
+  （`hardware_ai_expert/data/chroma_db`），离线期间写入的知识在服务恢复后查不到，"由 Neo4j 兜底"的说法不成立。
+  已新增 `deploy/systemd/chromadb.service`（安装需 sudo），当前由 `scripts/start_dev.sh` 拉起，健康检查 4/4。
+  回退库里 10-27 写入的数据尚未合并回服务端，需人工确认后处理。
 
 ---
 
