@@ -14,15 +14,25 @@ load_dotenv(os.path.join(ROOT_DIR, ".env"))
 # ============================================================
 
 VOLTAGE_PATTERNS = [
-    (r'(?i)3V3|3\.3V', '3.3V'),
-    (r'(?i)1V8|1\.8V', '1.8V'),
-    (r'(?i)1V2|1\.2V', '1.2V'),
-    (r'(?i)1V0|1\.0V', '1.0V'),
-    (r'(?i)5V\b', '5V'),
-    (r'(?i)12V', '12V'),
-    (r'(?i)0V9|0\.9V', '0.9V'),
-    (r'(?i)0V85|0\.85V', '0.85V'),
-    (r'(?i)0V75|0\.75V', '0.75V'),
+    # Explicit numeric rails: VDD_3V3, VCCINT_0V85, VDDQ_1V2, 1V0_DDR,
+    # FB_V1V0. Keep the numeric token bounded so DDR data/address names do
+    # not become power rails accidentally.
+    (r'(?i)(?:^|[_\-]|V)3V3(?:[_\-]|$)|3\.3V', '3.3V'),
+    (r'(?i)(?:^|[_\-])2V5(?:[_\-]|$)|2\.5V|VPP(?:[_\-]?DDR)?(?:[_\-]|$)', '2.5V'),
+    (r'(?i)(?:^|[_\-]|V)1V8(?:[_\-]|$)|1\.8V', '1.8V'),
+    (r'(?i)(?:^|[_\-])1V35(?:[_\-]|$)|1\.35V', '1.35V'),
+    (r'(?i)(?:^|[_\-])1V2(?:[_\-]|$)|1\.2V|VDDQ(?:[_\-]?DDR)?(?:[_\-]|$)', '1.2V'),
+    (r'(?i)(?:^|[_\-]|V)1V0(?:[_\-]|$)|1\.0V', '1.0V'),
+    (r'(?i)(?:^|[_\-])0V9(?:[_\-]|$)|0\.9V', '0.9V'),
+    (r'(?i)(?:^|[_\-])0V85(?:[_\-]|$)|0\.85V', '0.85V'),
+    (r'(?i)(?:^|[_\-])0V75(?:[_\-]|$)|0\.75V', '0.75V'),
+    (r'(?i)(?:^|[_\-])0V6(?:[_\-]|$)|0\.6V|VTT(?:[_\-]?DDR)?(?:[_\-]|$)', '0.6V'),
+    (r'(?i)(?:^|[_\-]|V)0V675(?:[_\-]|$)|0\.675V', '0.675V'),
+    (r'(?i)(?:^|[_\-]|V)1V05(?:[_\-]|$)|1\.05V', '1.05V'),
+    (r'(?i)(?:^|[_\-]|V)1V1(?:[_\-]|$)|1\.1V', '1.1V'),
+    (r'(?i)(?:^|[_\-]|V)1V25(?:[_\-]|$)|1\.25V', '1.25V'),
+    (r'(?i)(?:^|[_\-])5V(?:[_\-]|$)|5\.0V', '5V'),
+    (r'(?i)(?:^|[_\-])12V(?:[_\-]|$)|12\.0V', '12V'),
     (r'(?i)VBAT|BATT', 'VBAT'),
 ]
 
@@ -101,22 +111,37 @@ class HardwareTopologyDB:
                         "Value": data.get("Value"),
                         "PartType": data.get("PartType"),
                         "RawPartType": data.get("RawPartType"),
+                        "MPN": data.get("MPN"),
+                        "Manufacturer": data.get("Manufacturer"),
+                        "Description": data.get("Description"),
+                        "Quantity": data.get("Quantity"),
+                        "Package": data.get("Package"),
                         "project_id": self.project_id,
                     }
                     for ref, data in batch
                 ]
                 session.run("""
                     UNWIND $components AS comp
-                    MERGE (c:Component {RefDes: comp.RefDes})
+                    MERGE (c:Component {project_id: comp.project_id, RefDes: comp.RefDes})
                     ON CREATE SET c.Model = comp.Model,
                                   c.Value = comp.Value,
                                   c.PartType = comp.PartType,
                                   c.RawPartType = comp.RawPartType,
+                                  c.MPN = comp.MPN,
+                                  c.Manufacturer = comp.Manufacturer,
+                                  c.Description = comp.Description,
+                                  c.Quantity = comp.Quantity,
+                                  c.Package = comp.Package,
                                   c.project_id = comp.project_id
                     ON MATCH SET c.Model = comp.Model,
                                  c.Value = comp.Value,
                                  c.PartType = comp.PartType,
                                  c.RawPartType = comp.RawPartType,
+                                 c.MPN = comp.MPN,
+                                 c.Manufacturer = comp.Manufacturer,
+                                 c.Description = comp.Description,
+                                 c.Quantity = comp.Quantity,
+                                 c.Package = comp.Package,
                                  c.project_id = comp.project_id
                 """, components=batch_data)
                 processed += len(batch)
@@ -129,8 +154,9 @@ class HardwareTopologyDB:
         为 Pin 和 Net 创建索引，这是保证 MERGE 语句极速执行的生命线！
         """
         queries = [
-            "CREATE CONSTRAINT pin_id_unique IF NOT EXISTS FOR (p:Pin) REQUIRE p.Id IS UNIQUE",
-            "CREATE CONSTRAINT net_name_unique IF NOT EXISTS FOR (n:Net) REQUIRE n.Name IS UNIQUE"
+            "CREATE CONSTRAINT pin_project_id_unique IF NOT EXISTS FOR (p:Pin) REQUIRE (p.project_id, p.Id) IS UNIQUE",
+            "CREATE CONSTRAINT net_project_name_unique IF NOT EXISTS FOR (n:Net) REQUIRE (n.project_id, n.Name) IS UNIQUE",
+            "CREATE CONSTRAINT component_project_refdes_unique IF NOT EXISTS FOR (c:Component) REQUIRE (c.project_id, c.RefDes) IS UNIQUE"
         ]
         with self.driver.session() as session:
             for q in queries:
@@ -159,10 +185,10 @@ class HardwareTopologyDB:
         UNWIND $triplets AS trip
 
         // 1. 匹配已经存在的器件节点
-        MATCH (c:Component {RefDes: trip.Component_RefDes})
+        MATCH (c:Component {project_id: $project_id, RefDes: trip.Component_RefDes})
 
         // 2. 创建或匹配引脚节点 (拼装全局唯一 ID)，写入 Type 和 project_id
-        MERGE (p:Pin {Id: trip.Component_RefDes + '_' + trip.Pin_Number})
+        MERGE (p:Pin {project_id: $project_id, Id: trip.Component_RefDes + '_' + trip.Pin_Number})
         ON CREATE SET p.Number = trip.Pin_Number,
                       p.Type = trip._pin_type,
                       p.project_id = $project_id
@@ -173,7 +199,7 @@ class HardwareTopologyDB:
         MERGE (c)-[:HAS_PIN]->(p)
 
         // 4. 创建或匹配网络节点（带属性推断）
-        MERGE (n:Net {Name: trip.Net_Name})
+        MERGE (n:Net {project_id: $project_id, Name: trip.Net_Name})
         ON CREATE SET n.VoltageLevel = trip._inferred_voltage,
                       n.NetType = trip._inferred_type,
                       n.project_id = $project_id
@@ -194,21 +220,21 @@ class HardwareTopologyDB:
 
             # 统计 NetType 分布
             stats = session.run("""
-                MATCH (n:Net)
+                MATCH (n:Net {project_id: $project_id})
                 RETURN n.NetType AS nt, count(n) AS cnt
                 ORDER BY cnt DESC
-            """)
+            """, project_id=self.project_id)
             print("\nNetType 分布:")
             for row in stats:
                 print(f"  {row['nt'] or 'N/A'}: {row['cnt']}")
 
             # 统计 VoltageLevel 分布
             vstats = session.run("""
-                MATCH (n:Net)
+                MATCH (n:Net {project_id: $project_id})
                 WHERE n.VoltageLevel IS NOT NULL
                 RETURN n.VoltageLevel AS vl, count(n) AS cnt
                 ORDER BY cnt DESC
-            """)
+            """, project_id=self.project_id)
             print("\nVoltageLevel 分布 (已推断):")
             for row in vstats:
                 print(f"  {row['vl']}: {row['cnt']}")

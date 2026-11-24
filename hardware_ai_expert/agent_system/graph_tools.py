@@ -11,14 +11,16 @@ V2 增强：
 
 import os
 import re
+import threading
 from typing import Optional, Any
 from dotenv import load_dotenv
 from langchain_core.tools import tool
 
 try:
-    from neo4j import GraphDatabase
+    from neo4j import GraphDatabase, READ_ACCESS
 except ImportError:
     GraphDatabase = None
+    READ_ACCESS = "READ"
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(ROOT_DIR, ".env"))
@@ -26,7 +28,9 @@ load_dotenv(os.path.join(ROOT_DIR, ".env"))
 # 聚合阈值：超过此数量的网络启用聚合摘要
 DEFAULT_AGGREGATION_THRESHOLD = 100
 
-# 只读模式：为 True 时拦截所有写入类 Cypher
+# 只读模式：为 True 时拦截所有写入类 Cypher。
+# 关键字正则只是第一道防线；会话同时以 READ_ACCESS 打开，由 Neo4j 服务端拒绝写入
+# （Community 版没有 RBAC，graph_reader 之类的账号实际拥有写权限，不能靠账号做只读）。
 READ_ONLY_MODE = os.getenv("NEO4J_READ_ONLY", "false").lower() in ("true", "1", "yes")
 
 # Cypher 查询超时（秒）
@@ -72,22 +76,29 @@ def _run_cypher(query: str, params: dict = None, timeout: int = None, project_id
             f"[Read-Only Mode] 写入操作被拦截: {query[:80]}..."
         )
 
-    # 注入 project_id 参数（未显式指定时从全局取）
+    # 注入 project_id 参数（未显式指定时从调用线程的当前项目取）
     params = dict(params or {})
     if project_id is not None:
         params["project_id"] = project_id
-    elif "project_id" not in params and _current_project_id != "default":
-        params["project_id"] = _current_project_id
+    elif "project_id" not in params and get_current_project() != "default":
+        params["project_id"] = get_current_project()
 
     driver = _get_driver()
     timeout = timeout or CYPHER_TIMEOUT_SECONDS
-    with driver.session() as session:
+    session_kwargs = {"default_access_mode": READ_ACCESS} if READ_ONLY_MODE else {}
+    with driver.session(**session_kwargs) as session:
         # 大网络安全保护：若无 LIMIT 且查询含 Net，自动加 LIMIT
         safe_query = query
+        if params.get("project_id") not in (None, "default"):
+            # Legacy null-owned nodes are not shared. Never include them for
+            # a selected project, even in power-tree traversals.
+            safe_query = re.sub(
+                r"(\b\w+\.project_id\s*=\s*\$project_id)\s+OR\s+\w+\.project_id\s+IS\s+NULL",
+                r"\1", safe_query, flags=re.IGNORECASE)
         if 'LIMIT' not in query.upper() and 'COUNT(' not in query.upper() and 'AGG' not in query.upper():
             # 检查是否是返回大量行的查询（含 MATCH...RETURN 无聚合）
             if 'RETURN' in query.upper() and not any(agg in query.upper() for agg in ['SUM(', 'AVG(', 'MIN(', 'MAX(', 'COLLECT(']):
-                safe_query = query.rstrip().rstrip(';') + f'\nLIMIT {CYPHER_ROW_LIMIT}'
+                safe_query = safe_query.rstrip().rstrip(';') + f'\nLIMIT {CYPHER_ROW_LIMIT}'
 
         result = session.run(safe_query, params)
         records = [dict(record) for record in result]
@@ -95,29 +106,41 @@ def _run_cypher(query: str, params: dict = None, timeout: int = None, project_id
 
 
 
-# 默认 project_id，可通过 set_current_project() 切换
-_current_project_id = "default"
+# 当前 project_id 为线程本地状态，而非进程全局：FastAPI 的 /chat 和 /ws/chat
+# 用线程池处理并发请求的 ReActAgent.run()，不同请求携带不同 project_id 时，
+# 进程全局变量会让后到的请求覆盖先到请求仍在用的项目范围（跨请求数据泄露/误报）。
+_project_context = threading.local()
 
 
 def set_current_project(project_id: str):
-    """设置当前 project_id，用于多项目数据隔离"""
-    global _current_project_id
-    _current_project_id = project_id
+    """设置当前线程的 project_id，用于多项目数据隔离"""
+    _project_context.project_id = project_id
 
 
 def get_current_project() -> str:
-    """获取当前 project_id"""
-    return _current_project_id
+    """获取当前线程的 project_id，未设置时默认 'default'（聚合视图）"""
+    return getattr(_project_context, "project_id", "default")
 
 
 def list_projects() -> list[str]:
-    """列出 Neo4j 中所有 Project 节点"""
+    """列出 Neo4j 中所有项目
+
+    Project 节点有两种历史写法：ETL 写 ``project_id``，旧 Streamlit 写 ``id``；
+    另有只存在于 Component.project_id 上、没有 Project 节点的项目（如 legacy）。
+    三处都要读，否则新建项目不出现在列表里，前端会把当前项目重置回 default。
+    """
     try:
-        records = _run_cypher("MATCH (p:Project) RETURN p.id AS id ORDER BY p.id")
-        projects = [r["id"] for r in records] if records else []
-        # 始终包含 default
-        if "default" not in projects:
-            projects.insert(0, "default")
+        records = _run_cypher(
+            "MATCH (p:Project) RETURN coalesce(p.project_id, p.id) AS id "
+            "UNION "
+            "MATCH (c:Component) WHERE c.project_id IS NOT NULL "
+            "RETURN DISTINCT c.project_id AS id"
+        )
+        projects = sorted({r["id"] for r in records if r.get("id")})
+        # 始终包含 default，且排在首位
+        if "default" in projects:
+            projects.remove("default")
+        projects.insert(0, "default")
         return projects
     except Exception:
         return ["default"]
@@ -512,23 +535,54 @@ def get_graph_summary() -> str:
     """
     try:
         pid = get_current_project()
-        total_nodes = _run_cypher("MATCH (n) WHERE n.project_id = $project_id OR n.project_id IS NULL RETURN count(n) AS cnt", {"project_id": pid})[0]["cnt"]
-        comp_count = _run_cypher("MATCH (c:Component) WHERE c.project_id = $project_id OR c.project_id IS NULL RETURN count(c) AS cnt", {"project_id": pid})[0]["cnt"]
-        net_count = _run_cypher("MATCH (n:Net) WHERE n.project_id = $project_id OR n.project_id IS NULL RETURN count(n) AS cnt", {"project_id": pid})[0]["cnt"]
-        pin_count = _run_cypher("MATCH (p:Pin) WHERE p.project_id = $project_id OR p.project_id IS NULL RETURN count(p) AS cnt", {"project_id": pid})[0]["cnt"]
+        # ``default`` means no concrete project has been selected yet.  In
+        # that mode the Agent must see the same aggregate graph as the
+        # System page; otherwise project-scoped predicates such as
+        # ``project_id = 'default' OR project_id IS NULL`` hide all imported
+        # projects (currently ``legacy`` and ``beet7_acceptance``).
+        project_filter = (
+            "(n.project_id = $project_id OR n.project_id IS NULL)"
+            if pid != "default"
+            else "true"
+        )
+        component_filter = (
+            "(c.project_id = $project_id OR c.project_id IS NULL)"
+            if pid != "default"
+            else "true"
+        )
+        params = {"project_id": pid}
+
+        total_nodes = _run_cypher(
+            f"MATCH (n) WHERE {project_filter} RETURN count(n) AS cnt",
+            params,
+        )[0]["cnt"]
+        comp_count = _run_cypher(
+            f"MATCH (c:Component) WHERE {component_filter} RETURN count(c) AS cnt",
+            params,
+        )[0]["cnt"]
+        net_count = _run_cypher(
+            f"MATCH (n:Net) WHERE {project_filter} RETURN count(n) AS cnt",
+            params,
+        )[0]["cnt"]
+        pin_count = _run_cypher(
+            f"MATCH (p:Pin) WHERE {project_filter.replace('n.', 'p.')} "
+            "RETURN count(p) AS cnt",
+            params,
+        )[0]["cnt"]
 
         # 按类型统计器件
-        by_type = _run_cypher("""
+        by_type = _run_cypher(f"""
             MATCH (c:Component)
-            WHERE c.project_id = $project_id OR c.project_id IS NULL
+            WHERE {component_filter}
             RETURN c.PartType AS part_type, count(c) AS cnt
             ORDER BY cnt DESC
-        """, {"project_id": pid})
+        """, params)
 
         lines = [
             "=" * 50,
             "Neo4j 图谱统计摘要",
             "=" * 50,
+            f"项目范围: {'全部项目' if pid == 'default' else pid}",
             f"总节点数: {total_nodes}",
             f"  - Component: {comp_count}",
             f"  - Net: {net_count}",
@@ -699,6 +753,43 @@ def get_power_tree(root_refdes: str = None, voltage: str = None) -> str:
 # Tool 8: 差分对追踪 (预留接口)
 # ============================================================
 
+def _powered_by_ancestors(refdes: str, max_depth: int = 8) -> list:
+    """沿 POWERED_BY 逐跳向上，返回 [(ancestor, voltage, net)]（按层序去重）。
+
+    逐跳而非 ``*1..10``：变长路径会把每条路径的节点/关系全部物化，图稍大就退化。
+    """
+    import time as _time
+
+    started = _time.time()
+    seen = {refdes}
+    ordered: list = []
+    frontier = [refdes]
+    for _ in range(max(1, max_depth)):
+        if not frontier:
+            break
+        rows = _run_cypher(
+            """
+            MATCH (c:Component)-[r:POWERED_BY]->(p:Component)
+            WHERE c.RefDes IN $refs
+            RETURN c.RefDes AS src, p.RefDes AS parent,
+                   r.voltage AS voltage, r.net AS net
+            """,
+            {"refs": frontier},
+        )
+        nxt = []
+        for row in rows:
+            parent = row.get("parent")
+            if not parent or parent in seen:
+                continue
+            seen.add(parent)
+            nxt.append(parent)
+            ordered.append((parent, row.get("voltage"), row.get("net")))
+        frontier = nxt
+        if _time.time() - started > 8:  # 兜底：单器件最多 8s
+            break
+    return ordered
+
+
 @tool
 def find_common_cause(refdes_list: str) -> str:
     """
@@ -738,31 +829,11 @@ def find_common_cause(refdes_list: str) -> str:
             direct_records = _run_cypher(direct_query, {"refdes": refdes})
             redundancy[refdes] = len(direct_records) if direct_records else 0
 
-            # 完整电源路径（BFS 沿 POWERED_BY 向上遍历）
-            path_query = """
-            MATCH path = (c:Component {RefDes: $refdes})-[:POWERED_BY*1..10]->(anc:Component)
-            RETURN [n IN nodes(path)[1..] | n.RefDes] AS ancestors,
-                   [r IN relationships(path) | {voltage: r.voltage, net: r.net}] AS edges
-            """
-            path_records = _run_cypher(path_query, {"refdes": refdes})
-
-            # 收集所有上游节点（去重）
-            ancestors_set = set()
-            ancestors_info = []  # (ancestor, voltage, net)
-            for rec in path_records:
-                ancs = rec['ancestors']
-                edges = rec['edges']
-                for i, anc in enumerate(ancs):
-                    if anc not in ancestors_set:
-                        ancestors_set.add(anc)
-                        edge = edges[i] if i < len(edges) else {}
-                        ancestors_info.append((
-                            anc,
-                            edge.get('voltage'),
-                            edge.get('net')
-                        ))
-
-            power_paths[refdes] = ancestors_info
+            # 完整电源路径：逐跳 BFS（原来用 [:POWERED_BY*1..10] 一次性枚举
+            # 全部路径，Neo4j 要把每条路径的 nodes/relationships 都物化，
+            # 实测单个器件就能卡住 20s+，5 个器件直接 180s。逐跳查询走
+            # RefDes 索引，深度 8 也就 8 条 Cypher。）
+            power_paths[refdes] = _powered_by_ancestors(refdes, max_depth=MAX_DEPTH)
 
         # ── Phase 2: 找到共同上游节点 ──
         # 统计每个上游节点被多少故障器件共享
@@ -1716,35 +1787,22 @@ def get_common_cause_graph(refdes_list: str) -> str:
 
         pid = get_current_project()
 
-        # 查询每个器件的电源上游路径
-        cypher = """
-        MATCH path = (c:Component {RefDes: $refdes})-[:POWERED_BY*1..5]->(upstream:Component)
-        WHERE c.project_id = $project_id OR c.project_id IS NULL
-        WITH c, nodes(path) AS ns, relationships(path) AS rs
-        UNWIND range(0, size(ns)-1) AS i
-        WITH c, ns[i] AS node, CASE WHEN i < size(rs) THEN rs[i] ELSE null END AS rel
-        RETURN DISTINCT c.RefDes AS source_refdes,
-               node.RefDes AS upstream_refdes,
-               node.PartType AS upstream_type,
-               node.Model AS upstream_model
-        """
-
+        # 查询每个器件的电源上游路径（逐跳 BFS；`*1..5` 会物化所有路径，图大就卡）
         all_upstream = {}  # refdes -> set of upstream refdes
         node_info = {}     # refdes -> {type, model}
 
         for refdes in refdes_items:
-            with _get_driver().session() as session:
-                records = session.run(cypher, {"refdes": refdes, "project_id": pid})
-                upstream_set = set()
-                for r in records:
-                    upstream_ref = r["upstream_refdes"]
-                    if upstream_ref:
-                        upstream_set.add(upstream_ref)
-                        node_info[upstream_ref] = {
-                            "type": r["upstream_type"],
-                            "model": r["upstream_model"],
-                        }
-                all_upstream[refdes] = upstream_set
+            upstream_set = set()
+            for anc, _volt, _net in _powered_by_ancestors(refdes, max_depth=5):
+                upstream_set.add(anc)
+                rows = _run_cypher(
+                    "MATCH (c:Component {RefDes: $rd}) "
+                    "RETURN c.PartType AS pt, c.Model AS model LIMIT 1",
+                    {"rd": anc},
+                )
+                if rows:
+                    node_info[anc] = {"type": rows[0].get("pt"), "model": rows[0].get("model")}
+            all_upstream[refdes] = upstream_set
 
             # 记录源器件信息
             cypher_self = """
@@ -1936,6 +1994,383 @@ def trace_power_chain(refdes: str, direction: str = "downstream", max_depth: int
         return f"电源链路追踪出错: {str(e)}"
 
 
+# ─────────────────────────────────────────────────────────────
+# 故障根因的「内联证据」
+#
+# 背景：`trace_fault_root` 原先只沿 POWERED_BY 关系向上溯源。但 ETL 里大量板级
+# 主电源（例如热插拔/多相控制器）**没有** POWERED_BY 关系，工具只能回一句
+# 「未找到 POWERED_BY 关系」，模型只好自己用 query_graph 逐条网络手工拼拓扑
+# —— 这正是 C2 诊断任务 8~10 轮 API 往返的主要来源。
+#
+# 下面的辅助函数在关系缺失时改用「网络连通性」还原主链路（输入网络 → 串联器件
+# → 上游网络；开关节点 → 电感 → 输出网络），并顺带解析反馈分压与输出负载，
+# 让一次调用就能给出可核实的证据。
+# ─────────────────────────────────────────────────────────────
+
+_INPUT_NET_RE = re.compile(
+    r"(?i)^(VIN|VCC|VDD|PVDD|AVDD|DVDD|VCCA|VDDIO|PVIN|AVIN|VSYS|VBAT|VBUS|VMAIN"
+    r"|P\d+V\d*|V\d+P\d+)"
+)
+_SW_NET_RE = re.compile(r"(?i)^(SW|PH|LX|SWITCH)\d*[_-]?")
+_FB_NET_RE = re.compile(r"(?i)(^|_)(FB|VFB|ADJ|VSET|VREF)")
+_GROUND_NET_RE = re.compile(r"(?i)^(A|D|P)?GND")
+_NOISE_NET_RE = re.compile(
+    r"(?i)(FB|_EN$|^EN_|SW\d|ISEN|IMON|ADDR|SCL|SDA|_PG$|FLT|ALERT|BOOT|COMP|SS$)"
+)
+_SERIES_PART_TYPES = [
+    "PASSIVE",
+    "INDUCTOR",
+    "RESISTOR",
+    "FUSE",
+    "DIODE",
+    "MOSFET",
+    "TRANSISTOR",
+]
+_SI_SUFFIX = {
+    "": 1.0,
+    "R": 1.0,
+    "r": 1.0,
+    "K": 1e3,
+    "k": 1e3,
+    "M": 1e6,
+    "m": 1e-3,
+    "U": 1e-6,
+    "u": 1e-6,
+    "N": 1e-9,
+    "n": 1e-9,
+}
+
+
+def _si_value(text):
+    """把 "46.4k" / "0.1uH" / "5mΩ" 这类器件值解析成浮点数，失败返回 None。"""
+    if text is None:
+        return None
+    raw = str(text).strip().replace("Ω", "").replace("ohm", "").replace("F", "")
+    raw = raw.replace("H", "").strip()
+    m = re.match(r"^([0-9]*\.?[0-9]+)\s*([a-zA-Zµ]?)", raw)
+    if not m:
+        return None
+    try:
+        num = float(m.group(1))
+    except ValueError:
+        return None
+    scale = _SI_SUFFIX.get(m.group(2) or "", None)
+    if scale is None:
+        return None
+    return num * scale
+
+
+def _component_nets(refdes: str) -> list:
+    """返回器件的 (pin, net, net_type, voltage) 列表。"""
+    return _run_cypher(
+        """
+        MATCH (c:Component {RefDes: $refdes})-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
+        WHERE (c.project_id = $project_id OR c.project_id IS NULL)
+        RETURN p.Number AS pin, n.Name AS net, n.NetType AS ntype,
+               n.VoltageLevel AS voltage
+        """,
+        {"refdes": refdes},
+    )
+
+
+def _net_summary(net: str, limit: int = 40) -> list:
+    """返回一条网络上的器件清单（按类型聚合电容，其余逐个列出）。"""
+    return _run_cypher(
+        """
+        MATCH (c:Component)-[:HAS_PIN]->(:Pin)-[:CONNECTS_TO]->(n:Net {Name: $net})
+        WHERE (c.project_id = $project_id OR c.project_id IS NULL)
+        RETURN DISTINCT c.RefDes AS rd, c.PartType AS pt, c.Value AS val
+        ORDER BY c.PartType, c.RefDes
+        LIMIT $limit
+        """,
+        {"net": net, "limit": limit},
+    )
+
+
+def _net_bridges(net: str, refdes: str, limit: int = 10) -> list:
+    """与 net 直连、且跨接到另一条电源网络的串联器件（电感/电阻/二极管/开关管等）。"""
+    return _run_cypher(
+        """
+        MATCH (c:Component)-[:HAS_PIN]->(:Pin)-[:CONNECTS_TO]->(n1:Net {Name: $net})
+        MATCH (c)-[:HAS_PIN]->(:Pin)-[:CONNECTS_TO]->(n2:Net)
+        WHERE (c.project_id = $project_id OR c.project_id IS NULL)
+          AND c.RefDes <> $refdes
+          AND n2.Name <> $net
+          AND n2.NetType = 'POWER'
+          AND c.PartType IN $types
+          AND NOT n2.Name =~ $ground
+          AND NOT n2.Name =~ $noise
+        RETURN DISTINCT c.RefDes AS rd, c.PartType AS pt, c.Value AS val,
+               n2.Name AS other_net, n2.VoltageLevel AS other_v
+        LIMIT $limit
+        """,
+        {
+            "net": net,
+            "refdes": refdes,
+            "types": _SERIES_PART_TYPES,
+            # Cypher 的 =~ 是整串匹配（不像 Python re.search），必须自己补 .*
+            "ground": r"(?i).*GND.*",
+            "noise": (
+                r"(?i).*(FB|_EN|EN_|SW[0-9]|ISEN|IMON|ADDR|SCL|SDA"
+                r"|_PG|FLT|ALERT|BOOT|COMP|SS).*"
+            ),
+            "limit": limit,
+        },
+    )
+
+
+def _fmt_net_devices(rows: list, exclude: set = None, limit: int = 6) -> str:
+    """把器件清单压成一行：`C×15, L20006(0.1uH), U20187`。"""
+    exclude = exclude or set()
+    caps = 0
+    others = []
+    printed = set()
+    for row in rows:
+        rd = row.get("rd")
+        if rd in exclude or rd in printed:
+            continue
+        printed.add(rd)
+        if row.get("pt") == "CAPACITOR":
+            caps += 1
+            continue
+        val = row.get("val") or ""
+        others.append(f"{row.get('rd')}({val})" if val else str(row.get("rd")))
+    parts = []
+    if caps:
+        parts.append(f"C×{caps}")
+    if others:
+        shown = others[:limit]
+        more = f" …+{len(others) - limit}" if len(others) > limit else ""
+        parts.append(", ".join(shown) + more)
+    return ", ".join(parts) if parts else "（无）"
+
+
+def _fb_nets_near(refdes: str, nets: list) -> list:
+    """找出与器件“隔一个串阻”的反馈网络。
+
+    控制器常见画法：FB 引脚串一颗电阻到分压中点（该中点网络叫 FB_xxx），
+    所以分压网络往往不直接连在 IC 上。这里沿器件网络上的电阻再走一跳。
+    """
+    found = []
+    for item in nets:
+        name = item.get("net") or ""
+        if name and _FB_NET_RE.search(name) and name not in found:
+            found.append(name)
+    if found:
+        return found
+
+    rows = _run_cypher(
+        """
+        MATCH (c:Component {RefDes: $refdes})-[:HAS_PIN]->(:Pin)-[:CONNECTS_TO]->(n:Net)
+        MATCH (r:Component {PartType: 'RESISTOR'})-[:HAS_PIN]->(:Pin)-[:CONNECTS_TO]->(n)
+        MATCH (r)-[:HAS_PIN]->(:Pin)-[:CONNECTS_TO]->(fb:Net)
+        WHERE (c.project_id = $project_id OR c.project_id IS NULL)
+          AND (r.project_id = $project_id OR r.project_id IS NULL)
+          AND fb.Name =~ $fbre
+          AND NOT n.Name =~ $ground
+        RETURN DISTINCT fb.Name AS net
+        LIMIT 5
+        """,
+        {
+            "refdes": refdes,
+            "fbre": r"(?i).*(FB|VFB|ADJ|VSET).*",
+            # 不能用公共地网络当“串阻另一头”：DGND 上挂了几千个电阻，
+            # 不排除会把全板的 FB 网络都招回来。
+            "ground": r"(?i).*GND.*",
+        },
+    )
+    return [r["net"] for r in rows if r.get("net")]
+
+
+def _divider_evidence(refdes: str, nets: list) -> list:
+    """解析反馈分压网络：上臂/下臂阻值、分压比、目标 Vref 与输出网络电压是否自洽。"""
+    fb_nets = _fb_nets_near(refdes, nets)
+    if not fb_nets:
+        return []
+
+    lines = []
+    for fb in fb_nets[:2]:
+        rows = _run_cypher(
+            """
+            MATCH (r:Component {PartType: 'RESISTOR'})-[:HAS_PIN]->(:Pin)-[:CONNECTS_TO]->(n:Net {Name: $fb})
+            WHERE (r.project_id = $project_id OR r.project_id IS NULL)
+            RETURN DISTINCT r.RefDes AS rd, r.Value AS val
+            """,
+            {"fb": fb},
+        )
+        if not rows:
+            continue
+        arms = []  # (rd, value, other_net, other_v, kind)
+        for r in rows:
+            others = _run_cypher(
+                """
+                MATCH (r:Component {RefDes: $rd})-[:HAS_PIN]->(:Pin)-[:CONNECTS_TO]->(n:Net)
+                WHERE (r.project_id = $project_id OR r.project_id IS NULL)
+                  AND n.Name <> $fb
+                RETURN n.Name AS net, n.NetType AS ntype, n.VoltageLevel AS voltage
+                """,
+                {"rd": r["rd"], "fb": fb},
+            )
+            for o in others:
+                name = o.get("net") or ""
+                ntype = (o.get("ntype") or "").upper()
+                if _GROUND_NET_RE.match(name):
+                    kind = "下臂"
+                elif ntype == "POWER":
+                    kind = "上臂"
+                else:
+                    # 非电源网络 = FB 引脚到分压中点的串阻，不参与分压比
+                    kind = "串阻"
+                arms.append((r["rd"], r.get("val"), name, o.get("voltage"), kind))
+
+        lines.append(f"\n🎚️ 反馈分压网络 {fb}:")
+        top = [a for a in arms if a[4] == "上臂"]
+        bottom = [a for a in arms if a[4] == "下臂"]
+        for rd, val, net, v, kind in arms:
+            vtxt = f"{v}V" if v is not None else "?"
+            lines.append(f"  {kind}: {rd} {val or '?'} → {net} ({vtxt})")
+
+        if len(top) == 1 and len(bottom) == 1:
+            r_top = _si_value(top[0][1])
+            r_bot = _si_value(bottom[0][1])
+            if r_top and r_bot and r_top > 0:
+                ratio = (r_top + r_bot) / r_bot
+                lines.append(
+                    f"  分压比 {ratio:.2f}:1（上臂 {top[0][1]} / 下臂 {bottom[0][1]}，"
+                    f"输出≈Vref×{ratio:.2f}）"
+                )
+                v_out = top[0][3]
+                if v_out is None:
+                    v_out = bottom[0][3]
+                if v_out is None:
+                    for arm in arms:
+                        if arm[4] == "上臂" and arm[3] is not None:
+                            v_out = arm[3]
+                            break
+                if v_out:
+                    vref = float(v_out) * r_bot / (r_top + r_bot)
+                    lines.append(
+                        f"  反推：输出 {v_out}V 需要 Vref≈{vref:.3f}V"
+                        f"（0.5V 基准 ⇒ {0.5 * ratio:.2f}V，0.6V ⇒ {0.6 * ratio:.2f}V，"
+                        f"0.8V ⇒ {0.8 * ratio:.2f}V）"
+                    )
+                    common_refs = (0.5, 0.6, 0.8, 1.0)
+                    nearest = min(common_refs, key=lambda x: abs(x - vref))
+                    if abs(nearest - vref) / nearest <= 0.05:
+                        lines.append(
+                            f"  ✓ 分压网络与输出目标自洽（等价 {nearest}V 基准，"
+                            f"偏差 {abs(nearest - vref) / nearest * 100:.1f}%），"
+                            "可优先怀疑上游供电/负载而非分压参数"
+                        )
+                    else:
+                        lines.append(
+                            f"  ⚠️ 分压网络与输出目标不自洽：反推 {vref:.3f}V 基准不匹配常见"
+                            f" 0.5/0.6/0.8/1.0V（最近 {nearest}V，偏差 "
+                            f"{abs(nearest - vref) / nearest * 100:.0f}%），"
+                            "优先核对分压电阻选型/贴装"
+                        )
+                    out_net = top[0][2]
+                    if out_net:
+                        loads = _net_summary(out_net, limit=80)
+                        ic_like = [
+                            r
+                            for r in loads
+                            if r.get("pt") not in ("CAPACITOR", "RESISTOR", "PASSIVE")
+                        ]
+                        lines.append(
+                            f"  输出网络 {out_net} 负载 {len(loads)} 个器件"
+                            f"（非无源 {len(ic_like)}: {_fmt_net_devices(loads, {refdes}, limit=5)}）"
+                        )
+    return lines
+
+
+def _net_chain_evidence(refdes: str, net_rows: list = None) -> list:
+    """用网络连通性还原供电路径与输出去向（POWERED_BY 缺失时的替代证据）。"""
+    net_rows = net_rows if net_rows is not None else _component_nets(refdes)
+    if not net_rows:
+        return []
+
+    seen = []
+    for row in net_rows:
+        if row.get("net") and row["net"] not in seen:
+            seen.append(row["net"])
+
+    inputs = [
+        n for n in seen if _INPUT_NET_RE.match(n) and not _NOISE_NET_RE.search(n)
+    ][:3]
+    switches = [n for n in seen if _SW_NET_RE.match(n)][:3]
+    vmap = {
+        r["net"]: r.get("voltage")
+        for r in net_rows
+        if r.get("net") and r.get("voltage") is not None
+    }
+
+    def vtxt(net):
+        v = vmap.get(net)
+        return f"{v}V" if v is not None else "?"
+
+    lines = []
+    if inputs:
+        lines.append("\n🔎 网络级上游链（按网络连通性还原，可直接作为证据引用）:")
+        # 把所有已知网络都标为已访问：否则会沿同一条链路来回“跳”（
+        # VIN_FUSA ⇄ VIN_P12V_SAFETY 这类），把预算全花在重复展开上。
+        visited = set(seen) | {refdes}
+        for net in inputs:
+            devices = _net_summary(net, limit=40)
+            lines.append(f"  ● {net} ({vtxt(net)}) 直连器件: {_fmt_net_devices(devices, visited)}")
+            frontier = [(net, 1, "    ")]
+            while frontier:
+                cur_net, hop, indent = frontier.pop(0)
+                if hop > 2:
+                    continue
+                for br in _net_bridges(cur_net, refdes, limit=6):
+                    up_net = br.get("other_net")
+                    if not up_net or up_net in visited:
+                        continue
+                    visited.add(up_net)
+                    arrow = "←" if hop == 1 else "⇇"
+                    lines.append(
+                        f"{indent}{arrow} 经 {br['rd']} {br.get('val') or ''} "
+                        f"({br['pt']}) 连到 {up_net} ({vtxt(up_net)})"
+                    )
+                    up_devices = _net_summary(up_net, limit=40)
+                    lines.append(
+                        f"{indent}   {up_net} 器件: {_fmt_net_devices(up_devices, visited)}"
+                    )
+                    frontier.append((up_net, hop + 1, indent + "  "))
+    else:
+        lines.append("\n🔎 网络级上游链: 未识别到输入电源网络（网络名不含 VIN/VCC/VDD 等前缀）")
+
+    if switches:
+        lines.append("\n🔀 开关节点/输出去向:")
+        for sw in switches:
+            bridges = _net_bridges(sw, refdes, limit=4)
+            if not bridges:
+                lines.append(
+                    f"  ● {sw} ({vtxt(sw)}) → 未发现直达输出网络的串联器件"
+                    "（多相并联/扇出型开关节点，输出网络以反馈分压上臂为准）"
+                )
+                continue
+            for br in bridges:
+                out_net = br.get("other_net") or ""
+                loads = _net_summary(out_net, limit=60)
+                ic_like = [
+                    r
+                    for r in loads
+                    if r.get("pt") not in ("CAPACITOR", "RESISTOR", "PASSIVE")
+                ]
+                lines.append(
+                    f"  ● {sw} ({vtxt(sw)}) → {br['rd']} {br.get('val') or ''} "
+                    f"({br['pt']}) → {out_net} ({vtxt(out_net)})"
+                )
+                lines.append(
+                    f"     {out_net} 负载 {len(loads)} 个器件"
+                    f"（其中非无源器件 {len(ic_like)}: "
+                    f"{_fmt_net_devices(loads, {refdes}, limit=5)}）"
+                )
+    return lines
+
+
 @tool
 def trace_fault_root(refdes: str, symptom: str = "") -> str:
     """
@@ -2006,6 +2441,18 @@ def trace_fault_root(refdes: str, symptom: str = "") -> str:
                                      f"检查 {u2['rd']} → {u['rd']} → {refdes} 链路"))
         else:
             lines.append("⚡ 上游供电: 未找到 POWERED_BY 关系（可能为顶层电源输入或关系缺失）")
+
+        # ── 1b. 关系缺失时的内联证据 ──
+        # 让模型一次拿到「网络级供电链 / 反馈分压 / 输出去向」，免去再开 3~4 轮
+        # query_graph 手工拼拓扑。任一子块异常都不影响主流程。
+        try:
+            net_rows = _component_nets(refdes)
+            for ev_line in _net_chain_evidence(refdes, net_rows):
+                lines.append(ev_line)
+            for dv_line in _divider_evidence(refdes, net_rows):
+                lines.append(dv_line)
+        except Exception as ev_err:  # noqa: BLE001
+            lines.append(f"\n（内联证据生成失败: {ev_err}）")
 
         # ── 2. 使能信号检查 ──
         en_q = """
@@ -2126,18 +2573,10 @@ def common_cause_risk_score(refdes_list: str) -> str:
 
         pid = get_current_project()
 
-        # 查询每个器件的上游
-        cypher = """
-        MATCH (c:Component {RefDes: $refdes})-[:POWERED_BY*1..5]->(upstream:Component)
-        WHERE c.project_id = $project_id OR c.project_id IS NULL
-        RETURN collect(DISTINCT upstream.RefDes) AS upstream_refs
-        """
-
+        # 查询每个器件的上游（逐跳 BFS，避免变长路径全量物化）
         all_upstream = {}
         for refdes in refdes_items:
-            with _get_driver().session() as session:
-                rec = session.run(cypher, {"refdes": refdes, "project_id": pid}).single()
-                all_upstream[refdes] = set(rec["upstream_refs"]) if rec and rec["upstream_refs"] else set()
+            all_upstream[refdes] = {a for a, _v, _n in _powered_by_ancestors(refdes, max_depth=5)}
 
         # 计算指标
         total_upstreams = set()

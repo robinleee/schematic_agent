@@ -1,0 +1,22 @@
+[Unit]
+Description=schematic_agent API (FastAPI/uvicorn :8501)
+After=network-online.target neo4j.service ollama.service
+Wants=network-online.target
+RequiresMountsFor=/data
+
+[Service]
+Type=simple
+User=caros
+Group=caros
+Environment=HOME=/home/caros
+Environment=PYTHONUNBUFFERED=1
+WorkingDirectory=/data/schematic_agent
+ExecStart=/bin/bash /data/schematic_agent/scripts/run_api.sh fg
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+StandardOutput=append:/data/schematic_agent/logs/uvicorn.log
+StandardError=append:/data/schematic_agent/logs/uvicorn.log
+
+[Install]
+WantedBy=multi-user.target

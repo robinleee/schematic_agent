@@ -25,9 +25,9 @@ from agent_system.react_agent import ReActAgent
 # LLM 依赖测试标记 — 需要 Ollama 服务运行
 # 跳过: pytest -m "not llm"
 llm_test = pytest.mark.llm
+pytestmark = pytest.mark.live
 
 
-@llm_test
 @pytest.fixture(scope="module")
 def agent():
     """共享 Agent 实例"""

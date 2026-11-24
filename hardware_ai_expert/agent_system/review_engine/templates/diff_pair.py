@@ -142,7 +142,7 @@ class DiffPairCheckTemplate(RuleTemplate):
         require_ac_coupling = params.get("require_ac_coupling", ["PCIe", "USB3"])
         require_cmc = params.get("require_cmc", ["USB2", "USB3", "Ethernet"])
 
-        driver = context.neo4j_driver
+        driver = context.scoped_driver
 
         if check_type in ("matching", "all"):
             violations.extend(self._check_matching(

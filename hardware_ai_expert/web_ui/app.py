@@ -1,5 +1,8 @@
 """
-Hardware AI Expert System - Streamlit Web UI
+Legacy Streamlit Web UI (fallback only; not the mainline entry point).
+
+Mainline: React frontend served by FastAPI via scripts/start_dev.sh.
+Keep this fallback until all seven React pages pass live core-flow validation.
 
 功能模块：
   1. 聊天界面：与 Agent 对话，支持审查/诊断/查询
@@ -1893,7 +1896,7 @@ with st.sidebar:
                         from neo4j import GraphDatabase
                         driver = GraphDatabase.driver(
                             os.environ.get("NEO4J_URI", "bolt://localhost:7687"),
-                            auth=("neo4j", os.environ.get("NEO4J_PASSWORD", "SecretPassword123"))
+                            auth=("neo4j", os.environ.get("NEO4J_PASSWORD"))
                         )
                         try:
                             with driver.session() as session:
@@ -1918,7 +1921,7 @@ with st.sidebar:
                     from neo4j import GraphDatabase
                     driver = GraphDatabase.driver(
                         os.environ.get("NEO4J_URI", "bolt://localhost:7687"),
-                        auth=("neo4j", os.environ.get("NEO4J_PASSWORD", "SecretPassword123"))
+                        auth=("neo4j", os.environ.get("NEO4J_PASSWORD"))
                     )
                     try:
                         with driver.session() as session:
@@ -1968,5 +1971,3 @@ with st.sidebar:
 
 # 运行当前页面
 pg.run()
-
-

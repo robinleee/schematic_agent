@@ -94,7 +94,7 @@ class PullupCheckTemplate(RuleTemplate):
         if not net_patterns:
             return violations
 
-        driver = context.neo4j_driver
+        driver = context.scoped_driver
 
         # Pass driver to sub-checks via params
         params["_driver"] = driver
@@ -160,7 +160,7 @@ class PullupCheckTemplate(RuleTemplate):
 
         valid_resistors = []
         for res in resistors:
-            val_str = res.get("res_value", "")
+            val_str = res.get("res_value", "") or ""
             # 跳过 DNP 电阻（不贴装，不算有效上拉）
             if val_str.upper().startswith("DNP"):
                 continue

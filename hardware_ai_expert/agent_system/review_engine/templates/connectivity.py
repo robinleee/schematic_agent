@@ -46,7 +46,7 @@ class ConnectivityCheck(RuleTemplate):
         exclude_part_types = params.get("exclude_part_types", ["TESTPOINT", "MECHANICAL"])
         min_bus_devices = params.get("min_bus_devices", 2)
 
-        driver = context.neo4j_driver
+        driver = context.scoped_driver
 
         if check_type in ("floating_pin", "all"):
             violations.extend(self._check_floating_pins(

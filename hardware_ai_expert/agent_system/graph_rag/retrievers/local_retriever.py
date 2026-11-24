@@ -20,7 +20,8 @@ class LocalRetriever:
         self.vector_indexer = vector_indexer
         self.config = config or GraphRAGConfig()
 
-    def retrieve(self, query: str, top_k: int = 5) -> list[RetrievalResult]:
+    def retrieve(self, query: str, top_k: int = 5,
+                 project_id: Optional[str] = None) -> list[RetrievalResult]:
         """
         向量相似度检索
 
@@ -31,7 +32,7 @@ class LocalRetriever:
         Returns:
             检索结果列表
         """
-        results = self.vector_indexer.search(query, top_k=top_k)
+        results = self.vector_indexer.search(query, top_k=top_k, project_id=project_id)
 
         retrieval_results = []
         for r in results:

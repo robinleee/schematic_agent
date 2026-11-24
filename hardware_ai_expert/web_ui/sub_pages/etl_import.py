@@ -374,7 +374,7 @@ def render_load():
         neo4j_uri = st.text_input("Neo4j URI", value="bolt://localhost:7687")
     with col2:
         neo4j_user = st.text_input("Neo4j 用户", value="neo4j")
-        neo4j_password = st.text_input("Neo4j 密码", value="SecretPassword123", type="password")
+        neo4j_password = st.text_input("Neo4j 密码", value="", type="password")
 
     # 执行入库
     if st.button("🚀 开始入库", type="primary"):
@@ -441,5 +441,4 @@ def main():
 
     with tab4:
         render_load()
-
 

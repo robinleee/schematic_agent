@@ -1,0 +1,496 @@
+"""业务级工具适配层。
+
+原则：
+- 只做参数整形、项目边界校验、返回裁剪
+- 不重写任何专业逻辑，全部复用 ``agent_system`` 现有实现
+- 工具签名即 LLM 可见契约，参数使用业务语义（refdes / net_name / voltage）
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+from typing import Literal, Optional
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+HARDWARE_DIR = REPO_ROOT / "hardware_ai_expert"
+if str(HARDWARE_DIR) not in sys.path:
+    sys.path.insert(0, str(HARDWARE_DIR))
+
+from agent_system import graph_tools  # noqa: E402
+from mcp_server import query_engine  # noqa: E402
+from mcp_server.project_guard import ProjectScopeError, resolve_project  # noqa: E402
+
+MAX_RESULT_CHARS = int(os.getenv("SCHEMATIC_MCP_MAX_RESULT_CHARS", "6000"))
+# JSON 结果单独给预算：批量/子图结果按块裁剪，不走字符串硬截断（否则 JSON 断裂）。
+MAX_JSON_CHARS = int(os.getenv("SCHEMATIC_MCP_MAX_JSON_CHARS", "16000"))
+
+WRITE_TOOLS_ENABLED = os.getenv("SCHEMATIC_ENABLE_WRITE_TOOLS", "0").lower() in (
+    "1",
+    "true",
+    "yes",
+)
+
+
+# ---------------------------------------------------------------------------
+# 内部工具
+# ---------------------------------------------------------------------------
+
+
+def _bind_project(project_id: str) -> str:
+    """解析并绑定项目，同步到 graph_tools 的全局上下文。"""
+    pid = resolve_project(project_id)
+    graph_tools.set_current_project(pid)
+    return pid
+
+
+def _guard(tool: str, project_id: str) -> tuple[str, str]:
+    """解析项目；越界时返回可被模型理解的拒绝结果，而不是抛异常。
+
+    MCP 客户端拿到的异常会被 SDK 折叠成 "Error executing tool xxx"，
+    丢失具体原因；这里显式转成结构化文本，便于 Agent 自我纠正。
+    """
+    try:
+        return _bind_project(project_id), ""
+    except ProjectScopeError as exc:
+        return "", (
+            f"[scope-denied | tool={tool}] {exc}\n"
+            "说明：当前会话已绑定固定项目，不能跨项目查询。"
+            "如需访问其他项目，请新建会话。"
+        )
+
+
+def _invoke(tool_obj, args: dict) -> str:
+    """调用 LangChain StructuredTool 并统一转为字符串。"""
+    result = tool_obj.invoke(args)
+    if isinstance(result, str):
+        return result
+    return str(result)
+
+
+def _format(pid: str, tool: str, body: str) -> str:
+    """统一返回格式：项目标签 + 截断。"""
+    text = body.strip()
+    truncated = False
+    if len(text) > MAX_RESULT_CHARS:
+        text = text[:MAX_RESULT_CHARS] + "\n\n[结果已截断，如需细节请缩小查询范围]"
+        truncated = True
+    suffix = " | truncated" if truncated else ""
+    return f"[project={pid} | tool={tool}{suffix}]\n{text}"
+
+
+def _format_json(pid: str, tool: str, payload: dict) -> str:
+    """结构化结果的统一返回：项目标签 + 紧凑 JSON（已在引擎侧按预算裁剪）。"""
+    return f"[project={pid} | tool={tool}]\n{query_engine.pack(payload)}"
+
+
+def _error(pid: str, tool: str, exc: Exception) -> str:
+    return f"[project={pid} | tool={tool} | error] {type(exc).__name__}: {exc}"
+
+
+def _require_write_enabled(tool: str) -> None:
+    if not WRITE_TOOLS_ENABLED:
+        raise PermissionError(
+            f"写工具 '{tool}' 未启用。设置 SCHEMATIC_ENABLE_WRITE_TOOLS=1 后重启服务。"
+        )
+
+
+# ---------------------------------------------------------------------------
+# 只读工具
+# ---------------------------------------------------------------------------
+
+
+def project_overview(project_id: str = "") -> str:
+    """查看当前项目的整体概况：器件/网络规模、电源域分布、I2C 设备数量。
+
+    回答「这个项目有多大」「有哪些电压域」这类问题时的第一个工具。
+    """
+    pid, denied = _guard("project_overview", project_id)
+    if denied:
+        return denied
+    try:
+        parts = [
+            _invoke(graph_tools.get_graph_summary, {}),
+            _invoke(graph_tools.get_power_domain, {"detail": False}),
+        ]
+        return _format(pid, "project_overview", "\n\n".join(parts))
+    except Exception as exc:  # noqa: BLE001
+        return _error(pid, "project_overview", exc)
+
+
+def query_graph(
+    query_type: Literal[
+        "component_nets",
+        "net_components",
+        "i2c_devices",
+        "power_tree",
+        "neighborhood",
+    ],
+    refdes: str = "",
+    net_name: str = "",
+    root_refdes: str = "",
+    voltage: str = "",
+    refdes_list: Optional[list[str]] = None,
+    net_name_list: Optional[list[str]] = None,
+    depth: int = 2,
+    max_nets: int = 40,
+    max_pins: int = 300,
+    project_id: str = "",
+) -> str:
+    """按对象查询图谱结构。批量参数优先于单值参数。
+
+    - component_nets: 器件的引脚-网络。refdes_list=[...] 一次查多个（推荐）。
+      只想要引脚-网络表时用它；若还要看同网络的其它器件，直接用 neighborhood，
+      不要「component_nets + neighborhood」对同一个器件各调一次。
+    - net_components: 网络上的器件。net_name_list=[...] 一次查多个（推荐）。
+    - neighborhood: 以 refdes 为中心的子图（自身引脚-网络 + 这些网络上的其它器件
+      + 器件属性 mpn/part_type/voltage）。depth 1-3（默认 2），max_nets/max_pins 控制体量。
+      诊断「某个器件/某路电源异常」优先用它，一次调用代替逐网络遍历。
+      refdes_list=[...] 可一次查多个器件的邻域（depth 建议 1），用于批量核对
+      同一网络上的电阻/电容，避免逐个器件单独调用。
+      ⚠️ 诊断标准姿势（2 次调用够了）：先 neighborhood(refdes=中心器件, depth=2)，
+      再对返回里需要细看的器件一次性 neighborhood(refdes_list=[...], depth=1)。
+    - i2c_devices / power_tree: 同旧行为。
+
+    新增路径返回紧凑 JSON；truncated=true 表示结果被裁剪，stats 给出真实总量。
+    """
+    pid, denied = _guard("query_graph", project_id)
+    if denied:
+        return denied
+    try:
+        if query_type == "neighborhood":
+            centers, clipped = query_engine.norm_list(
+                ([refdes] if refdes else [])
+                + ([root_refdes] if root_refdes and not refdes else [])
+                + list(refdes_list or [])
+            )
+            if not centers:
+                raise ValueError("neighborhood 需要 refdes 或 refdes_list")
+            if len(centers) > 1 or refdes_list:
+                payload = query_engine.neighborhood_bulk(
+                    refdes_list=centers,
+                    depth=depth,
+                    max_nets=max_nets,
+                    max_pins=max_pins,
+                    char_budget=MAX_JSON_CHARS,
+                )
+                payload["input_truncated"] = clipped
+            else:
+                payload = query_engine.neighborhood(
+                    refdes=centers[0],
+                    depth=depth,
+                    max_nets=max_nets,
+                    max_pins=max_pins,
+                    char_budget=MAX_JSON_CHARS,
+                )
+            return _format_json(pid, "query_graph", payload)
+
+        if query_type == "component_nets":
+            wanted, clipped = query_engine.norm_list(
+                ([refdes] if refdes else []) + list(refdes_list or [])
+            )
+            if not wanted:
+                raise ValueError("component_nets 需要 refdes 或 refdes_list")
+            if len(wanted) == 1 and not refdes_list:
+                # 旧单值路径：返回格式完全不变
+                body = _invoke(graph_tools.get_component_nets, {"refdes": wanted[0]})
+                return _format(pid, "query_graph", body)
+            payload = query_engine.bulk_component_nets(wanted)
+            payload["input_truncated"] = clipped
+            return _format_json(pid, "query_graph", payload)
+
+        if query_type == "net_components":
+            wanted, clipped = query_engine.norm_list(
+                ([net_name] if net_name else []) + list(net_name_list or [])
+            )
+            if not wanted:
+                raise ValueError("net_components 需要 net_name 或 net_name_list")
+            if len(wanted) == 1 and not net_name_list:
+                body = _invoke(graph_tools.get_net_components, {"net_name": wanted[0]})
+                return _format(pid, "query_graph", body)
+            payload = query_engine.bulk_net_components(wanted)
+            payload["input_truncated"] = clipped
+            return _format_json(pid, "query_graph", payload)
+
+        if query_type == "i2c_devices":
+            body = _invoke(graph_tools.get_i2c_devices, {})
+        else:
+            args = {}
+            if root_refdes:
+                args["root_refdes"] = root_refdes
+            if voltage:
+                args["voltage"] = voltage
+            body = _invoke(graph_tools.get_power_tree, args)
+        return _format(pid, "query_graph", body)
+    except Exception as exc:  # noqa: BLE001
+        return _error(pid, "query_graph", exc)
+
+
+def trace_signal(
+    mode: Literal["path", "pin", "pair", "discover"],
+    from_refdes: str = "",
+    from_pin: str = "",
+    to_refdes: str = "",
+    to_pin: str = "",
+    start_pin: str = "",
+    start_pin_id: str = "",
+    signal_type: str = "",
+    max_depth: int = 5,
+    project_id: str = "",
+) -> str:
+    """追踪信号连通性与差分对。
+
+    - path: 两个引脚之间的连通路径（需要 from_refdes/from_pin/to_refdes/to_pin）
+    - pin: 从单个引脚出发的被动穿透追踪（需要 start_pin，格式 U1_A4 或 U1.A4）
+    - pair: 追踪一个差分对（需要 start_pin_id）
+    - discover: 发现全部差分对（可选 signal_type 过滤）
+    """
+    pid, denied = _guard("trace_signal", project_id)
+    if denied:
+        return denied
+    try:
+        if mode == "path":
+            body = _invoke(
+                graph_tools.get_signal_path,
+                {
+                    "from_refdes": from_refdes,
+                    "from_pin": from_pin,
+                    "to_refdes": to_refdes,
+                    "to_pin": to_pin,
+                },
+            )
+        elif mode == "pin":
+            if not start_pin:
+                raise ValueError("pin 模式需要 start_pin")
+            body = _invoke(
+                graph_tools.trace_signal_path,
+                {"start_pin": start_pin, "max_depth": max_depth},
+            )
+        elif mode == "pair":
+            if not start_pin_id:
+                raise ValueError("pair 模式需要 start_pin_id")
+            body = _invoke(
+                graph_tools.trace_differential_pair, {"start_pin_id": start_pin_id}
+            )
+        else:
+            body = _invoke(
+                graph_tools.discover_diff_pairs, {"signal_type": signal_type or ""}
+            )
+        return _format(pid, "trace_signal", body)
+    except Exception as exc:  # noqa: BLE001
+        return _error(pid, "trace_signal", exc)
+
+
+def diagnose_fault(
+    mode: Literal[
+        "power_chain",
+        "root_cause",
+        "power_sequence",
+        "common_cause",
+        "common_cause_graph",
+        "risk_score",
+    ],
+    refdes: str = "",
+    refdes_list: str = "",
+    symptom: str = "",
+    direction: Literal["upstream", "downstream", "both"] = "downstream",
+    max_depth: int = 5,
+    project_id: str = "",
+) -> str:
+    """故障诊断与电源分析。
+
+    - root_cause: 故障根因反向溯源（refdes + symptom）。**自包含**：一次返回上游
+      POWERED_BY 链；关系缺失时用网络连通性还原上游链（串联器件 + 上游网络器件
+      清单）；并解析反馈分压（上/下臂阻值、分压比、反推 Vref 与是否自洽）、输出
+      网络负载与可疑度排序。诊断类问题用它开局就够，不必再手工拼拓扑。
+    - power_chain: 沿供电关系追踪电源链（refdes + direction + max_depth）
+    - power_sequence: 上电时序分析（refdes）
+    - common_cause: 共因失效定位（refdes_list，逗号分隔）
+    - common_cause_graph: 共因失效关系图（refdes_list）
+    - risk_score: 共因失效风险评分（refdes_list）
+    """
+    pid, denied = _guard("diagnose_fault", project_id)
+    if denied:
+        return denied
+    try:
+        if mode == "power_chain":
+            body = _invoke(
+                graph_tools.trace_power_chain,
+                {"refdes": refdes, "direction": direction, "max_depth": max_depth},
+            )
+        elif mode == "root_cause":
+            body = _invoke(
+                graph_tools.trace_fault_root, {"refdes": refdes, "symptom": symptom}
+            )
+        elif mode == "power_sequence":
+            body = _invoke(graph_tools.analyze_power_sequence, {"refdes": refdes})
+        elif mode == "common_cause":
+            body = _invoke(graph_tools.find_common_cause, {"refdes_list": refdes_list})
+        elif mode == "common_cause_graph":
+            body = _invoke(
+                graph_tools.get_common_cause_graph, {"refdes_list": refdes_list}
+            )
+        else:
+            body = _invoke(
+                graph_tools.common_cause_risk_score, {"refdes_list": refdes_list}
+            )
+        return _format(pid, "diagnose_fault", body)
+    except Exception as exc:  # noqa: BLE001
+        return _error(pid, "diagnose_fault", exc)
+
+
+def run_review(rule_ids: Optional[list[str]] = None, project_id: str = "") -> str:
+    """执行规则审查引擎，返回违规统计与典型条目。
+
+    ⚠️ 一次调用就返回**全部启用规则**的统计和每类违规，足以回答“项目有哪些设计
+    规则问题”。要看某几条规则的明细才传 rule_ids，**不要按 rule_id 逐条循环调用**
+    （一次全量审查约 4s，逐条重跑 24 次会白烧两分钟）。结果只读，不修改数据。
+    """
+    pid, denied = _guard("run_review", project_id)
+    if denied:
+        return denied
+    try:
+        from agent_system.review_engine import ReviewRuleEngine  # 延迟导入
+
+        driver = graph_tools._get_driver()
+        # 全量审查结果带 TTL 缓存：模型常见行为是按 rule_id 反复调用，
+        # 每次都重跑引擎。缓存后子集查询只做内存过滤（同一项目 180s 内复用）。
+        violations = _run_review_cached(ReviewRuleEngine, driver, pid)
+        if rule_ids:
+            wanted = {str(r).strip() for r in rule_ids if str(r).strip()}
+            violations = [v for v in violations if getattr(v, "rule_id", "") in wanted]
+
+        by_severity: dict[str, int] = {}
+        by_rule: dict[str, int] = {}
+        for item in violations:
+            by_severity[item.severity] = by_severity.get(item.severity, 0) + 1
+            by_rule[item.rule_id] = by_rule.get(item.rule_id, 0) + 1
+
+        lines = [f"审查完成：共 {len(violations)} 个违规"]
+        lines.append(
+            "按严重度：" + ", ".join(f"{k}:{v}" for k, v in sorted(by_severity.items()))
+        )
+        all_rules = sorted(by_rule.items(), key=lambda kv: (-kv[1], kv[0]))
+        lines.append("按规则：" + ", ".join(f"{k}:{v}" for k, v in all_rules))
+
+        for item in violations[:10]:
+            lines.append(
+                f"- [{item.severity}] {item.rule_id} | {getattr(item, 'refdes', '-')} | "
+                f"{getattr(item, 'message', '')}"
+            )
+        return _format(pid, "run_review", "\n".join(lines))
+    except Exception as exc:  # noqa: BLE001
+        return _error(pid, "run_review", exc)
+
+
+_REVIEW_CACHE: dict[str, tuple[float, list]] = {}
+_REVIEW_TTL_S = 180.0
+
+
+def _run_review_cached(engine_cls, driver, project_id: str) -> list:
+    """全量审查结果缓存（TTL 180s），避免模型按 rule_id 反复触发全量重跑。"""
+    import time as _time
+
+    now = _time.time()
+    hit = _REVIEW_CACHE.get(project_id)
+    if hit and now - hit[0] < _REVIEW_TTL_S:
+        return hit[1]
+    engine = engine_cls(driver, project_id=project_id)
+    violations = engine.run_rules(rule_ids=None, enabled_only=True)
+    _REVIEW_CACHE[project_id] = (now, violations)
+    return violations
+
+
+def search_knowledge(query: str, mpn: str = "", project_id: str = "") -> str:
+    """检索知识库：GraphRAG 四级路由（图谱 → 本地 → 向量库 → 公网）+ Datasheet。
+
+    适用于芯片规格、引脚定义、典型应用电路、设计规范等问题。
+    """
+    pid, denied = _guard("search_knowledge", project_id)
+    if denied:
+        return denied
+    try:
+        import json
+        import urllib.request
+
+        base = os.getenv("SCHEMATIC_API_BASE", "http://127.0.0.1:8501").rstrip("/")
+        payload = {"query": query, "project_id": pid}
+        if mpn:
+            payload["mpn"] = mpn
+        req = urllib.request.Request(
+            f"{base}/api/v1/knowledge/search",
+            data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = json.loads(resp.read()).get("data") or {}
+
+        if data.get("status") != "success" or not data.get("content"):
+            return _format(
+                pid,
+                "search_knowledge",
+                f"未找到相关内容 (query={query!r}, mpn={mpn!r})",
+            )
+        body = (
+            f"置信度: {data.get('confidence', 0):.2f}\n"
+            f"来源: {data.get('tier')} / {data.get('source')}\n\n{data['content']}"
+        )
+        return _format(pid, "search_knowledge", body)
+    except Exception as exc:  # noqa: BLE001
+        return _error(pid, "search_knowledge", exc)
+
+
+# ---------------------------------------------------------------------------
+# 写工具（默认关闭，P1 接入 Hermes 审批后启用）
+# ---------------------------------------------------------------------------
+
+
+def import_netlist(
+    netlist_path: str,
+    bom_path: str = "",
+    project_name: str = "",
+    skip_quality: bool = False,
+    project_id: str = "",
+) -> str:
+    """导入网表 / BOM 到图数据库（写操作，需要人工审批）。"""
+    pid, denied = _guard("import_netlist", project_id)
+    if denied:
+        return denied
+    try:
+        _require_write_enabled("import_netlist")
+        from agent_system.etl_web_bridge import run_etl_pipeline
+
+        file_paths = {"netlist": netlist_path}
+        if bom_path:
+            file_paths["bom"] = bom_path
+        payload = {"file_paths": file_paths, "project_name": project_name or pid, "skip_quality": skip_quality}
+        result = (
+            run_etl_pipeline.invoke(payload) if hasattr(run_etl_pipeline, "invoke") else run_etl_pipeline(**payload)
+        )
+        return _format(pid, "import_netlist", str(result))
+    except Exception as exc:  # noqa: BLE001
+        return _error(pid, "import_netlist", exc)
+
+
+def submit_hitl_decision(
+    review_id: str,
+    decision: Literal["approve", "reject"],
+    comment: str = "",
+    project_id: str = "",
+) -> str:
+    """提交领域 HITL 审批结论（写操作，需要人工审批）。"""
+    pid, denied = _guard("submit_hitl_decision", project_id)
+    if denied:
+        return denied
+    try:
+        _require_write_enabled("submit_hitl_decision")
+        from agent_system.hitl_workflow import approve_review, reject_review
+
+        fn = approve_review if decision == "approve" else reject_review
+        # approve_review / reject_review 是 LangChain StructuredTool（@tool 装饰），不能直接调用
+        payload = {"review_id": review_id, "comment": comment, "project_id": pid}
+        raw = fn.invoke(payload) if hasattr(fn, "invoke") else fn(review_id, comment=comment, project_id=pid)
+        return _format(pid, "submit_hitl_decision", str(raw))
+    except Exception as exc:  # noqa: BLE001
+        return _error(pid, "submit_hitl_decision", exc)

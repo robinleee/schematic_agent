@@ -1,0 +1,22 @@
+[Unit]
+Description=Neo4j 5.26 (schematic_agent graph store)
+After=network-online.target
+Wants=network-online.target
+RequiresMountsFor=/data
+
+[Service]
+Type=simple
+User=caros
+Group=caros
+Environment=HOME=/home/caros
+Environment=JAVA_HOME=/data/tools/jdk-17
+Environment=NEO4J_HOME=/data/schematic_agent/hardware_ai_expert/data/neo4j/neo4j-community-5.26.0
+WorkingDirectory=/data/schematic_agent
+ExecStart=/data/schematic_agent/hardware_ai_expert/data/neo4j/neo4j-community-5.26.0/bin/neo4j console
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=180
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

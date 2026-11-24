@@ -118,6 +118,8 @@ class ReActDecision(BaseModel):
     action_input: dict = Field(default_factory=dict, description="工具参数")
     final_answer: Optional[str] = Field(default=None, description="最终回答（当 action='final_answer' 时）")
     is_final: bool = Field(default=False, description="是否结束循环")
+    # LLM 本身调用/解析失败时置 True：上层据此把 run 记为 error，而不是 success
+    is_error: bool = Field(default=False, description="决策阶段是否发生错误")
 
 
 class ReActTraceStep(BaseModel):

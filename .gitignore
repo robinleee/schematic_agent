@@ -3,9 +3,47 @@ neo4j data/
 data/
 *.log
 .venv/
+.venv*/
 __pycache__/
 *.pyc
+.coverage
+.coverage.*
+.coverage-task12.json
+coverage.xml
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Local runtime state and secrets
+.run/
+.openclaw/
+.env
+.env.*
+!.env.example
+logs/
+
+# Frontend dependencies and build output
+frontend/node_modules/
+frontend/dist/
 
 # Netlist source files (may contain proprietary data)
 netlist_parser/netlist/
 chroma_data/
+
+# Agent workspace identity files (local persona/memory scaffolding, not project code)
+/AGENTS.md
+/HEARTBEAT.md
+/IDENTITY.md
+/SOUL.md
+/TOOLS.md
+/USER.md
+/.comate/
+
+# Proprietary customer BOM/schematic source data and scratch acceptance scripts
+/beet_schematic_bom/
+/.beet_acceptance_*.py
+/tmp_beet_acceptance.py
+/coverage.json
+
+/coverage.json
+hardware_ai_expert/coverage.json

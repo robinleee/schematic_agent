@@ -20,7 +20,7 @@ import re
 import json
 import logging
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 import requests
 import html2text
@@ -31,6 +31,7 @@ from agent_system.knowledge_router import (
     PublicMPNRetriever,
     RetrievalResult,
     TierLevel,
+    valid_public_mpn,
 )
 
 logger = logging.getLogger(__name__)
@@ -260,7 +261,7 @@ class WebScraper:
     """轻量 HTTP 抓取器（requests + html2text）"""
 
     def __init__(self):
-        self.timeout = int(os.getenv("TIER3_SCRAPE_TIMEOUT", "15"))
+        self.timeout = max(1, min(int(os.getenv("TIER3_SCRAPE_TIMEOUT", "15")), 20))
         self.user_agent = (
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -271,7 +272,7 @@ class WebScraper:
     def scrape_html(self, url: str) -> Optional[str]:
         """抓取 HTML 页面并转为 Markdown"""
         try:
-            resp = self.session.get(url, timeout=self.timeout)
+            resp = self.session.get(url, timeout=self.timeout, allow_redirects=False)
             resp.raise_for_status()
 
             content_type = resp.headers.get("content-type", "")
@@ -294,7 +295,7 @@ class WebScraper:
     def scrape_pdf(self, url: str) -> Optional[str]:
         """下载 PDF 并解析（复用 PyMuPDF）"""
         try:
-            resp = self.session.get(url, timeout=self.timeout)
+            resp = self.session.get(url, timeout=self.timeout, allow_redirects=False)
             resp.raise_for_status()
 
             if len(resp.content) < 1000:
@@ -341,6 +342,7 @@ class Tier3Retriever(PublicMPNRetriever):
 
     def __init__(self):
         self.enabled = os.getenv("TIER3_ENABLED", "false").lower() in ("true", "1", "yes")
+        self.last_reason = "tier3_disabled" if not self.enabled else None
         self._scraper = None
         self._max_content_len = int(os.getenv("TIER3_MAX_CONTENT_LEN", "6000"))
         self._enable_llm_extract = os.getenv("TIER3_LLM_EXTRACT", "true").lower() in ("true", "1", "yes")
@@ -357,6 +359,10 @@ class Tier3Retriever(PublicMPNRetriever):
     def search(self, mpn: str, query: str) -> Optional[RetrievalResult]:
         """执行 Tier3 公网检索"""
         if not self.enabled:
+            self.last_reason = "tier3_disabled"
+            return None
+        if not valid_public_mpn(mpn):
+            self.last_reason = "invalid_mpn"
             return None
 
         # 触发延迟初始化
@@ -365,17 +371,18 @@ class Tier3Retriever(PublicMPNRetriever):
             return None
 
         # 脱敏：只用 MPN，忽略 query 中的电路上下文
-        safe_query = self._sanitize_query(mpn, query)
-        logger.info(f"Tier3 search: mpn={mpn}, safe_query={safe_query}")
+        safe_query = "specifications"
 
         # 策略 3a: 定点抓取
         result = self._search_by_supplier(mpn, safe_query)
         if result:
+            self.last_reason = None
             return result
 
         # 策略 3b: 通用搜索（预留）
         # TODO: 接入 SearXNG / Firecrawl search
 
+        self.last_reason = "tier3_not_found" if match_supplier(mpn) is None else "tier3_unavailable"
         return None
 
     def _sanitize_query(self, mpn: str, query: str) -> str:
@@ -394,10 +401,10 @@ class Tier3Retriever(PublicMPNRetriever):
             "frequency", "capacitance", "resistance", "temperature",
             "datasheet", "specification", "specs", "pinout",
             "package", "derating", "esr", "tolerance", "input",
-            "output", "switching", "buck", "ldo", "regulator",
+            "output", "switching", "buck", "ldo", "regulator", "formula",
         }
         words = cleaned.lower().split()
-        safe_words = [w for w in words if w in tech_keywords or len(w) > 5]
+        safe_words = [w for w in words if w in tech_keywords]
 
         return " ".join(safe_words) if safe_words else "specifications"
 
@@ -468,6 +475,7 @@ class Tier3Retriever(PublicMPNRetriever):
             source=f"tier3:{supplier}:{url}",
             confidence=0.7,
             mpn=mpn,
+            retrieved_at=datetime.now(timezone.utc).isoformat(),
         )
 
     # ---- 辅助方法 ----

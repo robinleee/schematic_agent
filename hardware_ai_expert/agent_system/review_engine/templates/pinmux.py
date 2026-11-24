@@ -145,7 +145,7 @@ class PinMuxCheckTemplate(RuleTemplate):
         severity = params.get("severity", self.default_severity)
         rule_name = params.get("rule_name", self.name)
 
-        driver = context.neo4j_driver
+        driver = context.scoped_driver
 
         if check_od_pullup:
             violations.extend(

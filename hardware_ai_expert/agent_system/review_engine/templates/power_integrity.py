@@ -43,7 +43,7 @@ class PowerIntegrityCheck(RuleTemplate):
         severity = params.get("severity", self.default_severity)
         min_output_caps = params.get("min_output_caps", 2)
 
-        driver = context.neo4j_driver
+        driver = context.scoped_driver
 
         if check_type in ("orphan_power_net", "all"):
             violations.extend(self._check_orphan_power_net(

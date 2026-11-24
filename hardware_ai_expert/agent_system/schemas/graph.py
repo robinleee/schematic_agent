@@ -269,6 +269,45 @@ class KnowledgeChunkNode(BaseModel):
         }
 
 
+class AMRParamNode(BaseModel):
+    """
+    AMR (Application Mismatch Risk) 器件参数节点
+
+    来自 Datasheet HITL 审批通过的器件规格参数（如电容耐压值）。
+    全局共享，不做 project_id 隔离：MPN 是器件的物理规格，与具体项目/板子无关。
+
+    对应 Neo4j: (:AMRParam)
+    """
+    mpn: str = Field(description="器件型号 (Manufacturer Part Number)")
+    param_type: str = Field(description="参数类型，如 cap_voltage_rating / res_power_rating")
+    param_name: str = Field(default="", description="参数名称")
+    value: float = Field(description="参数数值")
+    unit: str = Field(default="", description="单位")
+    min_value: Optional[float] = Field(default=None, description="最小值")
+    max_value: Optional[float] = Field(default=None, description="最大值")
+    condition: str = Field(default="", description="测试/适用条件")
+    source_file: str = Field(default="", description="来源 Datasheet 文件")
+    approved_by: str = Field(default="", description="审批人")
+    reviewed_at: str = Field(default="", description="审批时间")
+    review_id: str = Field(default="", description="审批记录 ID")
+
+    def to_cypher_properties(self) -> dict:
+        return {
+            "Mpn": self.mpn,
+            "ParamType": self.param_type,
+            "ParamName": self.param_name,
+            "Value": self.value,
+            "Unit": self.unit,
+            "MinValue": self.min_value,
+            "MaxValue": self.max_value,
+            "Condition": self.condition,
+            "SourceFile": self.source_file,
+            "ApprovedBy": self.approved_by,
+            "ReviewedAt": self.reviewed_at,
+            "ReviewId": self.review_id,
+        }
+
+
 # ============================================
 # 约束与索引定义
 # ============================================
@@ -281,6 +320,7 @@ NEO4J_CONSTRAINTS: list[str] = [
     "CREATE CONSTRAINT design_guide_id IF NOT EXISTS FOR (d:DesignGuide) REQUIRE d.GuideId IS UNIQUE",
     "CREATE CONSTRAINT review_rule_id IF NOT EXISTS FOR (r:ReviewRule) REQUIRE r.RuleId IS UNIQUE",
     "CREATE CONSTRAINT knowledge_chunk_id IF NOT EXISTS FOR (k:KnowledgeChunk) REQUIRE k.ChunkId IS UNIQUE",
+    "CREATE CONSTRAINT amr_param_key IF NOT EXISTS FOR (p:AMRParam) REQUIRE (p.Mpn, p.ParamType) IS UNIQUE",
 ]
 
 NEO4J_INDEXES: list[str] = [
@@ -296,4 +336,5 @@ NEO4J_INDEXES: list[str] = [
     "CREATE INDEX review_rule_severity IF NOT EXISTS FOR (r:ReviewRule) ON (r.Severity)",
     "CREATE INDEX knowledge_chunk_source IF NOT EXISTS FOR (k:KnowledgeChunk) ON (k.SourceId)",
     "CREATE INDEX knowledge_chunk_category IF NOT EXISTS FOR (k:KnowledgeChunk) ON (k.Category)",
+    "CREATE INDEX amr_param_mpn IF NOT EXISTS FOR (p:AMRParam) ON (p.Mpn)",
 ]

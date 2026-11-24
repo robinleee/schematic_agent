@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from agent_system.schemas.review import Violation, RuleConfig, WhitelistEntry
 from agent_system.review_engine.templates.base import (
-    RuleTemplate, RuleContext, TemplateRegistry,
+    RuleTemplate, RuleContext, TemplateRegistry, _scope_review_query,
 )
 from agent_system.review_engine.whitelist import WhitelistManager
 from agent_system.review_engine.engine import ReviewRuleEngine, RuleConfigManager
@@ -447,3 +447,195 @@ class TestWhitelistEntryModel:
         assert "MERGE" in cypher
         assert params["rule_id"] == "r1"
         assert params["refdes"] == "U1"
+
+
+class _CaptureResult(list):
+    def single(self):
+        return {"cnt": 0, "device_count": 0, "refs": []}
+
+
+class _CaptureSession:
+    def __init__(self, calls):
+        self.calls = calls
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def run(self, query, params=None, **kwargs):
+        self.calls.append((query, dict(params or kwargs)))
+        return _CaptureResult()
+
+
+class _CaptureDriver:
+    def __init__(self):
+        self.calls = []
+
+    def session(self):
+        return _CaptureSession(self.calls)
+
+
+def test_selected_project_review_scopes_all_builtin_template_query_paths():
+    """Every built-in template must use the isolation boundary, not raw sessions."""
+    driver = _CaptureDriver()
+    engine = ReviewRuleEngine(driver, project_id="project-a", auto_reload=False)
+    configs = {
+        "decap": ("decap_check", {"voltage_level": "3.3"}),
+        "pullup": ("pullup_check", {"net_patterns": ["I2C"]}),
+        "esd": ("esd_check", {"net_patterns": ["USB"]}),
+        "pinmux": ("pinmux_check", {"check_od_pullup": True, "check_power_gnd": True, "check_nc": True}),
+        "amr": ("amr_check", {}),
+        "diff": ("diff_pair_check", {}),
+        "power": ("power_integrity_check", {}),
+        "voltage": ("voltage_compatibility_check", {}),
+        "connectivity": ("connectivity_check", {}),
+    }
+    for rule_id, (template_id, params) in configs.items():
+        engine.add_rule(RuleConfig(id=rule_id, template_id=template_id, params=params))
+
+    assert engine.run_rules(rule_ids=list(configs)) == []
+    assert driver.calls
+    assert all("project_id = $project_id" in query for query, _ in driver.calls)
+    assert all(params["project_id"] == "project-a" for _, params in driver.calls)
+    assert all(" SET " not in query.upper() for query, _ in driver.calls)
+
+
+def test_selected_project_ab_query_never_returns_other_project_rows():
+    """A/B fake-driver proof: the selected project is always a query parameter."""
+    class ABSession(_CaptureSession):
+        def run(self, query, params=None, **kwargs):
+            merged = dict(params or kwargs)
+            assert merged["project_id"] == "A"
+            assert "project_id = $project_id" in query
+            return _CaptureResult([{"project_id": "A", "name": "A-only"}])
+
+    class ABDriver(_CaptureDriver):
+        def session(self):
+            return ABSession(self.calls)
+
+    context = RuleContext(neo4j_driver=ABDriver(), project_id="A")
+    rows = list(context.run_query("MATCH (n:Net) RETURN n.project_id AS project_id, n.Name AS name"))
+    assert rows == [{"project_id": "A", "name": "A-only"}]
+
+
+def test_review_query_scoping_ignores_list_comprehension_variables():
+    query = (
+        "MATCH (n:Net) "
+        "WHERE ANY(pattern IN $patterns WHERE n.Name CONTAINS pattern) "
+        "RETURN n"
+    )
+
+    scoped = _scope_review_query(query)
+
+    assert "n.project_id = $project_id" in scoped
+    assert "pattern.project_id" not in scoped
+
+
+def test_review_query_scoping_preserves_any_starts_with_and_not_starts_with():
+    queries = [
+        (
+            "MATCH (c:Component) "
+            "WHERE ANY(prefix IN $prefixes WHERE c.RefDes STARTS WITH prefix) "
+            "RETURN c"
+        ),
+        (
+            "MATCH (c:Component) "
+            "WHERE c.Value IS NOT NULL "
+            "AND NOT c.Value STARTS WITH 'DNP' "
+            "AND NOT c.Value STARTS WITH 'NC' "
+            "RETURN c"
+        ),
+    ]
+
+    for query in queries:
+        scoped = _scope_review_query(query)
+        assert "c.project_id = $project_id" in scoped
+        assert "STARTS WITH" in scoped
+        assert "STARTS)" not in scoped
+        assert "WHERE c.project_id = $project_id AND (" in scoped
+
+
+def test_review_query_scoping_handles_nested_match_clauses_and_existing_predicates():
+    query = (
+        "MATCH (a:Component)-[rel:CONNECTS_TO]->(p:Pin) "
+        "WHERE ANY(pattern IN $patterns WHERE a.Name CONTAINS pattern) "
+        "OPTIONAL MATCH (p)-[:ON_NET]->(n:Net) "
+        "WHERE n.project_id = $project_id AND n.Name IS NOT NULL "
+        "MATCH (x:Other) "
+        "WHERE x.Value = (a.Value) "
+        "RETURN a, p, n, x"
+    )
+
+    scoped = _scope_review_query(query)
+
+    # Four injected node predicates plus the original explicit project
+    # predicate on ``n`` are preserved.
+    assert scoped.count("project_id = $project_id") == 6
+    assert "a.project_id = $project_id" in scoped
+    assert "p.project_id = $project_id" in scoped
+    assert "n.project_id = $project_id" in scoped
+    assert "x.project_id = $project_id" in scoped
+    assert "pattern.project_id" not in scoped
+    assert "rel.project_id" not in scoped
+    assert "Value.project_id" not in scoped
+
+
+@pytest.mark.parametrize("predicate", [
+    "n.Name STARTS WITH 'NC_'",
+    "NOT n.Name STARTS WITH 'NC_'",
+    "n.Name STARTS\nWITH 'NC_'",
+])
+def test_review_query_scoping_does_not_split_starts_with_before_second_match(predicate):
+    query = (
+        f"MATCH (n:Net) WHERE {predicate} "
+        "MATCH (n)<-[:CONNECTS_TO]-(p:Pin)<-[:HAS_PIN]-(c:Component) "
+        "RETURN n, p, c"
+    )
+    scoped = _scope_review_query(query)
+    assert predicate in scoped
+    assert scoped.count("n.project_id = $project_id") == 2
+    assert "p.project_id = $project_id" in scoped
+    assert "c.project_id = $project_id" in scoped
+    assert "STARTS)" not in scoped
+
+
+def test_review_query_scoping_keeps_real_with_after_quoted_starts():
+    """A quoted 'STARTS' must not fool the WITH-clause-boundary detector into
+    treating the real WITH that follows it as part of the WHERE predicate."""
+    scoped = _scope_review_query(
+        "MATCH (n:Net) WHERE n.Name = 'STARTS' WITH n "
+        "MATCH (p:Pin) RETURN n, p"
+    )
+    # The literal predicate must survive untouched, including its closing quote.
+    assert "n.Name = 'STARTS'" in scoped
+    # WITH must remain a real clause boundary: exactly two MATCH clauses,
+    # each followed by its own scoping WHERE, not one swallowed into the other's predicate.
+    assert scoped.count("MATCH") == 2
+    assert "WITH n " in scoped
+    assert "n.project_id = $project_id" in scoped
+    assert "p.project_id = $project_id" in scoped
+    assert scoped.count("(") == scoped.count(")")
+
+
+def test_review_query_scoping_fails_closed_before_driver_run():
+    driver = _CaptureDriver()
+    context = RuleContext(driver, project_id="selected")
+    for query in (
+        "MATCH (n:Net) SET n.Name = 'NC' RETURN n",
+        "MATCH (n:Net) WHERE n.Name STARTS WITH 'NC_",
+        "RETURN 1",
+    ):
+        with pytest.raises(RuntimeError, match="Unsafe project-scoped review query"):
+            context.run_query(query)
+    assert driver.calls == []
+    assert isinstance(context.infrastructure_error, RuntimeError)
+
+    context.run_query(
+        "MATCH (n:Net) WHERE n.Name STARTS WITH 'NC_' RETURN n",
+        {"project_id": "other"},
+    )
+    query, params = driver.calls[0]
+    assert "n.project_id = $project_id" in query
+    assert params["project_id"] == "selected"

@@ -25,7 +25,7 @@ def get_neo4j_credentials() -> tuple[str, str, str]:
     env_path = os.path.join(ROOT_DIR, ".env")
     uri = "bolt://localhost:7687"
     user = "neo4j"
-    password = "SecretPassword123"
+    password = os.getenv("NEO4J_PASSWORD")
 
     if os.path.exists(env_path):
         with open(env_path, "r") as f:
@@ -43,6 +43,8 @@ def get_neo4j_credentials() -> tuple[str, str, str]:
                     elif key == "NEO4J_PASSWORD":
                         password = val
 
+    if not password:
+        raise RuntimeError("NEO4J_PASSWORD is required")
     return uri, user, password
 
 

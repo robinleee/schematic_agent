@@ -68,6 +68,7 @@ SAME_TOOL_REPEAT_LIMIT = 3
 OBSERVATION_TRUNCATE = 1200
 TOOL_RESULT_TRUNCATE = 3000
 MAX_HISTORY_STEPS = 6
+MAX_SELF_CORRECTION_RETRIES = 2
 
 
 # ============================================================
@@ -434,6 +435,7 @@ class ReActAgent:
                 action="final_answer",
                 final_answer="## 处理失败\n\nLLM 决策调用失败，请检查模型服务状态。",
                 is_final=True,
+                is_error=True,
             )
 
         # 校验 action
@@ -445,10 +447,22 @@ class ReActAgent:
             is_final = True
             result.setdefault("final_answer", self._generate_fallback_report(history))
 
+        is_error = False
         if action not in self.tool_map and action != "final_answer":
+            # LLM 给出了不存在的工具名：这是决策失败，必须让上层记为 error。
+            # 历史实现只把正文换成「## 处理异常」，status 仍是 success，
+            # 导致基线与验收门把失败算成成功（C2 只回 21 字却计入成功率）。
+            invalid_tool = str(action)
             action = "final_answer"
             is_final = True
-            result.setdefault("final_answer", "## 处理异常\n\nLLM 选择了无效工具。")
+            if not (result.get("final_answer") or "").strip():
+                result["final_answer"] = "## 处理异常\n\nLLM 选择了无效工具。"
+                is_error = True
+            if is_error:
+                prior_thought = (result.get("thought") or "").strip()
+                result["thought"] = f"LLM 选择了无效工具：{invalid_tool}" + (
+                    f"（{prior_thought}）" if prior_thought else ""
+                )
 
         return ReActDecision(
             thought=result.get("thought", ""),
@@ -456,6 +470,7 @@ class ReActAgent:
             action_input=result.get("action_input", {}),
             final_answer=result.get("final_answer"),
             is_final=is_final,
+            is_error=is_error,
         )
 
     @staticmethod
@@ -493,6 +508,65 @@ class ReActAgent:
     # --------------------------------------------------------
     # Tool Execution
     # --------------------------------------------------------
+
+
+    @staticmethod
+    def _looks_empty_observation(observation: str) -> bool:
+        """Heuristic: detect empty/no-hit tool observations that merit one relaxed retry."""
+        if not observation:
+            return True
+        text = observation.strip().lower()
+        empty_markers = [
+            "无返回内容", "未找到", "没有找到", "无结果", "empty", "not found",
+            "0 个", "0条", "no result", "no matching", "[]",
+        ]
+        return any(marker in text for marker in empty_markers)
+
+    @staticmethod
+    def _relax_action_input(action_input: dict) -> dict:
+        """Relax overly strict query parameters for one self-correction retry."""
+        relaxed = dict(action_input or {})
+        for key in list(relaxed.keys()):
+            value = relaxed[key]
+            if value in (None, "", [], {}):
+                relaxed.pop(key, None)
+        for key in ("exact", "strict", "exact_match", "case_sensitive"):
+            if key in relaxed:
+                relaxed[key] = False
+        for key in ("limit", "max_results", "top_k"):
+            if isinstance(relaxed.get(key), int):
+                relaxed[key] = max(relaxed[key], 10)
+        return relaxed
+
+    def _self_correct_tool_call(self, action: str, action_input: dict, observation: str,
+                                trace: list[ReActTraceStep], step_id: int) -> tuple[str, int]:
+        """Retry once/twice with relaxed parameters when a graph/Cypher-like query returns no data."""
+        if action not in self.tool_map or not self._looks_empty_observation(observation):
+            return observation, 0
+
+        retries = 0
+        relaxed_input = self._relax_action_input(action_input)
+        if relaxed_input == (action_input or {}):
+            return observation, 0
+
+        last_observation = observation
+        while retries < MAX_SELF_CORRECTION_RETRIES:
+            retries += 1
+            corrected = self._execute_tool(action, relaxed_input)
+            trace.append(ReActTraceStep(
+                step_id=step_id * 10 + retries,
+                thought="Self-Correction: 上一次工具返回空结果，放宽查询参数后重试",
+                action=f"self_correction:{action}",
+                action_input=relaxed_input,
+                observation=corrected,
+            ))
+            last_observation = corrected
+            if not self._looks_empty_observation(corrected):
+                break
+            # second retry: drop likely narrow entity filters if still empty
+            for key in ("pin", "pin_number", "net_type", "direction"):
+                relaxed_input.pop(key, None)
+        return last_observation, retries
 
     def _execute_tool(self, action: str, action_input: dict) -> str:
         """执行工具调用"""
@@ -604,17 +678,22 @@ class ReActAgent:
     # Main ReAct Loop
     # --------------------------------------------------------
 
-    def run(self, user_input: str, task_type: str = "") -> dict:
+    def run(self, user_input: str, task_type: str = "", project_id: Optional[str] = None) -> dict:
         """
         执行统一 ReAct 循环
 
         Args:
             user_input: 用户输入
             task_type: 任务类型提示 (review/diagnosis/query)，为空则自动检测
+            project_id: 本次调用要查询的项目范围；为 None 时使用聚合视图（'default'）。
+                仅影响当前线程，不污染其他并发请求的项目上下文。
 
         Returns:
             dict: {status, report, execution_trace, tool_call_count, ...}
         """
+        from agent_system.graph_tools import set_current_project
+        set_current_project(project_id or "default")
+
         if not task_type:
             # 检测复合意图
             sub_tasks = self._detect_composite_intent(user_input)
@@ -669,6 +748,7 @@ class ReActAgent:
         trace: list[ReActTraceStep] = []
         tool_call_count = 0
         error_message = None
+        failure_status = "timeout"
         final_report = ""
 
         force_final_next = False
@@ -680,12 +760,23 @@ class ReActAgent:
 
             decision = self._llm_decide(user_input, history, system_prompt, force_final=force_final)
 
+            if decision.is_error:
+                # 决策阶段就失败（Ollama 异常 / JSON 解析两轮都失败）：不能当成功上报
+                error_message = decision.thought or "LLM 决策失败"
+                failure_status = "error"
+                final_report = decision.final_answer or "## 处理失败\n\nLLM 决策调用失败。"
+                break
+
             if decision.is_final or decision.action == "final_answer":
                 final_report = decision.final_answer or "## 处理完成\n\nLLM 未输出结论。"
                 break
 
             observation = self._execute_tool(decision.action, decision.action_input)
             tool_call_count += 1
+            observation, correction_retries = self._self_correct_tool_call(
+                decision.action, decision.action_input, observation, trace, step + 1
+            )
+            tool_call_count += correction_retries
 
             graph_tool_count = sum(1 for t in trace if t.action in GRAPH_TOOLS)
             if graph_tool_count >= 4 and decision.action in GRAPH_TOOLS:
@@ -714,7 +805,7 @@ class ReActAgent:
             final_report = f"## 分析超时\n\n{error_message}\n\n## 已收集信息\n\n" + self._summarize_trace(trace)
 
         return {
-            "status": "success" if not error_message else "timeout",
+            "status": "success" if not error_message else failure_status,
             "task_type": task_type,
             "report": final_report,
             "error": error_message,

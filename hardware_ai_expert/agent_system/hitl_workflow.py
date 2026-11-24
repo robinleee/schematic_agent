@@ -78,7 +78,9 @@ class HITLManager:
     RULES_DIR = os.path.join(ROOT_DIR, "agent_system", "review_engine", "config")
     CUSTOM_RULES_FILE = os.path.join(RULES_DIR, "custom_rules.yaml")
 
-    def __init__(self):
+    def __init__(self, project_id=None, shared=False):
+        self.project_id = project_id
+        self.shared = shared
         self._driver = None
         self._pending: List[PendingReview] = []
 
@@ -88,7 +90,9 @@ class HITLManager:
                 raise RuntimeError("neo4j not installed")
             uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
             user = os.getenv("NEO4J_USER", "neo4j")
-            password = os.getenv("NEO4J_PASSWORD", "SecretPassword123")
+            password = os.getenv("NEO4J_PASSWORD")
+            if not password:
+                raise RuntimeError("NEO4J_PASSWORD is required")
             self._driver = GraphDatabase.driver(uri, auth=(user, password))
         return self._driver
 
@@ -103,11 +107,13 @@ class HITLManager:
 
     def add_pending(self, review: PendingReview) -> bool:
         """添加一个待审批项到队列和 Neo4j"""
+        if self.project_id is None and not self.shared:
+            raise ValueError("Explicit project_id or shared=True required for pending review")
+        if self.project_id is not None and not self.project_id.strip():
+            raise ValueError("project_id must not be blank")
         review.created_at = datetime.now().isoformat()
         if not review.review_id:
             review.review_id = f"REV_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{hash(review.rule_id + review.refdes) % 10000:04d}"
-
-        self._pending.append(review)
 
         try:
             driver = self._get_driver()
@@ -125,7 +131,9 @@ class HITLManager:
                         pr.suggested_fix = $suggested_fix,
                         pr.status = 'pending',
                         pr.created_at = datetime(),
-                        pr.source = $source
+                        pr.source = $source,
+                        pr.scope = $scope,
+                        pr.project_id = $project_id
                 """, {
                     "review_id": review.review_id,
                     "rule_id": review.rule_id,
@@ -138,7 +146,10 @@ class HITLManager:
                     "actual": review.actual,
                     "suggested_fix": review.suggested_fix,
                     "source": review.source,
+                    "scope": "project" if self.project_id is not None else "shared",
+                    "project_id": self.project_id,
                 })
+            self._pending.append(review)
             return True
         except Exception as e:
             logger.error(f"Failed to save pending review to Neo4j: {e}")
@@ -181,31 +192,35 @@ class HITLManager:
     def _update_status(self, review_id: str, action: ReviewAction,
                        reviewer: str, comment: str) -> bool:
         """更新审批状态"""
-        # 更新内存队列
-        for pr in self._pending:
-            if pr.review_id == review_id:
-                pr.status = action.value
-                pr.reviewer = reviewer
-                pr.review_comment = comment
-                pr.reviewed_at = datetime.now().isoformat()
-                break
-
-        # 更新 Neo4j
+        # Only pending reviews may transition; never report success for unknown IDs.
         try:
             driver = self._get_driver()
             with driver.session() as session:
-                session.run("""
-                    MATCH (pr:PendingReview {review_id: $review_id})
+                record = session.run("""
+                    MATCH (pr:PendingReview {review_id: $review_id, status: 'pending'})
+                    WHERE (pr.scope = 'shared' AND $project_id IS NULL)
+                       OR (pr.scope = 'project' AND pr.project_id = $project_id)
                     SET pr.status = $status,
                         pr.reviewer = $reviewer,
                         pr.review_comment = $comment,
                         pr.reviewed_at = datetime()
+                    RETURN pr.review_id AS review_id
                 """, {
                     "review_id": review_id,
-                    "status": action.value,
+                    "project_id": self.project_id,
+                    "status": "approved" if action == ReviewAction.APPROVE else "rejected",
                     "reviewer": reviewer,
                     "comment": comment,
-                })
+                }).single()
+            if record is None:
+                return False
+            for pr in self._pending:
+                if pr.review_id == review_id:
+                    pr.status = "approved" if action == ReviewAction.APPROVE else "rejected"
+                    pr.reviewer = reviewer
+                    pr.review_comment = comment
+                    pr.reviewed_at = datetime.now().isoformat()
+                    break
             return True
         except Exception as e:
             logger.error(f"Failed to update review status: {e}")
@@ -227,7 +242,7 @@ class HITLManager:
         """
         approved = [pr for pr in self._pending if pr.status == "approved"]
         if not approved:
-            return {"saved": 0, "message": "没有 approved 的审查项"}
+            return {"saved": 0, "rules": [], "message": "没有 approved 的审查项"}
 
         # 按 rule_id 分组
         rules_by_id = {}
@@ -265,7 +280,8 @@ class HITLManager:
                 pr.status = "persisted"
             self._mark_persisted_in_neo4j([pr.review_id for pr in approved])
 
-            return {"saved": len(rules_by_id), "rules": list(rules_by_id.keys())}
+            return {"saved": len(rules_by_id), "rules": list(rules_by_id.keys()),
+                    "location": self.CUSTOM_RULES_FILE}
         except Exception as e:
             logger.error(f"Failed to save custom rules: {e}")
             return {"saved": 0, "error": str(e)}
@@ -298,10 +314,52 @@ class HITLManager:
     # --------------------------------------------------------
 
     def get_pending_list(self, status: str = "pending") -> List[PendingReview]:
-        """获取指定状态的审批列表"""
+        """获取指定状态的审批列表（进程内缓存）"""
         if status == "all":
             return self._pending
         return [pr for pr in self._pending if pr.status == status]
+
+    def load_pending(self, status: str = "pending", limit: int = 200) -> List[PendingReview]:
+        """从 Neo4j 读取审批项：shared 作用域 + 当前 project 作用域。
+
+        ``get_pending_list`` 只读进程内缓存，新起的 manager 永远是空列表，工具侧必须走这里。
+        """
+        if status not in ("pending", "approved", "rejected", "modified", "all"):
+            raise ValueError(f"invalid status: {status}")
+        driver = self._get_driver()
+        with driver.session() as session:
+            records = session.run("""
+                MATCH (pr:PendingReview)
+                WHERE ((pr.scope = 'shared' AND $project_id IS NULL)
+                       OR (pr.scope = 'project' AND pr.project_id = $project_id))
+                  AND ($status = 'all' OR pr.status = $status)
+                RETURN pr
+                ORDER BY pr.created_at DESC
+                LIMIT $limit
+            """, {"project_id": self.project_id, "status": status, "limit": limit})
+            reviews = [
+                PendingReview(
+                    review_id=rec["pr"].get("review_id", ""),
+                    rule_id=rec["pr"].get("rule_id", ""),
+                    rule_name=rec["pr"].get("rule_name", ""),
+                    refdes=rec["pr"].get("refdes", ""),
+                    net_name=rec["pr"].get("net_name", ""),
+                    description=rec["pr"].get("description", ""),
+                    severity=rec["pr"].get("severity", "WARNING"),
+                    expected=rec["pr"].get("expected", ""),
+                    actual=rec["pr"].get("actual", ""),
+                    suggested_fix=rec["pr"].get("suggested_fix", ""),
+                    status=rec["pr"].get("status", "pending"),
+                    reviewer=rec["pr"].get("reviewer", "") or "",
+                    review_comment=rec["pr"].get("review_comment", "") or "",
+                    reviewed_at=str(rec["pr"].get("reviewed_at") or ""),
+                    created_at=str(rec["pr"].get("created_at") or ""),
+                    source=rec["pr"].get("source", "agent") or "agent",
+                )
+                for rec in records
+            ]
+        self._pending = reviews
+        return reviews
 
     def get_stats(self) -> dict:
         """获取审批统计"""
@@ -324,23 +382,25 @@ except ImportError:
 
 
 @tool
-def get_pending_reviews(status: str = "pending") -> str:
+def get_pending_reviews(status: str = "pending", project_id: str = "") -> str:
     """
     获取待审批的审查项列表。
 
     Args:
         status: pending / approved / rejected / all
+        project_id: 项目 ID；留空则只看 shared 作用域
 
     Returns:
         审批列表文本
     """
-    manager = HITLManager()
+    manager = HITLManager(project_id=project_id or None)
     try:
-        reviews = manager.get_pending_list(status)
+        reviews = manager.load_pending(status)
+        scope = f"项目 {project_id}" if project_id else "shared 作用域"
         if not reviews:
-            return f"没有 {status} 状态的审查项。"
+            return f"没有 {status} 状态的审查项（{scope}）。"
 
-        lines = [f"审查项列表 ({status}): 共 {len(reviews)} 项"]
+        lines = [f"审查项列表 ({status}, {scope}): 共 {len(reviews)} 项"]
         for pr in reviews:
             lines.append(f"\n--- {pr.review_id} ---")
             lines.append(f"规则: {pr.rule_name} ({pr.rule_id})")
@@ -355,41 +415,51 @@ def get_pending_reviews(status: str = "pending") -> str:
 
 
 @tool
-def approve_review(review_id: str, comment: str = "") -> str:
+def approve_review(review_id: str, comment: str = "", project_id: str = "") -> str:
     """
     审批通过一条审查项。
 
     Args:
         review_id: 审查项 ID
         comment: 审批意见
+        project_id: 项目 ID；留空则只作用于 shared 作用域
 
     Returns:
         操作结果
     """
-    manager = HITLManager()
+    manager = HITLManager(project_id=project_id or None)
     try:
         success = manager.approve(review_id, comment=comment)
-        return f"{'✅' if success else '❌'} 审查项 {review_id} 已审批通过。"
+        if success:
+            return f"✅ 审查项 {review_id} 已审批通过。"
+        scope = f"项目 {project_id}" if project_id else "shared 作用域"
+        return (f"❌ 未更新：审查项 {review_id} 不存在、已不是 pending 状态，"
+                f"或不属于{scope}。")
     finally:
         manager.close()
 
 
 @tool
-def reject_review(review_id: str, comment: str = "") -> str:
+def reject_review(review_id: str, comment: str = "", project_id: str = "") -> str:
     """
     拒绝（标记为误报）一条审查项。
 
     Args:
         review_id: 审查项 ID
         comment: 拒绝理由
+        project_id: 项目 ID；留空则只作用于 shared 作用域
 
     Returns:
         操作结果
     """
-    manager = HITLManager()
+    manager = HITLManager(project_id=project_id or None)
     try:
         success = manager.reject(review_id, comment=comment)
-        return f"{'✅' if success else '❌'} 审查项 {review_id} 已标记为误报。"
+        if success:
+            return f"✅ 审查项 {review_id} 已标记为误报。"
+        scope = f"项目 {project_id}" if project_id else "shared 作用域"
+        return (f"❌ 未更新：审查项 {review_id} 不存在、已不是 pending 状态，"
+                f"或不属于{scope}。")
     finally:
         manager.close()
 

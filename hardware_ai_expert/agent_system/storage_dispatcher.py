@@ -71,7 +71,7 @@ class Neo4jKnowledgeStore:
     def __init__(self, uri: str = None, user: str = None, password: str = None):
         self.uri = uri or os.environ.get("NEO4J_URI", "bolt://localhost:7687")
         self.user = user or os.environ.get("NEO4J_USER", "neo4j")
-        self.password = password or os.environ.get("NEO4J_PASSWORD", "SecretPassword123")
+        self.password = password or os.environ.get("NEO4J_PASSWORD")
         self._driver = None
     
     @property

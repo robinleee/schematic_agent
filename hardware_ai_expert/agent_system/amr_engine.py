@@ -672,11 +672,12 @@ class AMRDataSource:
     """
     AMR 数据源接口
 
-    支持四种数据源（优先级从高到低）：
+    支持五种数据源（优先级从高到低）：
     0. 封装+容值经验表：根据封装尺寸和容值推断耐压（最可靠，覆盖最广）
-    1. FileBasedAMRSource: 从 amr_data.yaml 读取工程师审批后的参数
-    2. KnowledgeRouter (ChromaDB): 从语义索引的 datasheet 知识库查询
-    3. GraphRAGBridge (Neo4j): 从图关联的 VectorChunk 查询
+    1. FileBasedAMRSource: 从 amr_data.yaml 读取工程师审批后的参数（单机权威源）
+    2. Neo4jAMRSource: 从 Neo4j 读取审批后的参数（多实例场景的补充/长期迁移目标）
+    3. KnowledgeRouter (ChromaDB): 从语义索引的 datasheet 知识库查询
+    4. GraphRAGBridge (Neo4j): 从图关联的 VectorChunk 查询
     """
 
     # 封装+容值 → 典型耐压经验表 (MLCC)
@@ -738,6 +739,13 @@ class AMRDataSource:
             except Exception as e:
                 logging.warning(f"FileBasedAMRSource init failed: {e}")
 
+        self._neo4j_amr_source = None
+        try:
+            from agent_system.amr_neo4j_source import Neo4jAMRSource
+            self._neo4j_amr_source = Neo4jAMRSource()
+        except Exception as e:
+            logging.warning(f"Neo4jAMRSource init failed: {e}")
+
         self._router = None
         if _KNOWLEDGE_ROUTER_AVAILABLE:
             try:
@@ -765,13 +773,22 @@ class AMRDataSource:
         if result is not None:
             return result
 
-        # 3. 尝试 KnowledgeRouter (ChromaDB semantic search)
+        # 3. 尝试 Neo4jAMRSource (审批参数的多实例补充存储)
+        if self._neo4j_amr_source:
+            try:
+                result = self._neo4j_amr_source.get_capacitor_voltage_rating(model)
+                if result is not None:
+                    return result
+            except Exception as e:
+                logging.debug(f"Neo4j AMR source query failed for {model}: {e}")
+
+        # 4. 尝试 KnowledgeRouter (ChromaDB semantic search)
         if self._router:
             result = self._query_kb_voltage_rating(model)
             if result is not None:
                 return result
 
-        # 4. 尝试 GraphRAGBridge (Neo4j VectorChunk)
+        # 5. 尝试 GraphRAGBridge (Neo4j VectorChunk)
         if self._bridge:
             result = self._query_graph_rag_voltage(model)
             if result is not None:
@@ -785,6 +802,14 @@ class AMRDataSource:
             result = self._file_source.get_resistor_power_rating(refdes, model, value)
             if result is not None:
                 return result
+
+        if self._neo4j_amr_source:
+            try:
+                result = self._neo4j_amr_source.get_resistor_power_rating(model)
+                if result is not None:
+                    return result
+            except Exception as e:
+                logging.debug(f"Neo4j AMR source query failed for {model}: {e}")
 
         # Try knowledge base
         if self._router:

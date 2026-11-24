@@ -82,7 +82,9 @@ class GraphRAGBridge:
                 raise RuntimeError("neo4j package not installed")
             uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
             user = os.getenv("NEO4J_USER", "neo4j")
-            password = os.getenv("NEO4J_PASSWORD", "SecretPassword123")
+            password = os.getenv("NEO4J_PASSWORD")
+            if not password:
+                raise RuntimeError("NEO4J_PASSWORD is required")
             self._driver = GraphDatabase.driver(uri, auth=(user, password))
         return self._driver
 

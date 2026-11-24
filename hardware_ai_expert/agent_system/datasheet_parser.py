@@ -99,6 +99,7 @@ class ExtractedComponent:
                     "max_value": p.max_value,
                     "typical_value": p.typical_value,
                     "confidence": p.confidence,
+                    "source_text": p.source_text,
                 }
                 for p in self.parameters
             ]
@@ -118,6 +119,7 @@ class ExtractedComponent:
                 max_value=p.get("max_value"),
                 typical_value=p.get("typical_value"),
                 confidence=p.get("confidence", 1.0),
+                source_text=p.get("source_text", ""),
             ))
         return cls(
             mpn=d["mpn"],
@@ -257,7 +259,11 @@ class ParameterSectionDetector:
             if found_section:
                 # 保存之前的区域
                 if current_section and current_text:
-                    sections[current_section] = '\n'.join(current_text)
+                    text = '\n'.join(current_text)
+                    if current_section in sections:
+                        sections[current_section] += '\n' + text
+                    else:
+                        sections[current_section] = text
                 current_section = found_section
                 current_text = []
             elif current_section:
@@ -265,7 +271,11 @@ class ParameterSectionDetector:
 
         # 保存最后一个区域
         if current_section and current_text:
-            sections[current_section] = '\n'.join(current_text)
+            text = '\n'.join(current_text)
+            if current_section in sections:
+                sections[current_section] += '\n' + text
+            else:
+                sections[current_section] = text
 
         return sections
 
@@ -311,7 +321,13 @@ class RegexParameterExtractor:
     VOLTAGE_RANGE_PATTERNS = [
         r"Input\s+Voltage[^\n]*?(\d+(?:\.\d+)?)\s*V\s*(?:to|-|~|–)\s*(\d+(?:\.\d+)?)\s*V",
         r"Supply\s+Voltage[^\n]*?(\d+(?:\.\d+)?)\s*V\s*(?:to|-|~|–)\s*(\d+(?:\.\d+)?)\s*V",
-        r"VCC[^\n]*?(\d+(?:\.\d+)?)\s*V\s*(?:to|-|~|–)\s*(\d+(?:\.\d+)?)\s*V",
+        # Common TI table/text forms, after PDF extraction:
+        # "Input voltage | 1.4 | 5.5 | V" and
+        # "VCC | Supply voltage | Operating | 1.65 | 5.5 | V".
+        r"(?:VIN|VCC|VDD)\s+(?:Input|Supply)\s+voltage(?:\s+range)?\s+"
+        r"(?:Operating\s+)?(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s+V",
+        r"(?:Input|Supply)\s+voltage(?:\s+range)?\s*[:|]?\s*"
+        r"(\d+(?:\.\d+)?)\s*V\s*(?:to|-|~|–)\s*(\d+(?:\.\d+)?)\s*V",
     ]
 
     def extract_capacitor_params(self, text: str) -> List[DatasheetParameter]:
@@ -586,7 +602,10 @@ class DatasheetParser:
 
         # 1. 提取文本
         self.text_extractor = PDFTextExtractor(pdf_path)
-        full_text = self.text_extractor.extract_all_text()
+        try:
+            full_text = self.text_extractor.extract_all_text()
+        finally:
+            self.text_extractor.close()
 
         # 2. 识别参数区域
         sections = self.section_detector.detect_sections(full_text)
@@ -615,21 +634,20 @@ class DatasheetParser:
             parameters=all_params,
         )
 
-        self.text_extractor.close()
         return result
 
     def _extract_parameters(self, text: str, component_hint: str) -> List[DatasheetParameter]:
         """提取参数（Regex + LLM 混合）"""
         # 1. Regex 提取
         regex_params = []
-        if "cap" in component_hint.lower() or "capacitor" in text.lower()[:500]:
+        if "cap" in component_hint.lower():
             regex_params.extend(self.regex_extractor.extract_capacitor_params(text))
-        elif "res" in component_hint.lower() or "resistor" in text.lower()[:500]:
+        elif "res" in component_hint.lower():
             regex_params.extend(self.regex_extractor.extract_resistor_params(text))
         else:
             regex_params.extend(self.regex_extractor.extract_ic_params(text))
-            regex_params.extend(self.regex_extractor.extract_capacitor_params(text))
-            regex_params.extend(self.regex_extractor.extract_resistor_params(text))
+            # IC datasheets mention external capacitors and their voltage ratings;
+            # these are not ratings of the IC itself.
 
         # 2. LLM 补充提取
         llm_params = []
