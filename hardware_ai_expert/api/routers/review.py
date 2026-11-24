@@ -1,5 +1,6 @@
 """Review API router."""
 from fastapi import APIRouter, HTTPException
+from starlette.concurrency import run_in_threadpool
 from datetime import datetime
 from typing import List
 
@@ -79,9 +80,12 @@ async def run_review(request: ReviewRequest) -> ReviewResponse:
             ) from e
         if engine is None:
             raise HTTPException(status_code=503, detail="ReviewEngine not available (Neo4j not connected)")
-        violations = engine.run_rules(
+        # run_rules() is synchronous and takes minutes on the aggregate graph;
+        # run it off the event loop so other API requests keep being served.
+        violations = await run_in_threadpool(
+            engine.run_rules,
             rule_ids=request.rule_ids,
-            enabled_only=request.enabled_only
+            enabled_only=request.enabled_only,
         )
         
         # Convert violations to response format

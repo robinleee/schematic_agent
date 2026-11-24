@@ -16,10 +16,12 @@ import type { VizMode, Direction } from '@/types/graph';
 import DotView from './DotView';
 import { parseDot, type DotGraph } from './dot';
 import PageHeader from '@/components/common/PageHeader';
+import { useProjectStore } from '@/stores/useProjectStore';
 
 const { Text } = Typography;
 
 const GraphPage: React.FC = () => {
+  const currentProject = useProjectStore((state) => state.currentProject);
   const [mode, setMode] = useState<VizMode>('component');
   const [refdes, setRefdes] = useState('');
   const [depth, setDepth] = useState(2);
@@ -45,6 +47,7 @@ const GraphPage: React.FC = () => {
         depth,
         direction,
         voltage: voltage || undefined,
+        project_id: currentProject,
       });
       if (!response.success) throw new Error(response.message || '接口返回失败');
       const parsed = parseDot(response.data?.dot_content);

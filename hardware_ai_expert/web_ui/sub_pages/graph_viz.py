@@ -9,21 +9,34 @@
 """
 
 import os
+import re
 import sys
 import streamlit as st
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, ROOT_DIR)
 
-from agent_system.graph_tools import _run_cypher, get_current_project
+from agent_system.graph_tools import _run_cypher as _run_cypher_raw, get_current_project
 
 
 def _pid_where(alias: str = "n", prefix: str = " AND ") -> str:
-    """根据当前 project_id 生成 WHERE 子句片段"""
+    """根据当前 project_id 生成 WHERE 子句片段（$project_id 由 _run_cypher 注入）"""
     pid = get_current_project()
     if pid == "default":
         return ""
-    return f"{prefix}({alias}.project_id = '{pid}' OR {alias}.project_id IS NULL)"
+    return f"{prefix}({alias}.project_id = $project_id OR {alias}.project_id IS NULL)"
+
+
+_PID_TOKEN = re.compile(r"/\*PID:(\w+)\*/")
+
+
+def _run_cypher(query: str, params: dict = None):
+    """把查询里的 /*PID:alias*/ 占位符替换为当前项目过滤条件后执行。
+
+    选择具体项目时，按项目过滤每个起点和邻居器件；否则同名位号（如 U1）
+    会把其他项目的器件和网络一起画进图里。
+    """
+    return _run_cypher_raw(_PID_TOKEN.sub(lambda m: _pid_where(m.group(1)), query), params)
 
 # 最大邻居数限制，避免渲染卡顿
 MAX_NEIGHBORS = 50
@@ -134,6 +147,7 @@ def _build_component_relation_dot(refdes: str, depth: int) -> str:
         # Find all nets connected to this component
         query = """
         MATCH (c:Component {RefDes: $refdes})-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
+        WHERE true /*PID:c*/
         RETURN n.Name AS net_name, n.NetType AS net_type, n.VoltageLevel AS voltage
         ORDER BY n.Name
         """
@@ -179,7 +193,7 @@ def _build_component_relation_dot(refdes: str, depth: int) -> str:
             # Find neighboring components on this net (limited)
             neighbor_query = """
             MATCH (c2:Component)-[:HAS_PIN]->(p2:Pin)-[:CONNECTS_TO]->(n:Net {Name: $net_name})
-            WHERE c2.RefDes <> $refdes
+            WHERE c2.RefDes <> $refdes /*PID:c2*/
             RETURN DISTINCT c2.RefDes AS refdes, c2.PartType AS part_type
             ORDER BY c2.RefDes
             LIMIT $limit
@@ -220,7 +234,7 @@ def _build_component_relation_dot(refdes: str, depth: int) -> str:
         # Get part type for root
         try:
             root_info = _run_cypher(
-                "MATCH (c:Component {RefDes: $refdes}) RETURN c.PartType AS pt",
+                "MATCH (c:Component {RefDes: $refdes}) WHERE true /*PID:c*/ RETURN c.PartType AS pt",
                 {"refdes": refdes}
             )
             pt = root_info[0]["pt"] if root_info else ""
@@ -237,7 +251,7 @@ def _build_component_relation_dot(refdes: str, depth: int) -> str:
         dot_nodes = [n for n in dot_nodes if root_id not in n]
         try:
             root_info = _run_cypher(
-                "MATCH (c:Component {RefDes: $refdes}) RETURN c.PartType AS pt",
+                "MATCH (c:Component {RefDes: $refdes}) WHERE true /*PID:c*/ RETURN c.PartType AS pt",
                 {"refdes": refdes}
             )
             pt = root_info[0]["pt"] if root_info else ""
@@ -278,6 +292,7 @@ def _build_power_chain_dot(refdes: str, direction: str, max_depth: int) -> str:
             if direction in ("downstream", "both"):
                 downstream_q = """
                 MATCH (src:Component {RefDes: $rd})-[r:POWERED_BY]->(load:Component)
+                WHERE true /*PID:src*/ /*PID:load*/
                 RETURN load.RefDes AS rd, load.PartType AS pt, load.Model AS model, r.voltage AS voltage
                 """
                 for r in _run_cypher(downstream_q, {"rd": current}):
@@ -293,6 +308,7 @@ def _build_power_chain_dot(refdes: str, direction: str, max_depth: int) -> str:
             if direction in ("upstream", "both"):
                 upstream_q = """
                 MATCH (src:Component)-[r:POWERED_BY]->(load:Component {RefDes: $rd})
+                WHERE true /*PID:src*/ /*PID:load*/
                 RETURN src.RefDes AS rd, src.PartType AS pt, src.Model AS model, r.voltage AS voltage
                 """
                 for r in _run_cypher(upstream_q, {"rd": current}):
@@ -341,6 +357,7 @@ def _build_fault_root_dot(refdes: str) -> str:
         # Upstream power
         upstream_q = """
         MATCH (src:Component)-[r:POWERED_BY]->(c:Component {RefDes: $rd})
+        WHERE true /*PID:src*/ /*PID:c*/
         RETURN src.RefDes AS rd, src.PartType AS pt, src.Model AS model, r.voltage AS voltage
         """
         for r in _run_cypher(upstream_q, {"rd": refdes}):
@@ -353,6 +370,7 @@ def _build_fault_root_dot(refdes: str) -> str:
             # 2nd level upstream
             up2_q = """
             MATCH (src2:Component)-[r:POWERED_BY]->(src:Component {RefDes: $rd2})
+            WHERE true /*PID:src2*/ /*PID:src*/
             RETURN src2.RefDes AS rd, src2.PartType AS pt, r.voltage AS voltage
             """
             for u2 in _run_cypher(up2_q, {"rd2": r['rd']}):
@@ -365,9 +383,9 @@ def _build_fault_root_dot(refdes: str) -> str:
         # Enable signal drivers
         en_q = """
         MATCH (c:Component {RefDes: $rd})-[:HAS_PIN]->(p:Pin)-[:CONNECTS_TO]->(n:Net)
-        WHERE n.Name =~ '(?i).*(_EN|EN_|ENABLE|^EN$)'
+        WHERE n.Name =~ '(?i).*(_EN|EN_|ENABLE|^EN$)' /*PID:c*/
         MATCH (drv:Component)-[:HAS_PIN]->(dp:Pin)-[:CONNECTS_TO]->(n:Net)
-        WHERE drv.RefDes <> $rd
+        WHERE drv.RefDes <> $rd /*PID:drv*/
         RETURN DISTINCT drv.RefDes AS rd, drv.PartType AS pt, n.Name AS net
         """
         for r in _run_cypher(en_q, {"rd": refdes}):
@@ -466,7 +484,7 @@ def _build_power_tree_dot(voltage: str = None) -> str:
             WHERE n.VoltageLevel IS NOT NULL
                   AND NOT n.Name CONTAINS 'GND'
                   AND NOT n.Name = 'DGND'
-                  AND NOT n.Name = 'NC'
+                  AND NOT n.Name = 'NC' /*PID:c*/
             RETURN DISTINCT n.Name AS net_name, n.VoltageLevel AS voltage
             ORDER BY n.VoltageLevel DESC
             """
@@ -498,7 +516,7 @@ def _build_power_tree_dot(voltage: str = None) -> str:
                 load_query = """
                 MATCH (lc:Component)-[:HAS_PIN]->(lp:Pin)-[:CONNECTS_TO]->(n:Net {Name: $net_name})
                 WHERE lc.RefDes <> $refdes
-                  AND NOT lc.PartType IN ['PMIC', 'LDO', 'BUCK', 'DCDC']
+                  AND NOT lc.PartType IN ['PMIC', 'LDO', 'BUCK', 'DCDC'] /*PID:lc*/
                 RETURN DISTINCT lc.RefDes AS refdes, lc.PartType AS part_type
                 ORDER BY lc.RefDes
                 LIMIT 20
@@ -544,7 +562,7 @@ def _build_power_tree_dot(voltage: str = None) -> str:
                 downstream_query = """
                 MATCH (dc:Component)-[:HAS_PIN]->(dp:Pin)-[:CONNECTS_TO]->(n:Net {Name: $net_name})
                 WHERE dc.RefDes <> $refdes
-                  AND dc.PartType IN ['LDO', 'BUCK', 'DCDC']
+                  AND dc.PartType IN ['LDO', 'BUCK', 'DCDC'] /*PID:dc*/
                 RETURN DISTINCT dc.RefDes AS refdes, dc.PartType AS part_type
                 LIMIT 5
                 """

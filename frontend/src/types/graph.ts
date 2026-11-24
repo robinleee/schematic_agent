@@ -8,6 +8,7 @@ export interface GraphRequest {
   depth: number;
   direction: Direction;
   voltage?: string;
+  project_id?: string;
 }
 
 export interface GraphResult {

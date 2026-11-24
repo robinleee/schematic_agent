@@ -119,13 +119,24 @@ def get_current_project() -> str:
 
 
 def list_projects() -> list[str]:
-    """列出 Neo4j 中所有 Project 节点"""
+    """列出 Neo4j 中所有项目
+
+    Project 节点有两种历史写法：ETL 写 ``project_id``，旧 Streamlit 写 ``id``；
+    另有只存在于 Component.project_id 上、没有 Project 节点的项目（如 legacy）。
+    三处都要读，否则新建项目不出现在列表里，前端会把当前项目重置回 default。
+    """
     try:
-        records = _run_cypher("MATCH (p:Project) RETURN p.id AS id ORDER BY p.id")
-        projects = [r["id"] for r in records] if records else []
-        # 始终包含 default
-        if "default" not in projects:
-            projects.insert(0, "default")
+        records = _run_cypher(
+            "MATCH (p:Project) RETURN coalesce(p.project_id, p.id) AS id "
+            "UNION "
+            "MATCH (c:Component) WHERE c.project_id IS NOT NULL "
+            "RETURN DISTINCT c.project_id AS id"
+        )
+        projects = sorted({r["id"] for r in records if r.get("id")})
+        # 始终包含 default，且排在首位
+        if "default" in projects:
+            projects.remove("default")
+        projects.insert(0, "default")
         return projects
     except Exception:
         return ["default"]

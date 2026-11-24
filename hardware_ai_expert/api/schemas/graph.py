@@ -27,6 +27,8 @@ class GraphRequest(BaseModel):
     depth: int = Field(default=2, ge=1, le=5)
     direction: Direction = Direction.BOTH
     voltage: Optional[str] = None  # For power tree mode
+    # None/"default" = 聚合视图；具体项目则只画该项目的器件
+    project_id: Optional[str] = None
 
     @model_validator(mode="after")
     def require_start(self):
