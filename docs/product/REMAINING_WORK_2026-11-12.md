@@ -65,6 +65,18 @@
   - System：四服务真实状态、数据统计口径
 - **验收**：七页面核心操作全部通过，问题清单闭环；把结果回写本文档
 - **预估**：1 天（含修复小问题）
+- **✅ 2026-11-24 已完成**（Playwright 无头浏览器，脚本 `scripts/ui_smoke_pages.py`，Chat 另跑两引擎）：
+  - 结果：ETL 新建项目/预览/导入/删除、Review、Graph、Knowledge 上传+检索、HITL、System 全部 PASS；
+    Chat 经典引擎（WebSocket 流式，24s）与 Hermes 引擎（12s，MCP 工具调用）均返回正确网络列表；无 console 错误、无 4xx/5xx。
+  - 联调中发现并修复的问题：
+    1. **新建项目不出现在项目列表**：`list_projects()` 读 `Project.id`，ETL 写的是 `Project.project_id`；
+       前端随后把当前项目重置回 `default`，导致「导入到新项目」实际写进了 default。改为同时读两种字段并补上只存在于 Component 上的项目（如 `legacy`）。
+    2. **刷新页面丢失当前项目**：project store 未持久化，刷新后回到 default（全库），Review/Graph 会对全部项目执行。已改为 localStorage 持久化。
+    3. **全库审查阻塞整个 API**：`/review/run` 在 async 路由里同步执行约 130s，期间其他请求全部卡住。改为线程池执行，实测审查期间 health 2ms 返回。
+    4. **图谱可视化不分项目**：`/graph/visualize` 无 project_id，同名位号（如 U1）会把其他项目的器件画在一起。请求增加 `project_id`，查询按项目过滤；节点计数不再把 DOT 的 `node [...]`/`edge [...]` 默认属性行算作节点。
+  - 已知限制（非缺陷）：Hermes 灰度期只绑定 `HERMES_BOUND_PROJECT=legacy`，其他项目在 Hermes 下返回 409，需切回经典引擎。
+  - 未覆盖：HITL 审批按钮（当前无待审批数据，Hermes 审批卡片由 `scripts/ui_e2e_agent.py` 覆盖）。
+  - 遗留 lint：`ChatContainer.tsx` handleSend 缺 `scopedProjectId` 依赖（warning），`System/index.tsx` 多余的 eslint-disable（error）；均为既有问题。
 
 #### P0-3 双引擎基准补样至 ≥20 次/引擎
 - **现状**：`bench_report.py` 的 `MIN_SAMPLES = 20`，实际只有 2～6 次，结论一直是 `insufficient_samples`。
