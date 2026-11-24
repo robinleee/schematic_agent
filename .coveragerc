@@ -8,6 +8,25 @@ omit =
     */etl_pipeline/main_etl.py
     */etl_pipeline/load_to_neo4j.py
     */tools/*
+    # Legacy Streamlit stack: imported only from web_ui/ (omitted above), never from
+    # the FastAPI / React / MCP product path. Removal tracked as P2-4 in
+    # docs/product/REMAINING_WORK_2026-11-12.md.
+    */agent_system/agent_core.py
+    */agent_system/agent_orchestrator.py
+    */agent_system/llm_intent_router.py
+    */agent_system/storage_dispatcher.py
+    */agent_system/kb_persistence.py
+    */agent_system/datasheet_processor.py
+    */agent_system/parsers/*
+    # One-off maintenance CLIs: __main__ entry points that nothing imports.
+    */agent_system/fix_p0_issues.py
+    */agent_system/merge_amr_data.py
+    */agent_system/generate_amr_data.py
+    */agent_system/import_datasheets.py
+    */agent_system/init_neo4j_schema.py
+    */agent_system/ti_datasheet_extractor.py
+    */etl_pipeline/refine_passive_types.py
+    */etl_pipeline/generate_power_tree.py
 
 [report]
 show_missing = True
