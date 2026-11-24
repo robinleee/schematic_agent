@@ -41,7 +41,7 @@ def test_cypher_project_scope_and_row_limit_are_enforced_without_database(monkey
             return [{"refdes": "U1"}]
 
     class Driver:
-        def session(self):
+        def session(self, **kwargs):
             return Session()
 
     calls = []

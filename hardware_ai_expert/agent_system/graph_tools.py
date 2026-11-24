@@ -17,9 +17,10 @@ from dotenv import load_dotenv
 from langchain_core.tools import tool
 
 try:
-    from neo4j import GraphDatabase
+    from neo4j import GraphDatabase, READ_ACCESS
 except ImportError:
     GraphDatabase = None
+    READ_ACCESS = "READ"
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(ROOT_DIR, ".env"))
@@ -27,7 +28,9 @@ load_dotenv(os.path.join(ROOT_DIR, ".env"))
 # 聚合阈值：超过此数量的网络启用聚合摘要
 DEFAULT_AGGREGATION_THRESHOLD = 100
 
-# 只读模式：为 True 时拦截所有写入类 Cypher
+# 只读模式：为 True 时拦截所有写入类 Cypher。
+# 关键字正则只是第一道防线；会话同时以 READ_ACCESS 打开，由 Neo4j 服务端拒绝写入
+# （Community 版没有 RBAC，graph_reader 之类的账号实际拥有写权限，不能靠账号做只读）。
 READ_ONLY_MODE = os.getenv("NEO4J_READ_ONLY", "false").lower() in ("true", "1", "yes")
 
 # Cypher 查询超时（秒）
@@ -82,7 +85,8 @@ def _run_cypher(query: str, params: dict = None, timeout: int = None, project_id
 
     driver = _get_driver()
     timeout = timeout or CYPHER_TIMEOUT_SECONDS
-    with driver.session() as session:
+    session_kwargs = {"default_access_mode": READ_ACCESS} if READ_ONLY_MODE else {}
+    with driver.session(**session_kwargs) as session:
         # 大网络安全保护：若无 LIMIT 且查询含 Net，自动加 LIMIT
         safe_query = query
         if params.get("project_id") not in (None, "default"):
