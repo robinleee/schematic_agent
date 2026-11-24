@@ -352,7 +352,9 @@ def test_fit_budget_trims_peers_but_keeps_valid_json():
     json.loads(query_engine.pack(out))  # 仍是合法 JSON
 
 
+@pytest.mark.live
 def test_neighborhood_bulk_merges_multiple_refdes():
+    # Queries the real graph (U20187); not an offline test.
     payload = query_engine.neighborhood_bulk(["U20187"], depth=1, char_budget=8000)
     assert payload["query_type"] == "neighborhood_bulk"
     assert payload["requested"] == 1

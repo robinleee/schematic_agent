@@ -144,12 +144,22 @@ def test_bom_excel_line_and_raw(tmp_path):
     assert loader.get_bom_record("C1")["manufacturer"] == "Texas Instruments"
 
 
-def test_real_beet_xls_headers_and_statistics():
-    xlrd = pytest.importorskip("xlrd")
+def _real_beet_bom() -> str:
+    """Untracked proprietary BOM (beet_schematic_bom/ is gitignored); skip when absent."""
+    import os
+
     path = (
         __file__.split("hardware_ai_expert")[0]
         + "beet_schematic_bom/700-00350-07_Rev02_DCN00192_bom.xls"
     )
+    if not os.path.exists(path):
+        pytest.skip("real Beet BOM not present in this checkout")
+    return path
+
+
+def test_real_beet_xls_headers_and_statistics():
+    xlrd = pytest.importorskip("xlrd")
+    path = _real_beet_bom()
     workbook = xlrd.open_workbook(path, on_demand=True)
     sheet = workbook.sheet_by_index(0)
     headers = {str(sheet.cell_value(0, column)).strip() for column in range(sheet.ncols)}
@@ -177,10 +187,7 @@ def test_real_beet_xls_headers_and_statistics():
 
 
 def test_real_beet_legacy_xls_loads_with_beet_headers():
-    path = (
-        __file__.split("hardware_ai_expert")[0]
-        + "beet_schematic_bom/700-00350-07_Rev02_DCN00192_bom.xls"
-    )
+    path = _real_beet_bom()
     loader = PartTypeStandardizer(path)
 
     assert len(loader.bom_records) > 0

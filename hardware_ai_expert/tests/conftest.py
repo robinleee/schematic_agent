@@ -11,6 +11,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # so chat/WS route tests never append fake runs to the live gate metrics log.
 os.environ["HERMES_METRICS_FILE"] = os.path.join(
     tempfile.mkdtemp(prefix="test_agent_runs_"), "agent_runs.jsonl")
+# The API defaults to production mode (API_TOKEN required). Developer machines get
+# "offline" from the untracked hardware_ai_expert/.env; a clean checkout or CI does not.
+os.environ.setdefault("API_SECURITY_MODE", "offline")
 
 
 @pytest.fixture(autouse=True)
