@@ -101,6 +101,21 @@
   - legacy 的 p95 只统计成功样本（B2 3/3、C2 2/3 失败）。把失败样本也算进去，legacy p95 为 171s，比值 2.38，仍不达标。
   - 跑基准期间（18:22～18:35）本机同时在跑离线测试，有少量 CPU 争用；最慢的一次（C2 407s）发生在测试结束之后，不是争用导致的。
   - **结论**：现在不能把 Hermes 设为默认引擎。下一步应先用 `scripts/trace_engine.py --task C2 --engine hermes` 查清诊断/审查为何要调 18～25 次工具，再复测。
+- **2026-11-25 排查结果**（trace：`logs/trace/C2-hermes-20261125a.jsonl`、`C1-hermes-20261125a.jsonl`；逐轮数据取自 Hermes `state.db`）：
+  - **慢的不是工具，是模型轮次和推理**。C2 共 363s：工具执行合计约 25s（7%），其余是 6 轮 LLM 调用。
+    输出 13.2k token，其中可见答案只有 2.9k 字，推理文本 3.1 万字（最后一轮单轮 1.4 万字、约 110s）。输入 5.3 万 + 缓存读 12 万 token。
+  - Hermes 用的是远端 `DeepSeek-V4.1-Flash`（`reasoning_effort: medium`），经典引擎用本地 gemma4，所以这组基准同时比较了引擎和模型。
+  - **C1 调 21 次工具的直接原因是 bug**：MCP `run_review` 读了不存在的 `item.message` 字段，违规样例描述全空，
+    且 10 条样例全部来自同一条规则。模型看不到其他规则的明细，只好按 rule_id 逐条再调了 14 次。**已修**：
+    每条规则给 2 条去重样例（指定规则时给 3 条），带位号、网络和描述。MCP Server 是 Hermes 网关的常驻子进程，重启网关后生效。
+  - C2 的多余调用：`project_overview`（9.4k 字）、`i2c_devices`（13k 字）、全项目 `run_review`、两次未命中的知识检索，
+    以及 `tool_describe`、`list_prompts`、`list_resources` 这类元工具。`query_graph` 邻域查询默认 depth=2，单次返回 28k 字，
+    且 JSON 再被包一层字符串，引号全部转义，token 进一步膨胀。
+  - **建议（按收益排序，均待确认）**：① 重启网关让 run_review 修复生效后复测 C1；② schematic profile 的 `reasoning_effort`
+    试降为 `low`，对比答案质量；③ 邻域查询默认 depth 改 1，结果改为紧凑文本、不做 JSON 套 JSON；
+    ④ 在 Hermes 侧关掉 schematic MCP 的 list_prompts/list_resources；⑤ 为诊断任务给固定的工具顺序提示（邻域 → root_cause → power_chain → 作答）。
+  - 顺带发现：profile 里 `SCHEMATIC_ENABLE_WRITE_TOOLS: "1"`，与设计文档「写工具默认关闭」不一致；
+    `POWER_1V8_DECAP` 把 `*_1V8_RGMII_TXD1` 这类信号网络当成 1.8V 电源网络，属规则误报。
 
 ---
 

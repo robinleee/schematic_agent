@@ -374,11 +374,23 @@ def run_review(rule_ids: Optional[list[str]] = None, project_id: str = "") -> st
         all_rules = sorted(by_rule.items(), key=lambda kv: (-kv[1], kv[0]))
         lines.append("按规则：" + ", ".join(f"{k}:{v}" for k, v in all_rules))
 
-        for item in violations[:10]:
-            lines.append(
-                f"- [{item.severity}] {item.rule_id} | {getattr(item, 'refdes', '-')} | "
-                f"{getattr(item, 'message', '')}"
+        # 每条规则给几条去重样例。只取前 10 条时样例全落在同一条规则上，
+        # 模型看不到其他规则的明细，就会按 rule_id 逐条再调（实测一次审查 14 次调用）。
+        per_rule = 3 if rule_ids else 2
+        samples: dict[str, list[str]] = {}
+        seen: set[tuple] = set()
+        for item in violations:
+            rid = item.rule_id
+            key = (rid, item.refdes, item.net_name)
+            if key in seen or len(samples.get(rid, [])) >= per_rule:
+                continue
+            seen.add(key)
+            net = f" @ {item.net_name}" if item.net_name else ""
+            samples.setdefault(rid, []).append(
+                f"- [{item.severity}] {rid} | {item.refdes}{net} | {item.description}"
             )
+        for rid, _ in all_rules:
+            lines.extend(samples.get(rid, []))
         return _format(pid, "run_review", "\n".join(lines))
     except Exception as exc:  # noqa: BLE001
         return _error(pid, "run_review", exc)
