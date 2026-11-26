@@ -239,7 +239,8 @@ def _parse_sse_block(lines: List[str]) -> Dict[str, Any]:
 
 
 def run_hermes(
-    client: httpx.Client, base: str, task: Dict[str, Any], project_id: str, tag: str
+    client: httpx.Client, base: str, task: Dict[str, Any], project_id: str, tag: str,
+    reasoning_effort: str = "",
 ) -> Dict[str, Any]:
     """Hermes 引擎：创建 run + 消费 SSE 到终态（必须消费完，后端才会落终态指标）。"""
     body = {
@@ -247,6 +248,8 @@ def run_hermes(
         "project_id": project_id,
         "session_id": f"bench-{tag}-{task['id']}-{uuid.uuid4().hex[:6]}",
     }
+    if reasoning_effort:
+        body["reasoning_effort"] = reasoning_effort
     started = time.monotonic()
     try:
         resp = client.post(f"{base}/api/v1/agent/runs", json=body, timeout=120.0)
@@ -498,6 +501,8 @@ def main() -> int:
     ap.add_argument("--repeat", type=int, default=1)
     ap.add_argument("--out-md", default="")
     ap.add_argument("--out-json", default="")
+    ap.add_argument("--reasoning-effort", choices=["low", "medium", "high"], default="",
+                    help="Hermes 推理档位；不传则沿用 profile 默认")
     args = ap.parse_args()
 
     base = args.base.rstrip("/")
@@ -530,7 +535,9 @@ def main() -> int:
                     if engine == "legacy":
                         row = run_legacy(client, base, task, args.project)
                     else:
-                        row = run_hermes(client, base, task, args.project, f"{tag}-r{rnd}")
+                        row = run_hermes(client, base, task, args.project, f"{tag}-r{rnd}",
+                                         args.reasoning_effort)
+                        row["reasoning_effort"] = args.reasoning_effort or "profile_default"
                     row.update({"round": rnd, "ts": now_iso(), "project": args.project})
                     rows.append(row)
                     record(row)

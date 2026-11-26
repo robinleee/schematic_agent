@@ -152,6 +152,36 @@ def test_create_run_success_forwards_body_and_remembers_run(client, upstream):
     assert str(upstream.requests[0].url) == UPSTREAM + "/runs"
     assert agent_runs._run_meta(RUN_ID)["project_id"] == "legacy"
     assert agent_runs._run_meta(RUN_ID)["conversation"] == "conv-1"
+    assert agent_runs._run_meta(RUN_ID)["reasoning_effort"] is None
+
+
+@pytest.mark.parametrize("level", ["low", "medium", "high"])
+def test_create_run_forwards_reasoning_effort_as_model_options(client, upstream, level):
+    upstream.handler = lambda req: httpx.Response(200, json={"run_id": RUN_ID})
+    resp = client.post(BASE + "/runs", json={"input": "hi", "project_id": "legacy",
+                                             "reasoning_effort": level})
+    assert resp.status_code == 200
+    assert json.loads(upstream.requests[0].content)["model_options"] == {"reasoning_effort": level}
+    assert agent_runs._run_meta(RUN_ID)["reasoning_effort"] == level
+
+
+@pytest.mark.parametrize("level", ["none", "xhigh", "max", "ultra", "LOW", ""])
+def test_create_run_rejects_reasoning_effort_outside_whitelist(client, upstream, level):
+    resp = client.post(BASE + "/runs", json={"input": "hi", "reasoning_effort": level})
+    assert resp.status_code == 422
+    assert upstream.requests == []
+
+
+def test_create_run_task_type_default_and_explicit_override(client, upstream, monkeypatch):
+    monkeypatch.setattr(agent_runs, "_TASK_REASONING_DEFAULT", {"query": "low"})
+    upstream.handler = lambda req: httpx.Response(200, json={"run_id": RUN_ID})
+    client.post(BASE + "/runs", json={"input": "a", "task_type": "Query"})
+    client.post(BASE + "/runs", json={"input": "b", "task_type": "query", "reasoning_effort": "high"})
+    client.post(BASE + "/runs", json={"input": "c", "task_type": "diagnosis"})
+    sent = [json.loads(r.content) for r in upstream.requests]
+    assert sent[0]["model_options"] == {"reasoning_effort": "low"}
+    assert sent[1]["model_options"] == {"reasoning_effort": "high"}
+    assert "model_options" not in sent[2]
 
 
 def test_create_run_session_key_sanitises_identifiers(client, upstream):
@@ -415,6 +445,15 @@ def test_events_client_disconnect_records_stream_closed(client, upstream):
     runs = [r for r in read_metrics() if r["kind"] == "run"]
     assert [r["status"] for r in runs] == ["stream_closed"]
     assert runs[0]["project_id"] is None
+    assert runs[0]["reasoning_effort"] == "profile_default"
+
+
+def test_events_metrics_record_reasoning_effort(client, upstream):
+    agent_runs._remember_run(RUN_ID, "legacy", "c", "low")
+    upstream.handler = lambda req: _stream_response(_sse(("run.completed", {})))
+    client.get(f"{BASE}/runs/{RUN_ID}/events")
+    runs = [r for r in read_metrics() if r["kind"] == "run"]
+    assert runs[0]["reasoning_effort"] == "low"
 
 
 def test_events_upstream_error_status(client, upstream):

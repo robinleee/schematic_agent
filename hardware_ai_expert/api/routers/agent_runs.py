@@ -16,7 +16,7 @@ import re
 import threading
 import time
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException
@@ -53,12 +53,14 @@ _RUNS_LOCK = threading.Lock()
 _MAX_RUNS = 2000
 
 
-def _remember_run(run_id: str, project_id: Optional[str], conversation: str) -> None:
+def _remember_run(run_id: str, project_id: Optional[str], conversation: str,
+                  reasoning_effort: Optional[str] = None) -> None:
     with _RUNS_LOCK:
         if len(_RUNS) >= _MAX_RUNS:
             for key in list(_RUNS.keys())[: _MAX_RUNS // 4]:
                 _RUNS.pop(key, None)
-        _RUNS[run_id] = {"project_id": project_id, "conversation": conversation, "created": time.time()}
+        _RUNS[run_id] = {"project_id": project_id, "conversation": conversation,
+                         "reasoning_effort": reasoning_effort, "created": time.time()}
 
 
 def _run_meta(run_id: str) -> Dict[str, Any]:
@@ -136,9 +138,12 @@ def _parse_event(raw: bytes) -> Dict[str, Any]:
 class RunTrace:
     """旁路观测：只读事件流做统计，不阻塞、不影响透传。"""
 
-    def __init__(self, run_id: str, project_id: Optional[str]) -> None:
+    def __init__(self, run_id: str, project_id: Optional[str],
+                 reasoning_effort: Optional[str] = None) -> None:
         self.run_id = run_id
         self.project_id = project_id
+        # None = 未指定，沿用 Hermes profile 的默认档位
+        self.reasoning_effort = reasoning_effort
         self.started = time.time()
         self.tools = 0
         self.approvals = 0
@@ -220,6 +225,7 @@ class RunTrace:
             "tools": self.tools,
             "approvals": self.approvals,
             "choices": self.choices,
+            "reasoning_effort": self.reasoning_effort or "profile_default",
         })
 
 
@@ -322,6 +328,19 @@ class RunCreateRequest(BaseModel):
     user_id: Optional[str] = Field(default=None, max_length=64)
     project_id: Optional[str] = None
     model: Optional[str] = None
+    # 只开放三档；Hermes 支持的 none/xhigh/max 等档位耗时和质量不可控，不对前端开放
+    reasoning_effort: Optional[Literal["low", "medium", "high"]] = None
+    task_type: Optional[str] = Field(default=None, max_length=32, description="前端任务类型，用于取默认推理档位")
+
+
+# 前端没指定档位时，按任务类型取默认值；不在表里的类型不传，沿用 Hermes profile 的默认档位。
+_TASK_REASONING_DEFAULT: Dict[str, str] = {}
+
+
+def _effective_reasoning(payload: "RunCreateRequest") -> Optional[str]:
+    if payload.reasoning_effort:
+        return payload.reasoning_effort
+    return _TASK_REASONING_DEFAULT.get((payload.task_type or "").strip().lower())
 
 
 class ApprovalRequest(BaseModel):
@@ -369,6 +388,9 @@ async def create_run(payload: RunCreateRequest) -> Any:
     }
     if payload.model:
         body["model"] = payload.model
+    effort = _effective_reasoning(payload)
+    if effort:
+        body["model_options"] = {"reasoning_effort": effort}
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -380,7 +402,7 @@ async def create_run(payload: RunCreateRequest) -> Any:
         return JSONResponse(status_code=resp.status_code, content=_safe_json(resp))
     data = _safe_json(resp)
     if isinstance(data, dict) and data.get("run_id"):
-        _remember_run(str(data["run_id"]), payload.project_id, conversation)
+        _remember_run(str(data["run_id"]), payload.project_id, conversation, effort)
     return data
 
 
@@ -407,7 +429,8 @@ async def stream_events(run_id: str, last_seq: Optional[int] = None) -> Streamin
         await client.aclose()
         return JSONResponse(status_code=upstream.status_code, content=_decode_json(raw))
 
-    trace = RunTrace(run_id, _run_meta(run_id).get("project_id"))
+    meta = _run_meta(run_id)
+    trace = RunTrace(run_id, meta.get("project_id"), meta.get("reasoning_effort"))
     buffer = b""
 
     async def relay():
