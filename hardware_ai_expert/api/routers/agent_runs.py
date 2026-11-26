@@ -334,7 +334,11 @@ class RunCreateRequest(BaseModel):
 
 
 # 前端没指定档位时，按任务类型取默认值；不在表里的类型不传，沿用 Hermes profile 的默认档位。
-_TASK_REASONING_DEFAULT: Dict[str, str] = {}
+# 2026-11-26 基准（A2/B3/C1/C2 各 3 轮，logs/bench/effort_*）：low 比 medium 中位耗时快 1.5～2.7 倍
+# （C2 诊断 134s vs 364s），工具调用更少，答案覆盖的位号和排查要点相当，所以各类任务默认都用 low。
+_TASK_REASONING_DEFAULT: Dict[str, str] = {
+    "": "low", "auto": "low", "query": "low", "review": "low", "diagnosis": "low",
+}
 
 
 def _effective_reasoning(payload: "RunCreateRequest") -> Optional[str]:

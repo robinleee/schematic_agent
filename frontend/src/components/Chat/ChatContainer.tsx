@@ -1,18 +1,32 @@
 // Chat container component
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Segmented, Switch, Tooltip, Tag } from 'antd';
+import { Button, Segmented, Select, Switch, Tooltip, Tag } from 'antd';
 import { ClearOutlined, StopOutlined } from '@ant-design/icons';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
 import { useChatStore } from '@/stores';
 import { useProjectStore } from '@/stores/useProjectStore';
 import { chatApi, agentApi } from '@/api';
+import type { ReasoningEffort } from '@/api/agent';
 import type { Message, ReasoningStep } from '@/types/chat';
 import type { AgentHealth, AgentRunEvent, ApprovalChoice, ApprovalState } from '@/types/agent';
 import { useChatWebSocket } from '@/hooks/useWebSocket';
 import { apiErrorText } from '@/api/client';
 
 type Engine = 'legacy' | 'hermes';
+type EffortChoice = 'auto' | ReasoningEffort;
+
+const EFFORT_STORAGE_KEY = 'schematic:hermes:reasoning-effort';
+
+function loadEffort(): EffortChoice {
+  try {
+    const value = window.localStorage.getItem(EFFORT_STORAGE_KEY);
+    if (value === 'low' || value === 'medium' || value === 'high') return value;
+  } catch {
+    /* 隐私模式下读不了 localStorage */
+  }
+  return 'auto';
+}
 
 /** 审批倒计时，超时前端自动拒绝（后端仍会等，绝不会自动放行） */
 const APPROVAL_TTL_MS = 180_000;
@@ -31,6 +45,8 @@ const ChatContainer: React.FC = () => {
   const scopedProjectId = currentProject === 'default' ? undefined : currentProject;
   const [streaming, setStreaming] = useState(false);
   const [engine, setEngine] = useState<Engine>('legacy');
+  // 推理强度：auto = 交给后端按任务类型取默认；按浏览器记住上次选择
+  const [reasoningEffort, setReasoningEffort] = useState<EffortChoice>(loadEffort);
   // 输入框草稿提升到容器层：点击示例问题可直接回填
   const [draft, setDraft] = useState('');
   const [health, setHealth] = useState<AgentHealth | null>(null);
@@ -215,9 +231,11 @@ const ChatContainer: React.FC = () => {
       input: message,
       sessionId: sessionId.current,
       projectId: scopedProjectId,
+      reasoningEffort: reasoningEffort === 'auto' ? undefined : reasoningEffort,
+      taskType,
     });
     await attachRun(run.run_id, assistantId);
-  }, [addMessage, attachRun, scopedProjectId]);
+  }, [addMessage, attachRun, scopedProjectId, reasoningEffort]);
 
   /** 停止：先让 Hermes 硬中断，再本地收尾（绝不把半截输出当成完成） */
   const stopHermes = useCallback(async () => {
@@ -454,6 +472,35 @@ const ChatContainer: React.FC = () => {
             <Tag color={health.upstream ? 'green' : 'red'} style={{ marginInlineEnd: 0 }}>
               {health.upstream ? '网关正常' : `网关不可用${health.detail ? `：${health.detail}` : ''}`}
             </Tag>
+          )}
+
+          {engine === 'hermes' && (
+            <Tooltip title="推理越深回答越慢。自动：按任务类型选择；对下一条消息生效">
+              <span className="hx-chat-stream">
+                <span className="hx-field-inline-label">推理</span>
+                <Select<EffortChoice>
+                  size="small"
+                  value={reasoningEffort}
+                  style={{ width: 96 }}
+                  disabled={isLoading}
+                  onChange={(value) => {
+                    setReasoningEffort(value);
+                    try {
+                      if (value === 'auto') window.localStorage.removeItem(EFFORT_STORAGE_KEY);
+                      else window.localStorage.setItem(EFFORT_STORAGE_KEY, value);
+                    } catch {
+                      /* 写不了就只在内存里生效 */
+                    }
+                  }}
+                  options={[
+                    { value: 'auto', label: '自动' },
+                    { value: 'low', label: '快速' },
+                    { value: 'medium', label: '标准' },
+                    { value: 'high', label: '深入' },
+                  ]}
+                />
+              </span>
+            </Tooltip>
           )}
 
           {engine === 'hermes' && isLoading && (

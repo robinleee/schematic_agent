@@ -121,6 +121,10 @@
       答案按规则列出了具体位号和网络。6 次那一轮仍调了 `list_resources`/`list_prompts` 和一次补查。
     - C2（诊断）2 次：工具 15 / 16 次，耗时 507s / 483s，LLM 8～9 轮，输出 1.9 万～2.0 万 token。这个修复对诊断题无效（诊断题本来就不靠 run_review），
       瓶颈仍是轮次和推理长度，需按上面建议 ②③⑤ 处理。
+  - **2026-11-26 推理档位**：`/api/v1/agent/runs` 支持 `reasoning_effort`（low/medium/high，其余 422），Chat 页 Hermes 模式下可选
+    「自动 / 快速 / 标准 / 深入」，浏览器记住上次选择；运行指标记录实际档位。low vs medium 各 3 轮（中位耗时）：
+    A2 问答 29s vs 43s，B3 图谱 61s vs 98s，C1 审查 44s vs 106s，C2 诊断 134s vs 364s；low 的工具调用更少，C2 答案覆盖的位号与排查要点相当。
+    **「自动」默认改为 low**（见 `agent_runs._TASK_REASONING_DEFAULT`）。尚未用 low 重跑与经典引擎对比的完整验收门基准。
 
 ---
 

@@ -148,11 +148,13 @@ def test_create_run_success_forwards_body_and_remembers_run(client, upstream):
     assert resp.status_code == 200
     assert resp.json() == {"run_id": RUN_ID, "status": "started"}
     sent = json.loads(upstream.requests[0].content)
-    assert sent == {"input": "check pullups", "session_id": "alice:legacy:conv-1", "model": "m1"}
+    assert sent == {"input": "check pullups", "session_id": "alice:legacy:conv-1", "model": "m1",
+                    "model_options": {"reasoning_effort": "low"}}
     assert str(upstream.requests[0].url) == UPSTREAM + "/runs"
     assert agent_runs._run_meta(RUN_ID)["project_id"] == "legacy"
     assert agent_runs._run_meta(RUN_ID)["conversation"] == "conv-1"
-    assert agent_runs._run_meta(RUN_ID)["reasoning_effort"] is None
+    # 未指定档位、未给任务类型时走默认表的 "" 项
+    assert agent_runs._run_meta(RUN_ID)["reasoning_effort"] == "low"
 
 
 @pytest.mark.parametrize("level", ["low", "medium", "high"])

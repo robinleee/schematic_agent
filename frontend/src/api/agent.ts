@@ -8,11 +8,16 @@ import type {
   ApprovalChoice,
 } from '@/types/agent';
 
+export type ReasoningEffort = 'low' | 'medium' | 'high';
+
 export interface CreateRunParams {
   input: string;
   sessionId?: string;
   projectId?: string;
   model?: string;
+  /** 不传 = 由后端按任务类型取默认档位 */
+  reasoningEffort?: ReasoningEffort;
+  taskType?: string;
 }
 
 interface StreamHandlers {
@@ -80,6 +85,8 @@ export const agentApi = {
     if (params.sessionId) body.session_id = params.sessionId;
     if (params.projectId) body.project_id = params.projectId;
     if (params.model) body.model = params.model;
+    if (params.reasoningEffort) body.reasoning_effort = params.reasoningEffort;
+    if (params.taskType) body.task_type = params.taskType;
     const response = await apiClient.post<AgentRunCreateResponse>('/agent/runs', body, {
       timeout: 60000,
     });
