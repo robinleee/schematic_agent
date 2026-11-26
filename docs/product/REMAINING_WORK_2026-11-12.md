@@ -116,6 +116,11 @@
     ④ 在 Hermes 侧关掉 schematic MCP 的 list_prompts/list_resources；⑤ 为诊断任务给固定的工具顺序提示（邻域 → root_cause → power_chain → 作答）。
   - 顺带发现：profile 里 `SCHEMATIC_ENABLE_WRITE_TOOLS: "1"`，与设计文档「写工具默认关闭」不一致；
     `POWER_1V8_DECAP` 把 `*_1V8_RGMII_TXD1` 这类信号网络当成 1.8V 电源网络，属规则误报。
+  - **2026-11-26 网关重启后复测**：
+    - C1（审查）3 次：工具 3 / 6 / 3 次（原 21），耗时 71s / 101s / 74s（原 130s），LLM 轮次 3～5（原 8），输出 token 2.5k～4.4k（原 5.7k）。
+      答案按规则列出了具体位号和网络。6 次那一轮仍调了 `list_resources`/`list_prompts` 和一次补查。
+    - C2（诊断）2 次：工具 15 / 16 次，耗时 507s / 483s，LLM 8～9 轮，输出 1.9 万～2.0 万 token。这个修复对诊断题无效（诊断题本来就不靠 run_review），
+      瓶颈仍是轮次和推理长度，需按上面建议 ②③⑤ 处理。
 
 ---
 
