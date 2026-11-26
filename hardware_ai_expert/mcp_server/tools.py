@@ -105,6 +105,7 @@ def project_overview(project_id: str = "") -> str:
     """查看当前项目的整体概况：器件/网络规模、电源域分布、I2C 设备数量。
 
     回答「这个项目有多大」「有哪些电压域」这类问题时的第一个工具。
+    诊断某个具体器件/某路电源时不需要它（返回约 9k 字的全项目统计，与单器件故障无关）。
     """
     pid, denied = _guard("project_overview", project_id)
     if denied:
@@ -136,6 +137,7 @@ def query_graph(
     depth: int = 2,
     max_nets: int = 40,
     max_pins: int = 300,
+    output: Literal["text", "json"] = "text",
     project_id: str = "",
 ) -> str:
     """按对象查询图谱结构。批量参数优先于单值参数。
@@ -149,11 +151,12 @@ def query_graph(
       诊断「某个器件/某路电源异常」优先用它，一次调用代替逐网络遍历。
       refdes_list=[...] 可一次查多个器件的邻域（depth 建议 1），用于批量核对
       同一网络上的电阻/电容，避免逐个器件单独调用。
-      ⚠️ 诊断标准姿势（2 次调用够了）：先 neighborhood(refdes=中心器件, depth=2)，
-      再对返回里需要细看的器件一次性 neighborhood(refdes_list=[...], depth=1)。
+      ⚠️ 诊断标准姿势见 diagnose_fault 的说明：neighborhood(depth=2) 与 root_cause、
+      power_chain 同一轮并行调用；需要细看的器件再一次性 refdes_list(depth=1)。
     - i2c_devices / power_tree: 同旧行为。
 
-    新增路径返回紧凑 JSON；truncated=true 表示结果被裁剪，stats 给出真实总量。
+    neighborhood 默认返回紧凑文本（每行一个网络：网络名 [类型 电压, 器件数]: 位号 类型 值 p引脚…），
+    需要机器可读结构时传 output="json"。其余批量路径返回紧凑 JSON。结果被裁剪时会明确注明。
     """
     pid, denied = _guard("query_graph", project_id)
     if denied:
@@ -176,6 +179,7 @@ def query_graph(
                     char_budget=MAX_JSON_CHARS,
                 )
                 payload["input_truncated"] = clipped
+                render = query_engine.render_neighborhood_bulk
             else:
                 payload = query_engine.neighborhood(
                     refdes=centers[0],
@@ -184,7 +188,11 @@ def query_graph(
                     max_pins=max_pins,
                     char_budget=MAX_JSON_CHARS,
                 )
-            return _format_json(pid, "query_graph", payload)
+                render = query_engine.render_neighborhood
+            if output == "json":
+                return _format_json(pid, "query_graph", payload)
+            # 已按 JSON 预算裁剪过，文本只会更短；不再走 _format 的截断
+            return f"[project={pid} | tool=query_graph]\n{render(payload)}"
 
         if query_type == "component_nets":
             wanted, clipped = query_engine.norm_list(
@@ -299,6 +307,16 @@ def diagnose_fault(
     project_id: str = "",
 ) -> str:
     """故障诊断与电源分析。
+
+    ★ 单个器件 / 某路电源异常的诊断流程（按这个顺序，通常 2～3 轮就够作答）：
+      1. 同一轮并行调用：query_graph(neighborhood, refdes=器件, depth=2)
+         + diagnose_fault(root_cause, refdes=器件, symptom=现象)
+         + diagnose_fault(power_chain, refdes=器件, direction="both")
+      2. 只有在需要核对具体阻容（分压电阻、使能上下拉等）时，再一次性
+         query_graph(neighborhood, refdes_list=[...], depth=1)，不要逐个器件查。
+      3. 作答。
+      不要为单器件诊断调用 project_overview、run_review（全项目审查）或 i2c_devices；
+      search_knowledge 只在需要 datasheet 参数时调一次，查不到就按网表推断并说明。
 
     - root_cause: 故障根因反向溯源（refdes + symptom）。**自包含**：一次返回上游
       POWERED_BY 链；关系缺失时用网络连通性还原上游链（串联器件 + 上游网络器件
@@ -418,6 +436,7 @@ def search_knowledge(query: str, mpn: str = "", project_id: str = "") -> str:
     """检索知识库：GraphRAG 四级路由（图谱 → 本地 → 向量库 → 公网）+ Datasheet。
 
     适用于芯片规格、引脚定义、典型应用电路、设计规范等问题。
+    知识库只收录了部分器件；同一器件查不到时不要换说法反复检索。
     """
     pid, denied = _guard("search_knowledge", project_id)
     if denied:

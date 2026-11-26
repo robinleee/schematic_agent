@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Iterable, Optional
 
 from agent_system import graph_tools as gt
@@ -632,3 +633,115 @@ def fit_budget(result: dict, char_budget: int) -> dict:
         result["truncated"] = True
         result["stats"]["nets_detail_dropped"] = True
     return result
+
+
+# ---------------------------------------------------------------------------
+# 紧凑文本渲染
+# ---------------------------------------------------------------------------
+# Hermes 把工具结果包成 {"result": "<字符串>"} 再交给模型，JSON 结果里的每个引号都会
+# 被转义一次。U20187 depth=2 的邻域 JSON 约 16k 字，进到上下文里变成 28k。
+# 文本格式不含引号和重复的键名，信息量相同、体积更小，模型每轮都要重读它。
+
+_PASSIVE_TYPES = {"CAPACITOR", "RESISTOR", "INDUCTOR", "FERRITE_BEAD", "TESTPOINT"}
+
+
+def _pin_sort_key(pin: dict) -> tuple:
+    """引脚号自然排序：2 排在 10 前面，A1/B2 这类按字母再按数字。"""
+    match = re.match(r"^([A-Za-z]*)(\d*)(.*)$", str(pin.get("pin") or ""))
+    prefix, digits, rest = match.groups() if match else ("", "", "")
+    return (prefix, int(digits) if digits else -1, rest)
+
+
+def _fmt_v(value: Any) -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return ""
+    return f"{number:g}V"
+
+
+def _fmt_net_tag(nt: Any, v: Any) -> str:
+    parts = [str(nt)] if nt else []
+    volt = _fmt_v(v)
+    if volt:
+        parts.append(volt)
+    return " ".join(parts)
+
+
+def _fmt_peer(peer: dict) -> str:
+    part_type = peer.get("part_type") or "?"
+    text = f"{peer.get('refdes')} {part_type}"
+    value = peer.get("value")
+    if value:
+        text += f" {value}"
+    if part_type.upper() not in _PASSIVE_TYPES:
+        mpn = peer.get("mpn")
+        if mpn and mpn != value:
+            text += f" [{mpn}]"
+        volts = "/".join(_fmt_v(v) for v in peer.get("voltage") or [] if _fmt_v(v))
+        if volts:
+            text += f" @{volts}"
+    pins = peer.get("pins") or []
+    if pins:
+        text += " p" + ",".join(str(p) for p in pins)
+    other = peer.get("other_nets")
+    if other:
+        text += " → " + ", ".join(str(n) for n in other)
+    return text
+
+
+def render_neighborhood(payload: dict) -> str:
+    """把 neighborhood() 的结果渲染成紧凑文本（字段与 JSON 一一对应，不丢信息）。"""
+    refdes = payload.get("refdes")
+    if not payload.get("found"):
+        return f"邻域 {refdes}: 未找到该器件"
+    center = payload.get("center") or {}
+    head = f"邻域 {center.get('refdes')} {center.get('part_type') or '?'}"
+    for key in ("mpn", "value"):
+        if center.get(key):
+            head += f" | {center[key]}"
+    volts = "/".join(_fmt_v(v) for v in center.get("voltage") or [] if _fmt_v(v))
+    if volts:
+        head += f" | 电源 {volts}"
+    head += f" | depth={payload.get('depth')}"
+    lines = [head]
+
+    stats = payload.get("stats") or {}
+    pins = payload.get("pins") or []
+    if pins:
+        pin_text = " · ".join(
+            f"{p.get('pin')} {p.get('net')}"
+            + (f"({p.get('type')})" if p.get("type") else "")
+            for p in sorted(pins, key=_pin_sort_key)
+        )
+        lines.append(f"引脚({stats.get('pin_returned', len(pins))}/{stats.get('pin_total', len(pins))}): {pin_text}")
+
+    lines.append(f"网络({stats.get('net_returned')}/{stats.get('net_total')}):")
+    for net in payload.get("nets") or []:
+        tag = _fmt_net_tag(net.get("nt"), net.get("v"))
+        line = f"- {net.get('net')} [{tag + ', ' if tag else ''}器件 {net.get('degree')}]"
+        peers = net.get("peers")
+        if peers:
+            line += ": " + "; ".join(_fmt_peer(peer) for peer in peers)
+        total = net.get("peers_total")
+        if total and peers is not None and total > len(peers):
+            by_type = " ".join(f"{k}:{v}" for k, v in (net.get("by_type") or {}).items())
+            line += f"（另有 {total - len(peers)} 个未列出{'；类型 ' + by_type if by_type else ''}）"
+        lines.append(line)
+
+    if payload.get("truncated"):
+        notes = [f"{k}={v}" for k, v in stats.items()
+                 if k in ("pins_clipped", "nets_clipped", "peers_clipped",
+                          "peers_trimmed_for_budget", "nets_detail_dropped")]
+        lines.append("结果已裁剪：" + ", ".join(notes) + "；需要细节时用 refdes_list 对具体器件 depth=1 再查")
+    return "\n".join(lines)
+
+
+def render_neighborhood_bulk(payload: dict) -> str:
+    lines = [f"批量邻域：请求 {payload.get('requested')} 个，返回 {payload.get('returned')} 个，depth={payload.get('depth')}"]
+    if payload.get("input_truncated"):
+        lines.append(f"（输入超过 {MAX_BATCH_ITEMS} 个，多余的未查询）")
+    for item in (payload.get("items") or {}).values():
+        lines.append("")
+        lines.append(render_neighborhood(item))
+    return "\n".join(lines)

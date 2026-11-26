@@ -240,7 +240,7 @@ def _neighborhood_router(extra_peer_rows=None, extra_volts=None):
 @pytest.mark.unit
 def test_neighborhood_returns_center_nets_and_peers(bound_project, monkeypatch):
     monkeypatch.setattr(gt, "_run_cypher", _neighborhood_router())
-    out = tools.query_graph(query_type="neighborhood", refdes="U1")
+    out = tools.query_graph(query_type="neighborhood", refdes="U1", output="json")
     payload = json.loads(out.split("\n", 1)[1])
     assert payload["found"] is True
     assert payload["center"]["mpn"] == "MPN_X"
@@ -259,7 +259,7 @@ def test_neighborhood_returns_center_nets_and_peers(bound_project, monkeypatch):
 def test_neighborhood_truncates_nets_and_pins(bound_project, monkeypatch):
     monkeypatch.setattr(gt, "_run_cypher", _neighborhood_router())
     out = tools.query_graph(
-        query_type="neighborhood", refdes="U1", max_nets=2, max_pins=3
+        query_type="neighborhood", refdes="U1", max_nets=2, max_pins=3, output="json"
     )
     payload = json.loads(out.split("\n", 1)[1])
     assert payload["truncated"] is True
@@ -271,7 +271,7 @@ def test_neighborhood_truncates_nets_and_pins(bound_project, monkeypatch):
     assert "VIN_12V" in {item["net"] for item in payload["nets"]}
 
     out = tools.query_graph(
-        query_type="neighborhood", refdes="U1", max_nets=3, max_pins=2
+        query_type="neighborhood", refdes="U1", max_nets=3, max_pins=2, output="json"
     )
     payload = json.loads(out.split("\n", 1)[1])
     assert payload["stats"]["pin_returned"] == 2
@@ -290,7 +290,7 @@ def test_neighborhood_marks_partial_peer_lists(bound_project, monkeypatch):
     ]
     monkeypatch.setattr(gt, "_run_cypher", _neighborhood_router(extra_peer_rows=peer_rows))
     payload = json.loads(
-        tools.query_graph(query_type="neighborhood", refdes="U1").split("\n", 1)[1]
+        tools.query_graph(query_type="neighborhood", refdes="U1", output="json").split("\n", 1)[1]
     )
     nets = {item["net"]: item for item in payload["nets"]}
     assert nets["VIN_12V"]["peers_total"] == 2  # degree 3 - center
@@ -301,7 +301,7 @@ def test_neighborhood_marks_partial_peer_lists(bound_project, monkeypatch):
 def test_neighborhood_missing_center(bound_project, monkeypatch):
     monkeypatch.setattr(gt, "_run_cypher", lambda *a, **k: [])
     payload = json.loads(
-        tools.query_graph(query_type="neighborhood", refdes="U999").split("\n", 1)[1]
+        tools.query_graph(query_type="neighborhood", refdes="U999", output="json").split("\n", 1)[1]
     )
     assert payload["found"] is False
     assert payload["truncated"] is False
@@ -378,4 +378,29 @@ def test_neighborhood_accepts_refdes_list_and_root_alias(bound_project, monkeypa
     bulk = tools.query_graph(
         query_type="neighborhood", refdes_list=["U1", "U2"], depth=1
     )
-    assert "neighborhood_bulk" in bulk, bulk[:200]
+    assert "批量邻域：请求 2 个" in bulk, bulk[:200]
+
+
+@pytest.mark.unit
+def test_neighborhood_text_output_is_compact_and_complete(bound_project, monkeypatch):
+    monkeypatch.setattr(gt, "_run_cypher", _neighborhood_router())
+    text = tools.query_graph(query_type="neighborhood", refdes="U1")
+    as_json = tools.query_graph(query_type="neighborhood", refdes="U1", output="json")
+    body = text.split("\n", 1)[1]
+    assert body.startswith("邻域 U1 PMIC | MPN_X | VAL_X | 电源 12V")
+    assert '"' not in body  # 没有引号，Hermes 包装时不会被二次转义
+    assert len(text) < len(as_json)
+    # 每个网络、每个邻居位号都在文本里
+    payload = json.loads(as_json.split("\n", 1)[1])
+    for net in payload["nets"]:
+        assert f"- {net['net']} [" in body
+        for peer in net.get("peers", []):
+            assert peer["refdes"] in body
+
+
+@pytest.mark.unit
+def test_neighborhood_text_reports_clipping(bound_project, monkeypatch):
+    monkeypatch.setattr(gt, "_run_cypher", _neighborhood_router())
+    text = tools.query_graph(query_type="neighborhood", refdes="U1", max_nets=2, max_pins=3)
+    assert "引脚(3/" in text
+    assert "结果已裁剪" in text and "nets_clipped=1" in text
